@@ -1,0 +1,100 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  /* Modo Oscuro (Por defecto) - Variables directas sin :root */
+  --color-background: 210 35% 7%;
+  --color-foreground: 210 25% 97%;
+  --color-card: 210 25% 11%;
+  --color-card-foreground: 210 25% 97%;
+  --color-surface-alt: 32 35% 88%;
+  --color-surface-alt-foreground: 210 35% 7%;
+  --color-popover: 210 25% 11%;
+  --color-popover-foreground: 210 25% 97%;
+  --color-primary: 266 73% 63%;
+  --color-primary-foreground: 0 0% 100%;
+  --color-secondary: 210 20% 15%;
+  --color-secondary-foreground: 210 25% 97%;
+  /* Bordes más visibles para consistencia en todos los widgets */
+  --color-muted: 210 18% 21%;
+  --color-muted-foreground: 210 12% 47%;
+  --color-accent: 266 73% 63%;
+  --color-accent-foreground: 0 0% 100%;
+  --color-destructive: 0 65% 54%;
+  --color-destructive-foreground: 0 0% 100%;
+  --color-border: 210 18% 22%; /* Aumentado de 18% a 22% para mejor visibilidad */
+  --color-input: 210 18% 22%;
+  --color-ring: 266 73% 63%;
+  --color-chart-1: 266 73% 63%;
+  --color-chart-2: 280 65% 60%;
+  --color-chart-3: 250 70% 65%;
+  --color-chart-4: 290 60% 58%;
+  --color-chart-5: 270 80% 70%;
+  --radius-sm: 0.125rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --color-sidebar: 210 30% 9%;
+  --color-sidebar-foreground: 210 25% 97%;
+  --color-sidebar-primary: 266 73% 63%;
+  --color-sidebar-primary-foreground: 0 0% 100%;
+  --color-sidebar-accent: 210 20% 15%;
+  --color-sidebar-accent-foreground: 210 25% 97%;
+  --color-sidebar-border: 210 18% 22%; /* Consistente con border principal */
+  --color-sidebar-ring: 266 73% 63%;
+
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--color-border));
+  }
+
+  body {
+    background-color: hsl(var(--color-background));
+    color: hsl(var(--color-foreground));
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+.widget-glow {
+  position: relative;
+}
+
+.widget-glow::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, hsl(280 73% 67% / 0.15), hsl(270 65% 75% / 0.15));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.widget-glow:hover::before {
+  opacity: 1;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: hsl(var(--color-muted) / 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--color-muted-foreground) / 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--color-muted-foreground) / 0.3);
+}
