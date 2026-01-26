@@ -28,6 +28,7 @@ import {
   Podcast,
   Film,
   BarChart3,
+  MoreHorizontal,
 } from "lucide-react"
 import { Area, AreaChart, Line, LineChart, ResponsiveContainer, Tooltip } from "recharts"
 import type { CustomTrackerConfig } from "@/types"
@@ -55,6 +56,8 @@ interface TrackerWidgetProps {
   customTracker?: CustomTrackerConfig
   // Optional data override
   data?: any
+  width?: number
+  height?: number
 }
 
 // Mock data for each tracker type
@@ -438,37 +441,39 @@ function renderMood(data: typeof mockDataByType.mood) {
           </div>
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={80}>
-        <AreaChart data={chartData}>
-          <defs>
-            <linearGradient id="moodGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="oklch(0.67 0.19 259)" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="oklch(0.67 0.19 259)" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <Tooltip
-            content={({ active, payload }) => {
-              if (active && payload && payload.length) {
-                return (
-                  <div className="bg-popover border border-border rounded-lg p-2">
-                    <p className="text-sm font-medium">
-                      Rating: {payload[0].value} {getMoodEmoji(Number(payload[0].value))}
-                    </p>
-                  </div>
-                )
-              }
-              return null
-            }}
-          />
-          <Area
-            type="monotone"
-            dataKey="rating"
-            stroke="oklch(0.67 0.19 259)"
-            strokeWidth={2}
-            fill="url(#moodGradient)"
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+      <div className="w-full h-full min-h-[60px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={chartData}>
+            <defs>
+              <linearGradient id="moodGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="oklch(0.67 0.19 259)" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="oklch(0.67 0.19 259)" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <Tooltip
+              content={({ active, payload }) => {
+                if (active && payload && payload.length) {
+                  return (
+                    <div className="bg-popover border border-border rounded-lg p-2">
+                      <p className="text-sm font-medium">
+                        Rating: {payload[0].value} {getMoodEmoji(Number(payload[0].value))}
+                      </p>
+                    </div>
+                  )
+                }
+                return null
+              }}
+            />
+            <Area
+              type="monotone"
+              dataKey="rating"
+              stroke="oklch(0.67 0.19 259)"
+              strokeWidth={2}
+              fill="url(#moodGradient)"
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
       <div className="pt-2 border-t border-border/50 text-sm text-muted-foreground">
         {data.entriesCount} entries today
       </div>
@@ -563,25 +568,27 @@ function renderWeight(data: typeof mockDataByType.weight) {
         <span className="text-4xl font-display font-bold">{data.current}</span>
         <span className="text-muted-foreground">{data.unit}</span>
       </div>
-      <ResponsiveContainer width="100%" height={100}>
-        <LineChart data={data.history}>
-          <Tooltip
-            content={({ active, payload }) => {
-              if (active && payload && payload.length) {
-                return (
-                  <div className="bg-popover border border-border rounded-lg p-2">
-                    <p className="text-sm font-medium">
-                      {payload[0].value} {data.unit}
-                    </p>
-                  </div>
-                )
-              }
-              return null
-            }}
-          />
-          <Line type="monotone" dataKey="weight" stroke="oklch(0.67 0.19 25)" strokeWidth={2} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
+      <div className="w-full h-full min-h-[60px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data.history}>
+            <Tooltip
+              content={({ active, payload }) => {
+                if (active && payload && payload.length) {
+                  return (
+                    <div className="bg-popover border border-border rounded-lg p-2">
+                      <p className="text-sm font-medium">
+                        {payload[0].value} {data.unit}
+                      </p>
+                    </div>
+                  )
+                }
+                return null
+              }}
+            />
+            <Line type="monotone" dataKey="weight" stroke="oklch(0.67 0.19 25)" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
       <div className="pt-2 border-t border-border/50 text-sm text-muted-foreground">
         Goal: {data.goal} {data.unit} by end of month
       </div>
@@ -643,8 +650,14 @@ function renderCustom(tracker: CustomTrackerConfig, getTrackerEntries: (id: stri
   )
 }
 
-export function TrackerWidget({ type, className, customTracker, data }: TrackerWidgetProps) {
+export function TrackerWidget({ type, className, customTracker, data, width = 1, height = 1 }: TrackerWidgetProps) {
   const { getTrackerEntries } = useAppData()
+
+  // Smart size classification
+  const isTiny = width === 1 && height === 1 // 1x1: Only icon and number
+  const isWide = width >= 2 && height === 1  // 2x1, 3x1: Horizontal, low height
+  const isTall = width === 1 && height >= 2  // 1x2: Vertical, narrow
+  const isStandard = width >= 2 && height >= 2 // 2x2+: Full space
 
   // Get config based on type or custom tracker
   const config =
@@ -663,6 +676,23 @@ export function TrackerWidget({ type, className, customTracker, data }: TrackerW
 
   const Icon = config.icon
   const mockData = data || (type !== "custom" ? mockDataByType[type] : null)
+
+  const getMainMetric = (): string => {
+    switch (type) {
+      case 'tasks': return mockDataByType.tasks.completed.toString();
+      case 'books': return mockDataByType.books.readingTime.toString();
+      case 'diet': return mockDataByType.diet.status;
+      case 'exercise': return mockDataByType.exercise.hoursCompleted.toString();
+      case 'gaming': return mockDataByType.gaming.playTime.toString();
+      case 'media': return mockDataByType.media.totalHours.toString();
+      case 'mood': return mockDataByType.mood.currentRating.toString();
+      case 'social': return mockDataByType.social.todayInteractions.toString();
+      case 'tv': return mockDataByType.tv.episodesWatched.toString();
+      case 'weight': return mockDataByType.weight.current.toString();
+      case 'custom': return 'Custom';
+      default: return 'N/A';
+    }
+  }
 
   // Render header extra content based on type
   const renderHeaderExtra = () => {
@@ -726,12 +756,12 @@ export function TrackerWidget({ type, className, customTracker, data }: TrackerW
 
   return (
     <div
-      className={cn("bg-card border-2 border-border rounded-xl p-6 widget-glow transition-all duration-200", className)}
+      className={cn("bg-card border border-border/60 rounded-xl widget-glow transition-all duration-200 flex flex-col h-full overflow-hidden", isTiny ? "p-2 items-center justify-center" : "p-4", className)}
     >
-      <div className="flex items-start justify-between mb-4">
+      { !isTiny && ( <div className="flex items-start justify-between mb-2 shrink-0 gap-2">
         <div className="flex items-center gap-3">
           <div
-            className={cn("w-10 h-10 rounded-lg flex items-center justify-center", config.colorClass)}
+            className={cn("rounded-md flex items-center justify-center shrink-0", isStandard ? "w-8 h-8" : "w-6 h-6", config.colorClass)}
             style={
               type === "custom" && customTracker?.color
                 ? {
@@ -741,17 +771,22 @@ export function TrackerWidget({ type, className, customTracker, data }: TrackerW
             }
           >
             <Icon
-              className="w-5 h-5"
+              className={isStandard ? "w-4 h-4" : "w-3 h-3"}
               style={type === "custom" && customTracker?.color ? { color: customTracker.color } : undefined}
             />
           </div>
           <div>
-            <h3 className="font-display font-semibold text-lg">{config.title}</h3>
-            <p className="text-xs text-muted-foreground">{config.subtitle}</p>
+            <h3 className={cn("font-display font-semibold truncate leading-tight", isStandard ? "text-base" : "text-sm")}>{config.title}</h3>
+            { (isStandard || isTall) && <p className="text-[10px] text-muted-foreground truncate leading-tight">{config.subtitle}</p> }
           </div>
         </div>
         {renderHeaderExtra()}
-      </div>
+        {isStandard && (
+          <div className="text-muted-foreground/50 hover:text-foreground cursor-pointer">
+            <MoreHorizontal className="w-4 h-4" />
+          </div>
+        )}
+      </div> ) }
       {renderContent()}
     </div>
   )

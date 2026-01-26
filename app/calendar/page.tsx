@@ -1,167 +1,128 @@
 "use client"
 
-import { useState } from "react"
-import { ChevronLeft, ChevronRight, Filter } from "lucide-react"
+import { useState, useMemo } from "react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  Calendar as CalendarIcon,
+  Clock,
+  CheckCircle2,
+  Circle
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription
+} from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
-
-const categories = [
-  { id: "exercise", name: "Exercise", color: "bg-primary" },
-  { id: "diet", name: "Diet", color: "bg-accent" },
-  { id: "weight", name: "Weight", color: "bg-primary/70" },
-  { id: "tasks", name: "Tasks", color: "bg-accent/70" },
-  { id: "tv", name: "TV", color: "bg-primary/50" },
-  { id: "books", name: "Books", color: "bg-accent/50" },
-  { id: "media", name: "Media", color: "bg-primary/30" },
-  { id: "gaming", name: "Gaming", color: "bg-accent/30" },
-]
-
-const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-
-const months = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-]
-
-// Sample data - days with activity
-const activeDays = [1, 3, 5, 7, 8, 10, 12, 14, 15, 16, 18, 20, 22, 24, 25, 27, 28, 29]
+import { useAppData } from "@/contexts/app-data-context"
+import { aggregateEvents, type CalendarEvent } from "@/lib/calendar-service"
 
 export default function CalendarPage() {
+  const { activityLogs, customTrackers, customTrackerEntries } = useAppData()
+
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  const [selectedDay, setSelectedDay] = useState<number | null>(null)
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [isSheetOpen, setIsSheetOpen] = useState(false)
 
-  const currentYear = currentDate.getFullYear()
-  const currentMonth = currentDate.getMonth()
+  // Aggregate events from all data sources
+  const allEvents = useMemo(() => {
+    const appData = { activityLogs, customTrackers, customTrackerEntries }
+    return aggregateEvents(appData)
+  }, [activityLogs, customTrackers, customTrackerEntries])
 
-  const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay()
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
-
-  const goToPreviousMonth = () => {
-    setCurrentDate(new Date(currentYear, currentMonth - 1, 1))
-  }
-
-  const goToNextMonth = () => {
-    setCurrentDate(new Date(currentYear, currentMonth + 1, 1))
-  }
-
-  const toggleCategory = (categoryId: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(categoryId) ? prev.filter((id) => id !== categoryId) : [...prev, categoryId],
+  // Filter events for selected day
+  const selectedDayEvents = useMemo(() => {
+    return allEvents.filter(event =>
+      event.date.getDate() === selectedDate.getDate() &&
+      event.date.getMonth() === selectedDate.getMonth() &&
+      event.date.getFullYear() === selectedDate.getFullYear()
     )
+  }, [allEvents, selectedDate])
+
+  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
+  const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay()
+  const monthName = currentDate.toLocaleString('default', { month: 'long' })
+  const year = currentDate.getFullYear()
+
+  const handlePrevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
+  const handleNextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
+
+  const handleDayClick = (day: Date) => {
+    setSelectedDate(day)
+    setIsSheetOpen(true)
   }
 
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
-  const emptyDays = Array.from({ length: firstDayOfMonth }, (_, i) => i)
+  // Generate days array
+  const days = []
+  for (let i = 0; i < firstDayOfMonth; i++) {
+    days.push(null)
+  }
+  for (let i = 1; i <= daysInMonth; i++) {
+    days.push(new Date(currentDate.getFullYear(), currentDate.getMonth(), i))
+  }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-display font-bold mb-2">Calendar</h1>
-            <p className="text-muted-foreground">Track your progress over time</p>
-          </div>
+    <div className="h-[calc(100vh-2rem)] p-6 overflow-hidden flex flex-col">
 
-          <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={goToPreviousMonth}
-              className="hover:bg-primary hover:text-primary-foreground transition-colors bg-transparent"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </Button>
-            <div className="min-w-[200px] text-center">
-              <h2 className="text-2xl font-display font-bold">
-                {months[currentMonth]} {currentYear}
-              </h2>
-            </div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={goToNextMonth}
-              className="hover:bg-primary hover:text-primary-foreground transition-colors bg-transparent"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </Button>
-          </div>
+      {/* HEADER DEL CALENDARIO */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-3xl font-display font-bold capitalize">{monthName}</h2>
+          <p className="text-muted-foreground text-lg">{year}</p>
         </div>
-
-        {/* Category Filters */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <Filter className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">Filter by:</span>
-          {categories.map((category) => (
-            <Badge
-              key={category.id}
-              variant={selectedCategories.includes(category.id) ? "default" : "outline"}
-              className={cn(
-                "cursor-pointer transition-all hover:scale-105",
-                selectedCategories.includes(category.id) && category.color,
-              )}
-              onClick={() => toggleCategory(category.id)}
-            >
-              {category.name}
-            </Badge>
-          ))}
+        <div className="flex gap-2">
+          <Button variant="outline" size="icon" onClick={handlePrevMonth}>
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <Button variant="outline" size="icon" onClick={handleNextMonth}>
+            <ChevronRight className="h-5 w-5" />
+          </Button>
         </div>
       </div>
 
-      {/* Calendar Grid */}
-      <div className="bg-card border border-border rounded-2xl p-6">
-        {/* Day headers */}
-        <div className="grid grid-cols-7 gap-2 mb-4">
-          {daysOfWeek.map((day) => (
-            <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
+      {/* GRID DEL CALENDARIO (OCUPA TODO EL ANCHO) */}
+      <div className="bg-card border border-border rounded-2xl p-6 shadow-sm flex-1 flex flex-col min-h-0">
+        <div className="grid grid-cols-7 mb-4">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+            <div key={day} className="text-center font-medium text-muted-foreground text-sm uppercase tracking-wider">
               {day}
             </div>
           ))}
         </div>
 
-        {/* Calendar days */}
-        <div className="grid grid-cols-7 gap-2">
-          {emptyDays.map((_, index) => (
-            <div key={`empty-${index}`} className="aspect-square" />
-          ))}
+        <div className="grid grid-cols-7 gap-2 flex-1 auto-rows-fr">
+          {days.map((day, index) => {
+            if (!day) return <div key={`empty-${index}`} className="p-2" />
 
-          {days.map((day) => {
-            const isActive = activeDays.includes(day)
-            const isSelected = selectedDay === day
-            const isToday =
-              day === new Date().getDate() &&
-              currentMonth === new Date().getMonth() &&
-              currentYear === new Date().getFullYear()
+            const isToday = day.toDateString() === new Date().toDateString()
+            const hasEvents = allEvents.some(e => e.date.toDateString() === day.toDateString())
 
             return (
               <button
-                key={day}
-                onClick={() => setSelectedDay(day)}
+                key={index}
+                onClick={() => handleDayClick(day)}
                 className={cn(
-                  "aspect-square rounded-xl border border-border transition-all duration-200",
-                  "hover:border-primary hover:bg-muted",
-                  "flex flex-col items-center justify-center gap-1",
-                  isSelected && "border-primary bg-primary/10",
-                  isToday && "border-accent bg-accent/10",
+                  "relative rounded-xl border p-3 flex flex-col items-start justify-between transition-all hover:border-primary/50 hover:bg-muted/50 group text-left",
+                  isToday ? "bg-accent/5 border-accent ring-1 ring-accent" : "bg-card/50 border-border/50",
                 )}
               >
-                <span className={cn("font-medium", isSelected && "text-primary", isToday && "text-accent")}>{day}</span>
-                {isActive && (
-                  <div className="flex gap-1">
-                    <div className="w-1 h-1 rounded-full bg-primary" />
-                    <div className="w-1 h-1 rounded-full bg-accent" />
+                <span className={cn(
+                  "text-sm font-bold w-8 h-8 flex items-center justify-center rounded-full transition-colors",
+                  isToday ? "bg-accent text-accent-foreground" : "text-muted-foreground group-hover:text-foreground",
+                )}>
+                  {day.getDate()}
+                </span>
+
+                {/* Preview de eventos (Puntos) */}
+                {hasEvents && (
+                  <div className="flex gap-1.5 mt-auto w-full px-1">
+                    <div className="h-2 w-2 rounded-full bg-primary/70" />
                   </div>
                 )}
               </button>
@@ -170,29 +131,83 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* Day Details (when a day is selected) */}
-      {selectedDay && (
-        <div className="bg-card border border-border rounded-2xl p-6">
-          <h3 className="text-xl font-display font-bold mb-4">
-            {months[currentMonth]} {selectedDay}, {currentYear}
-          </h3>
+      {/* --- PANEL LATERAL DESLIZANTE (SHEET) --- */}
+      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+        <SheetContent side="right" className="w-[400px] sm:w-[540px] border-l border-border p-0 flex flex-col gap-0">
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {categories.slice(0, 6).map((category) => (
-              <div
-                key={category.id}
-                className="bg-muted rounded-xl p-4 border border-border hover:border-primary/50 transition-colors"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium">{category.name}</span>
-                  <div className={cn("w-2 h-2 rounded-full", category.color)} />
-                </div>
-                <p className="text-sm text-muted-foreground">2.5 hours logged</p>
+          {/* Header del Panel */}
+          <SheetHeader className="p-6 border-b border-border bg-muted/20">
+            <SheetTitle className="text-2xl font-display font-bold">
+              {selectedDate.toLocaleDateString('default', { weekday: 'long' })}
+            </SheetTitle>
+            <SheetDescription className="text-lg">
+              {selectedDate.toLocaleDateString('default', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </SheetDescription>
+          </SheetHeader>
+
+          {/* Cuerpo del Panel (Scrollable) */}
+          <ScrollArea className="flex-1 p-6">
+            {selectedDayEvents.length === 0 ? (
+              <div className="h-[400px] flex flex-col items-center justify-center text-center opacity-50">
+                <CalendarIcon className="w-16 h-16 mb-4 text-muted-foreground/30" />
+                <p className="font-medium text-lg">No activities</p>
+                <p className="text-sm text-muted-foreground">This day is completely free.</p>
               </div>
-            ))}
+            ) : (
+              <div className="space-y-6 relative ml-2">
+                {/* Línea de tiempo vertical */}
+                <div className="absolute left-[19px] top-2 bottom-2 w-[2px] bg-border/50 z-0" />
+
+                {selectedDayEvents.map((event) => (
+                  <div key={event.id} className="relative z-10 grid grid-cols-[40px_1fr] gap-4">
+
+                    {/* Icono de estado */}
+                    <div className="flex flex-col items-center pt-1">
+                      <div className={cn(
+                        "w-10 h-10 rounded-full border-4 border-background flex items-center justify-center shadow-sm",
+                        event.color
+                      )}>
+                        {event.completed ? (
+                           <CheckCircle2 className="w-4 h-4 text-white" />
+                        ) : (
+                           <Circle className="w-4 h-4 text-white fill-white/20" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Tarjeta de actividad */}
+                    <div className="bg-card border border-border/60 rounded-xl p-4 hover:border-primary/30 transition-colors shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                           <Clock className="w-3.5 h-3.5" />
+                           {event.startTime ? event.startTime : "All Day"}
+                        </span>
+                        <Badge variant="outline" className="text-[10px] h-5 px-2 uppercase border-border">
+                          {event.type}
+                        </Badge>
+                      </div>
+                      <h4 className={cn(
+                        "font-semibold text-base",
+                        event.completed && "line-through text-muted-foreground"
+                      )}>
+                        {event.title}
+                      </h4>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+
+          {/* Footer del Panel */}
+          <div className="p-6 border-t border-border bg-background">
+             <Button className="w-full h-12 text-base shadow-lg" size="lg">
+                + Add New Activity
+             </Button>
           </div>
-        </div>
-      )}
+
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

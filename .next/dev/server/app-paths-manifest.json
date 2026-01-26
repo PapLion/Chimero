@@ -1,0 +1,9 @@
+{
+  "/assets/page": "app/assets/page.js",
+  "/calendar/page": "app/calendar/page.js",
+  "/page": "app/page.js",
+  "/trackers/page": "app/trackers/page.js",
+  "/tracking/mood/page": "app/tracking/mood/page.js",
+  "/tracking/tasks/page": "app/tracking/tasks/page.js",
+  "/tracking/weight/page": "app/tracking/weight/page.js"
+}

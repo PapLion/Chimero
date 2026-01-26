@@ -362,11 +362,13 @@ export default function HomePage() {
     >
       <div ref={containerRef} className="flex-1 min-h-0 flex items-center justify-center p-4">
         <div
-          className="relative"
+          className="relative dashboard-grid-bg"
           style={{
             width: `${gridWidth}px`,
             height: `${gridHeight}px`,
-          }}
+            "--cell-size": `${cellSize}px`,
+            "--grid-gap": `${GRID_GAP}px`,
+          } as React.CSSProperties}
         >
           {/* Grid cells - only visible when dragging */}
           {isDragging && (
