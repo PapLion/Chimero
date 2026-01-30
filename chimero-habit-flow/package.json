@@ -1,0 +1,27 @@
+{
+  "name": "chimero-habit-flow",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "turbo run dev",
+    "db:migrate": "turbo run db:migrate",
+    "build": "turbo run build && electron-builder",
+    "test": "turbo run test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.28.2", 
+  "type": "commonjs",
+  "dependencies": {
+    "electron": "^40.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.1.0",
+    "electron-builder": "^26.4.0",
+    "turbo": "^2.7.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  }
+}
