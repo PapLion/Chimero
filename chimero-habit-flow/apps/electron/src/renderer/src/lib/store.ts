@@ -5,12 +5,23 @@ export type PageType = "home" | "calendar" | "assets" | "custom-trackers" | "tra
 export type AssetCategory = "games" | "books" | "tv" | "apps" | "other"
 export type AssetType = "svg" | "png" | "jpg" | "gif" | "webp" | "other"
 
+export interface TrackerConfig {
+  min?: number
+  max?: number
+  unit?: string
+  goal?: number
+  options?: string[]
+}
+
 export interface Tracker {
   id: number
   name: string
   type: TrackerType
   icon: string
-  config: Record<string, unknown>
+  color: string
+  config: TrackerConfig
+  isCustom: boolean
+  createdAt: number
 }
 
 export interface Entry {
@@ -56,16 +67,23 @@ interface AppState {
   addAsset: (asset: Omit<Asset, "id" | "createdAt">) => void
   updateAsset: (id: string, updates: Partial<Asset>) => void
   deleteAsset: (id: string) => void
+  // Custom Tracker CRUD
+  addTracker: (tracker: Omit<Tracker, "id" | "createdAt">) => void
+  updateTracker: (id: number, updates: Partial<Tracker>) => void
+  deleteTracker: (id: number) => void
 }
 
 // Mock data simulating SQLite database
 const mockTrackers: Tracker[] = [
-  { id: 1, name: "Weight", type: "counter", icon: "scale", config: { unit: "kg", goal: 70 } },
-  { id: 2, name: "Mood", type: "rating", icon: "smile", config: { max: 5 } },
-  { id: 3, name: "Exercise", type: "counter", icon: "dumbbell", config: { unit: "min", goal: 30 } },
-  { id: 4, name: "Social", type: "counter", icon: "users", config: { unit: "interactions" } },
-  { id: 5, name: "Tasks", type: "list", icon: "check-square", config: {} },
-  { id: 6, name: "Assets", type: "counter", icon: "wallet", config: { unit: "$", goal: 10000 } },
+  { id: 1, name: "Weight", type: "counter", icon: "scale", color: "#a855f7", config: { unit: "kg", goal: 70 }, isCustom: false, createdAt: Date.now() - 86400000 * 30 },
+  { id: 2, name: "Mood", type: "rating", icon: "smile", color: "#f59e0b", config: { max: 5 }, isCustom: false, createdAt: Date.now() - 86400000 * 30 },
+  { id: 3, name: "Exercise", type: "counter", icon: "dumbbell", color: "#22c55e", config: { unit: "min", goal: 30 }, isCustom: false, createdAt: Date.now() - 86400000 * 30 },
+  { id: 4, name: "Social", type: "counter", icon: "users", color: "#3b82f6", config: { unit: "interactions" }, isCustom: false, createdAt: Date.now() - 86400000 * 30 },
+  { id: 5, name: "Tasks", type: "list", icon: "check-square", color: "#ef4444", config: {}, isCustom: false, createdAt: Date.now() - 86400000 * 30 },
+  { id: 6, name: "Savings", type: "counter", icon: "wallet", color: "#10b981", config: { unit: "$", goal: 10000 }, isCustom: false, createdAt: Date.now() - 86400000 * 30 },
+  // Custom trackers
+  { id: 7, name: "CS2 Hours", type: "counter", icon: "gamepad-2", color: "#f97316", config: { unit: "hours" }, isCustom: true, createdAt: Date.now() - 86400000 * 5 },
+  { id: 8, name: "Reading", type: "counter", icon: "book", color: "#8b5cf6", config: { unit: "pages", goal: 50 }, isCustom: true, createdAt: Date.now() - 86400000 * 3 },
 ]
 
 const mockEntries: Entry[] = [
@@ -171,5 +189,24 @@ export const useAppStore = create<AppState>((set) => ({
   deleteAsset: (id) =>
     set((state) => ({
       assets: state.assets.filter((a) => a.id !== id),
+    })),
+  // Custom Tracker CRUD
+  addTracker: (tracker) =>
+    set((state) => ({
+      trackers: [
+        ...state.trackers,
+        { ...tracker, id: Math.max(...state.trackers.map((t) => t.id)) + 1, createdAt: Date.now() },
+      ],
+    })),
+  updateTracker: (id, updates) =>
+    set((state) => ({
+      trackers: state.trackers.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+    })),
+  deleteTracker: (id) =>
+    set((state) => ({
+      trackers: state.trackers.filter((t) => t.id !== id),
+      // Also remove associated entries and widgets
+      entries: state.entries.filter((e) => e.trackerId !== id),
+      widgets: state.widgets.filter((w) => w.trackerId !== id),
     })),
 }))

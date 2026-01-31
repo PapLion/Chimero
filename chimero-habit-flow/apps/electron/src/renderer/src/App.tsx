@@ -6,6 +6,7 @@ import { QuickEntry } from "./components/quick-entry"
 import { FloatingActionButton } from "./components/floating-action-button"
 import { CalendarPage } from "./pages/CalendarPage"
 import { AssetsPage } from "./pages/AssetsPage"
+import { CustomTrackersPage } from "./pages/CustomTrackersPage"
 import { useAppStore } from "./lib/store"
 
 export default function ChimeroApp() {
@@ -17,6 +18,8 @@ export default function ChimeroApp() {
         return <CalendarPage />
       case "assets":
         return <AssetsPage />
+      case "custom-trackers":
+        return <CustomTrackersPage />
       case "home":
       default:
         return <BentoGrid />
