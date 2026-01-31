@@ -1,6 +1,9 @@
 import { create } from "zustand"
 
 export type TrackerType = "counter" | "rating" | "list"
+export type PageType = "home" | "calendar" | "assets" | "custom-trackers" | "tracking"
+export type AssetCategory = "games" | "books" | "tv" | "apps" | "other"
+export type AssetType = "svg" | "png" | "jpg" | "gif" | "webp" | "other"
 
 export interface Tracker {
   id: number
@@ -25,18 +28,34 @@ export interface Widget {
   size: "small" | "medium" | "large"
 }
 
+export interface Asset {
+  id: string
+  name: string
+  category: AssetCategory
+  url: string
+  type: AssetType
+  size?: number
+  createdAt: number
+}
+
 interface AppState {
   trackers: Tracker[]
   entries: Entry[]
   widgets: Widget[]
+  assets: Asset[]
   activeTracker: number | null
+  currentPage: PageType
   sidebarCollapsed: boolean
   commandBarOpen: boolean
   setActiveTracker: (id: number | null) => void
+  setCurrentPage: (page: PageType) => void
   toggleSidebar: () => void
   toggleCommandBar: () => void
   addEntry: (entry: Omit<Entry, "id">) => void
   reorderWidgets: (widgets: Widget[]) => void
+  addAsset: (asset: Omit<Asset, "id" | "createdAt">) => void
+  updateAsset: (id: string, updates: Partial<Asset>) => void
+  deleteAsset: (id: string) => void
 }
 
 // Mock data simulating SQLite database
@@ -85,14 +104,52 @@ const mockWidgets: Widget[] = [
   { id: "widget-6", trackerId: 6, position: 5, size: "large" },
 ]
 
+const mockAssets: Asset[] = [
+  {
+    id: "asset-1",
+    name: "Elden Ring",
+    category: "games",
+    url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23764ba2' width='100' height='100'/%3E%3Ctext x='50' y='55' text-anchor='middle' fill='white' font-size='12'%3EER%3C/text%3E%3C/svg%3E",
+    type: "svg",
+    createdAt: Date.now() - 86400000 * 5,
+  },
+  {
+    id: "asset-2",
+    name: "Dune",
+    category: "books",
+    url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23667eea' width='100' height='100'/%3E%3Ctext x='50' y='55' text-anchor='middle' fill='white' font-size='12'%3EDune%3C/text%3E%3C/svg%3E",
+    type: "svg",
+    createdAt: Date.now() - 86400000 * 4,
+  },
+  {
+    id: "asset-3",
+    name: "Breaking Bad",
+    category: "tv",
+    url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%2343a047' width='100' height='100'/%3E%3Ctext x='50' y='55' text-anchor='middle' fill='white' font-size='12'%3EBB%3C/text%3E%3C/svg%3E",
+    type: "svg",
+    createdAt: Date.now() - 86400000 * 3,
+  },
+  {
+    id: "asset-4",
+    name: "Spotify",
+    category: "apps",
+    url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%231db954' width='100' height='100'/%3E%3Ctext x='50' y='55' text-anchor='middle' fill='white' font-size='12'%3ESpotify%3C/text%3E%3C/svg%3E",
+    type: "svg",
+    createdAt: Date.now() - 86400000 * 2,
+  },
+]
+
 export const useAppStore = create<AppState>((set) => ({
   trackers: mockTrackers,
   entries: mockEntries,
   widgets: mockWidgets,
+  assets: mockAssets,
   activeTracker: null,
+  currentPage: "home",
   sidebarCollapsed: false,
   commandBarOpen: false,
   setActiveTracker: (id) => set({ activeTracker: id }),
+  setCurrentPage: (page) => set({ currentPage: page }),
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   toggleCommandBar: () => set((state) => ({ commandBarOpen: !state.commandBarOpen })),
   addEntry: (entry) =>
@@ -100,4 +157,19 @@ export const useAppStore = create<AppState>((set) => ({
       entries: [...state.entries, { ...entry, id: state.entries.length + 1 }],
     })),
   reorderWidgets: (widgets) => set({ widgets }),
+  addAsset: (asset) =>
+    set((state) => ({
+      assets: [
+        ...state.assets,
+        { ...asset, id: `asset-${Date.now()}`, createdAt: Date.now() },
+      ],
+    })),
+  updateAsset: (id, updates) =>
+    set((state) => ({
+      assets: state.assets.map((a) => (a.id === id ? { ...a, ...updates } : a)),
+    })),
+  deleteAsset: (id) =>
+    set((state) => ({
+      assets: state.assets.filter((a) => a.id !== id),
+    })),
 }))

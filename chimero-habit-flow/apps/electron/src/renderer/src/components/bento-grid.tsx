@@ -56,7 +56,7 @@ export function BentoGrid() {
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={sortedWidgets.map((w) => w.id)} strategy={rectSortingStrategy}>
-        <div className="grid grid-cols-12 gap-4 auto-rows-[minmax(140px,auto)]">
+        <div className="grid grid-cols-12 gap-6 auto-rows-[minmax(140px,auto)]">
           {sortedWidgets.map((widget) => {
             const tracker = trackers.find((t) => t.id === widget.trackerId)
             const trackerEntries = entries.filter((e) => e.trackerId === widget.trackerId)

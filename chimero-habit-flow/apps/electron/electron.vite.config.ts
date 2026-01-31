@@ -43,6 +43,17 @@ export default defineConfig({
         '@packages/db': resolve(__dirname, '../../packages/db/src')
       }
     },
+    optimizeDeps: {
+      include: [
+        '@radix-ui/react-dialog',
+        '@radix-ui/react-slot',
+        '@radix-ui/react-tooltip',
+        'class-variance-authority',
+        'clsx',
+        'tailwind-merge',
+        'lucide-react'
+      ]
+    },
     plugins: [react()]
   }
 })

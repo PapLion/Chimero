@@ -4,7 +4,7 @@ import { cn } from "../lib/utils"
 import { useAppStore, type Widget, type Tracker, type Entry } from "../lib/store"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Type as type, LucideIcon } from "lucide-react"
+import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Type as type, type LucideIcon } from "lucide-react"
 import {
   LineChart,
   Line,
@@ -23,6 +23,18 @@ const iconMap: Record<string, LucideIcon> = {
   "check-square": CheckSquare,
   wallet: Wallet,
 }
+
+// Premium card classes for the Bento Grid
+const cardBaseClasses = cn(
+  "bg-white/[0.03]",
+  "border border-white/5",
+  "rounded-2xl",
+  "shadow-xl shadow-black/40",
+  "backdrop-blur-md",
+  "p-6",
+  "hover:bg-white/[0.04] hover:border-white/10",
+  "transition-all duration-200 ease-out"
+)
 
 interface WidgetCardProps {
   widget: Widget
@@ -54,14 +66,14 @@ function MoodWidget({ entries, tracker }: { entries: Entry[]; tracker: Tracker }
   return (
     <div className="flex flex-col items-center justify-center h-full gap-2">
       <span className="text-5xl">{moodEmojis[moodValue]}</span>
-      <span className="text-sm text-muted-foreground">Today's Mood</span>
-      <div className="flex gap-1 mt-2">
+      <span className="text-sm text-white/60">Today's Mood</span>
+      <div className="flex gap-1.5 mt-2">
         {[1, 2, 3, 4, 5].map((i) => (
           <div
             key={i}
             className={cn(
-              "w-2 h-2 rounded-full",
-              i <= (latestEntry?.value || 0) ? "bg-primary" : "bg-muted"
+              "w-2 h-2 rounded-full transition-colors duration-200",
+              i <= (latestEntry?.value || 0) ? "bg-blue-500" : "bg-white/10"
             )}
           />
         ))}
@@ -94,33 +106,33 @@ function CounterWidget({
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Icon className="w-4 h-4 text-primary" />
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-white/[0.06]">
+            <Icon className="w-4 h-4 text-white/70" />
           </div>
-          <span className="text-sm font-medium text-foreground">{tracker.name}</span>
+          <span className="text-sm font-medium text-white/60">{tracker.name}</span>
         </div>
         <div className="flex items-center gap-1 text-xs">
-          {trend === "up" && <TrendingUp className="w-3 h-3 text-emerald-400" />}
-          {trend === "down" && <TrendingDown className="w-3 h-3 text-rose-400" />}
-          {trend === "neutral" && <Minus className="w-3 h-3 text-muted-foreground" />}
+          {trend === "up" && <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />}
+          {trend === "down" && <TrendingDown className="w-3.5 h-3.5 text-rose-400" />}
+          {trend === "neutral" && <Minus className="w-3.5 h-3.5 text-white/30" />}
         </div>
       </div>
 
       <div className="flex-1 flex flex-col">
-        <div className="text-3xl font-bold text-foreground">
+        <div className="text-3xl font-medium text-white tracking-tight">
           {latestEntry ? formatValue(latestEntry.value, tracker.config) : "--"}
         </div>
 
         {goal && (
-          <div className="mt-2">
-            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+          <div className="mt-3">
+            <div className="flex justify-between text-xs text-white/40 mb-1.5">
               <span>Progress</span>
               <span>{Math.round(progress)}%</span>
             </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary rounded-full transition-all"
+                className="h-full bg-blue-500 rounded-full transition-all duration-300"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -133,21 +145,21 @@ function CounterWidget({
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id={`gradient-${tracker.id}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2} />
+                    <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <XAxis
                   dataKey="date"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
                 />
                 <YAxis hide domain={["auto", "auto"]} />
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke="hsl(var(--primary))"
+                  stroke="#3b82f6"
                   strokeWidth={2}
                   fill={`url(#gradient-${tracker.id})`}
                 />
@@ -170,27 +182,27 @@ function TaskWidget({ tracker }: { tracker: Tracker }) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="p-2 rounded-lg bg-primary/10">
-          <CheckSquare className="w-4 h-4 text-primary" />
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2 rounded-xl bg-white/[0.06]">
+          <CheckSquare className="w-4 h-4 text-white/70" />
         </div>
-        <span className="text-sm font-medium text-foreground">{tracker.name}</span>
+        <span className="text-sm font-medium text-white/60">{tracker.name}</span>
       </div>
-      <div className="space-y-2 flex-1">
+      <div className="space-y-2.5 flex-1">
         {mockTasks.map((task) => (
-          <div key={task.id} className="flex items-center gap-2">
+          <div key={task.id} className="flex items-center gap-3">
             <div
               className={cn(
-                "w-4 h-4 rounded border flex items-center justify-center",
-                task.done ? "bg-primary border-primary" : "border-muted-foreground"
+                "w-4 h-4 rounded border flex items-center justify-center transition-colors duration-200",
+                task.done ? "bg-blue-500 border-blue-500" : "border-white/20"
               )}
             >
-              {task.done && <CheckSquare className="w-3 h-3 text-primary-foreground" />}
+              {task.done && <CheckSquare className="w-3 h-3 text-white" />}
             </div>
             <span
               className={cn(
-                "text-sm",
-                task.done ? "text-muted-foreground line-through" : "text-foreground"
+                "text-sm transition-colors duration-200",
+                task.done ? "text-white/40 line-through" : "text-white/80"
               )}
             >
               {task.text}
@@ -198,7 +210,7 @@ function TaskWidget({ tracker }: { tracker: Tracker }) {
           </div>
         ))}
       </div>
-      <div className="text-xs text-muted-foreground mt-2">
+      <div className="text-xs text-white/40 mt-3">
         {mockTasks.filter((t) => t.done).length}/{mockTasks.length} completed
       </div>
     </div>
@@ -237,9 +249,9 @@ export function WidgetCard({ widget, tracker, entries }: WidgetCardProps) {
       style={style}
       className={cn(
         sizeClasses[widget.size],
-        "group relative bg-card border border-border rounded-xl p-4 transition-all",
-        isDragging && "opacity-50 scale-105 z-50 shadow-2xl shadow-primary/20",
-        "hover:border-primary/30"
+        "group relative",
+        cardBaseClasses,
+        isDragging && "opacity-50 scale-105 z-50 shadow-2xl shadow-blue-500/10"
       )}
     >
       {/* Drag Handle */}
@@ -247,11 +259,11 @@ export function WidgetCard({ widget, tracker, entries }: WidgetCardProps) {
         {...attributes}
         {...listeners}
         className={cn(
-          "absolute top-2 right-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity",
-          "hover:bg-muted cursor-grab active:cursor-grabbing"
+          "absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200",
+          "hover:bg-white/[0.06] cursor-grab active:cursor-grabbing"
         )}
       >
-        <GripVertical className="w-4 h-4 text-muted-foreground" />
+        <GripVertical className="w-4 h-4 text-white/30" />
       </button>
 
       {renderContent()}
