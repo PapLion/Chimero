@@ -1,8 +1,9 @@
 "use client"
 
 import { cn } from "../lib/utils"
-import { useAppStore, type PageType } from "../lib/store"
-import { Flame, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, CheckSquare, Tv, Salad, Smartphone, Type as type, LucideIcon } from "lucide-react"
+import { type PageType } from "../lib/store"
+import { useTrackers } from "../lib/queries"
+import { Flame, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, CheckSquare, Tv, Salad, Smartphone, LucideIcon } from "lucide-react"
 
 // Icon mapping for custom trackers
 const iconMap: Record<string, LucideIcon> = {
@@ -41,8 +42,7 @@ export function CustomTrackersSection({
   setCurrentPage,
   setActiveTracker,
 }: CustomTrackersSectionProps) {
-  const { trackers } = useAppStore()
-  
+  const { data: trackers = [] } = useTrackers()
   const customTrackers = trackers.filter((t) => t.isCustom)
 
   if (customTrackers.length === 0) {
@@ -65,7 +65,7 @@ export function CustomTrackersSection({
 
       {/* Custom Tracker Items */}
       {customTrackers.map((tracker) => {
-        const Icon = iconMap[tracker.icon] || Flame
+        const Icon = iconMap[tracker.icon ?? ""] || Flame
         const isActive = activeTrackingItem === `custom-${tracker.id}`
 
         return (

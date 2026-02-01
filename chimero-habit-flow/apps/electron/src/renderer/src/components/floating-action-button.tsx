@@ -5,11 +5,11 @@ import { Plus } from "lucide-react"
 import { cn } from "../lib/utils"
 
 export function FloatingActionButton() {
-  const { toggleCommandBar } = useAppStore()
+  const { setQuickEntryOpen, isQuickEntryOpen } = useAppStore()
 
   return (
     <button
-      onClick={toggleCommandBar}
+      onClick={() => setQuickEntryOpen(!isQuickEntryOpen)}
       className={cn(
         "fixed bottom-6 right-6 z-50",
         "w-14 h-14 rounded-full",

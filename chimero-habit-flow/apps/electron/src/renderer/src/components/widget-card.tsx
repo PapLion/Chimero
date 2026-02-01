@@ -1,10 +1,11 @@
 "use client"
 
 import { cn } from "../lib/utils"
-import { useAppStore, type Widget, type Tracker, type Entry } from "../lib/store"
+import { type Widget, type Tracker, type Entry } from "../lib/store"
+import { useMoodDailyAggregates } from "../lib/queries"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Type as type, type LucideIcon } from "lucide-react"
+import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, type LucideIcon } from "lucide-react"
 import {
   LineChart,
   Line,
@@ -51,8 +52,8 @@ function formatValue(value: number, config: Record<string, unknown>): string {
 
 function getTrend(entries: Entry[]): "up" | "down" | "neutral" {
   if (entries.length < 2) return "neutral"
-  const recent = entries[entries.length - 1].value
-  const previous = entries[entries.length - 2].value
+  const recent = entries[entries.length - 1]?.value ?? 0
+  const previous = entries[entries.length - 2]?.value ?? 0
   if (recent > previous) return "up"
   if (recent < previous) return "down"
   return "neutral"
@@ -60,24 +61,50 @@ function getTrend(entries: Entry[]): "up" | "down" | "neutral" {
 
 function MoodWidget({ entries, tracker }: { entries: Entry[]; tracker: Tracker }) {
   const latestEntry = entries[entries.length - 1]
+  const { data: dailyAggregates = [] } = useMoodDailyAggregates(tracker.id, 14)
   const moodEmojis = ["😢", "😔", "😐", "🙂", "😄"]
-  const moodValue = latestEntry ? Math.min(Math.max(Math.round(latestEntry.value) - 1, 0), 4) : 2
+  const moodValue = latestEntry ? Math.min(Math.max(Math.round(latestEntry.value ?? 0) - 1, 0), 4) : 2
+
+  const chartData = dailyAggregates.map((d) => ({
+    date: d.date.slice(5), // MM-DD
+    value: d.value,
+  }))
 
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-2">
-      <span className="text-5xl">{moodEmojis[moodValue]}</span>
-      <span className="text-sm text-white/60">Today's Mood</span>
-      <div className="flex gap-1.5 mt-2">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <div
-            key={i}
-            className={cn(
-              "w-2 h-2 rounded-full transition-colors duration-200",
-              i <= (latestEntry?.value || 0) ? "bg-blue-500" : "bg-white/10"
-            )}
-          />
-        ))}
+    <div className="flex flex-col h-full">
+      <div className="flex flex-col items-center gap-1 mb-2">
+        <span className="text-4xl">{moodEmojis[moodValue]}</span>
+        <span className="text-xs text-white/60">Today</span>
+        <div className="flex gap-1">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div
+              key={i}
+              className={cn(
+                "w-1.5 h-1.5 rounded-full transition-colors",
+                i <= (latestEntry?.value || 0) ? "bg-blue-500" : "bg-white/10"
+              )}
+            />
+          ))}
+        </div>
       </div>
+      {chartData.length > 0 && (
+        <div className="flex-1 min-h-[60px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <XAxis dataKey="date" hide />
+              <YAxis hide domain={[1, 5]} />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="hsl(266 73% 63%)"
+                strokeWidth={2}
+                dot={{ fill: "hsl(266 73% 63% / 0.5)", r: 2 }}
+                activeDot={{ r: 4 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   )
 }
@@ -93,15 +120,15 @@ function CounterWidget({
 }) {
   const latestEntry = entries[entries.length - 1]
   const trend = getTrend(entries)
-  const Icon = iconMap[tracker.icon] || CheckSquare
+  const Icon = iconMap[tracker.icon ?? ""] || CheckSquare
 
   const chartData = entries.slice(-7).map((entry) => ({
-    value: entry.value,
+    value: entry.value ?? 0,
     date: new Date(entry.timestamp).toLocaleDateString("en", { weekday: "short" }),
   }))
 
-  const goal = tracker.config.goal as number | undefined
-  const progress = goal && latestEntry ? Math.min((latestEntry.value / goal) * 100, 100) : 0
+  const goal = (tracker.config as Record<string, unknown>)?.goal as number | undefined
+  const progress = goal && latestEntry != null ? Math.min(((latestEntry.value ?? 0) / goal) * 100, 100) : 0
 
   return (
     <div className="flex flex-col h-full">
@@ -121,7 +148,7 @@ function CounterWidget({
 
       <div className="flex-1 flex flex-col">
         <div className="text-3xl font-medium text-white tracking-tight">
-          {latestEntry ? formatValue(latestEntry.value, tracker.config) : "--"}
+          {latestEntry ? formatValue(latestEntry.value ?? 0, (tracker.config ?? {}) as Record<string, unknown>) : "--"}
         </div>
 
         {goal && (
@@ -172,13 +199,13 @@ function CounterWidget({
   )
 }
 
-function TaskWidget({ tracker }: { tracker: Tracker }) {
-  const mockTasks = [
-    { id: 1, text: "Review project specs", done: true },
-    { id: 2, text: "Update documentation", done: true },
-    { id: 3, text: "Team standup meeting", done: false },
-    { id: 4, text: "Code review PR #42", done: false },
-  ]
+function TaskWidget({ entries, tracker }: { entries: Entry[]; tracker: Tracker }) {
+  const tasks = entries.map((e) => ({
+    id: e.id,
+    text: e.note ?? "Task",
+    done: (e.value ?? 0) >= 1,
+  }))
+  const completed = tasks.filter((t) => t.done).length
 
   return (
     <div className="flex flex-col h-full">
@@ -188,30 +215,34 @@ function TaskWidget({ tracker }: { tracker: Tracker }) {
         </div>
         <span className="text-sm font-medium text-white/60">{tracker.name}</span>
       </div>
-      <div className="space-y-2.5 flex-1">
-        {mockTasks.map((task) => (
-          <div key={task.id} className="flex items-center gap-3">
-            <div
-              className={cn(
-                "w-4 h-4 rounded border flex items-center justify-center transition-colors duration-200",
-                task.done ? "bg-blue-500 border-blue-500" : "border-white/20"
-              )}
-            >
-              {task.done && <CheckSquare className="w-3 h-3 text-white" />}
+      <div className="space-y-2.5 flex-1 overflow-y-auto max-h-[120px]">
+        {tasks.length === 0 ? (
+          <p className="text-sm text-white/40">No tasks yet</p>
+        ) : (
+          tasks.slice(0, 8).map((task) => (
+            <div key={task.id} className="flex items-center gap-3">
+              <div
+                className={cn(
+                  "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors duration-200",
+                  task.done ? "bg-blue-500 border-blue-500" : "border-white/20"
+                )}
+              >
+                {task.done && <CheckSquare className="w-3 h-3 text-white" />}
+              </div>
+              <span
+                className={cn(
+                  "text-sm transition-colors duration-200 truncate",
+                  task.done ? "text-white/40 line-through" : "text-white/80"
+                )}
+              >
+                {task.text}
+              </span>
             </div>
-            <span
-              className={cn(
-                "text-sm transition-colors duration-200",
-                task.done ? "text-white/40 line-through" : "text-white/80"
-              )}
-            >
-              {task.text}
-            </span>
-          </div>
-        ))}
+          ))
+        )}
       </div>
       <div className="text-xs text-white/40 mt-3">
-        {mockTasks.filter((t) => t.done).length}/{mockTasks.length} completed
+        {completed}/{tasks.length} completed
       </div>
     </div>
   )
@@ -238,7 +269,7 @@ export function WidgetCard({ widget, tracker, entries }: WidgetCardProps) {
       return <MoodWidget entries={entries} tracker={tracker} />
     }
     if (tracker.type === "list") {
-      return <TaskWidget tracker={tracker} />
+      return <TaskWidget entries={entries} tracker={tracker} />
     }
     return <CounterWidget entries={entries} tracker={tracker} size={widget.size} />
   }

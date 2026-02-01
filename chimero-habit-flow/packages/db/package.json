@@ -3,8 +3,13 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "files": ["src", "drizzle", "package.json"],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:reset": "node -e \"const fs=require('fs');const path=require('path');const base=process.env.LOCALAPPDATA||process.env.APPDATA||process.env.HOME||'';const p=path.join(base,'Chimero','chimero.db');try{fs.unlinkSync(p);console.log('Deleted:',p);}catch(e){if(e.code==='ENOENT')console.log('No DB file at',p);else throw e;}\""
   },
   "keywords": [],
   "author": "",

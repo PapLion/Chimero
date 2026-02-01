@@ -1,53 +1,107 @@
 "use client"
 
+import { useState } from "react"
 import { useAppStore } from "../lib/store"
-import { Bell, Search } from "lucide-react"
-import { Input } from "@packages/ui/input"
+import { useTrackers } from "../lib/queries"
+import { Bell, ChevronLeft, ChevronRight } from "lucide-react"
+import { Button } from "@packages/ui/button"
 
 export function Header() {
-  const { activeTracker, trackers } = useAppStore()
+  const { activeTracker, toggleNotifications } = useAppStore()
+  const { data: trackers = [] } = useTrackers()
+  // Reminders: no IPC yet; badge hidden until API exists
+  const unreadCount = 0
+  const [currentDate, setCurrentDate] = useState(new Date())
 
   const activeTrackerData = activeTracker
     ? trackers.find((t) => t.id === activeTracker)
     : null
 
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
+  const goToPreviousDay = () => {
+    setCurrentDate((prev) => {
+      const newDate = new Date(prev)
+      newDate.setDate(newDate.getDate() - 1)
+      return newDate
+    })
+  }
+
+  const goToNextDay = () => {
+    setCurrentDate((prev) => {
+      const newDate = new Date(prev)
+      newDate.setDate(newDate.getDate() + 1)
+      return newDate
+    })
+  }
+
+  const formatDate = (date: Date) => {
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }).format(date)
+  }
+
+  const isToday = currentDate.toDateString() === new Date().toDateString()
 
   return (
     <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-background/50 backdrop-blur-sm">
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">
-          {activeTrackerData ? activeTrackerData.name : "Dashboard"}
-        </h1>
-        <p className="text-sm text-muted-foreground">{today}</p>
+      {/* Left: Stats Block */}
+      <div className="hidden lg:flex items-center gap-6">
+        <div className="text-center">
+          <div className="text-2xl font-display font-bold text-accent">8</div>
+          <div className="text-xs text-muted-foreground">Activities</div>
+        </div>
+        <div className="w-px h-10 bg-border" />
+        <div className="text-center">
+          <div className="text-2xl font-display font-bold text-primary">12h</div>
+          <div className="text-xs text-muted-foreground">Tracked</div>
+        </div>
       </div>
 
+      {/* Center: Date Navigation */}
       <div className="flex items-center gap-4">
-        {/* Search */}
-        <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search..."
-            className="w-64 pl-9 bg-input border-border text-foreground placeholder:text-muted-foreground"
-          />
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={goToPreviousDay} 
+          className="rounded-full hover:bg-muted"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </Button>
+
+        <div className="text-center">
+          <h2 className="text-xl md:text-2xl font-display font-bold tracking-tight text-foreground">
+            {activeTrackerData ? activeTrackerData.name : formatDate(currentDate)}
+          </h2>
+          {isToday && !activeTrackerData && (
+            <p className="text-sm text-muted-foreground mt-0.5">Today's Overview</p>
+          )}
+          {activeTrackerData && (
+            <p className="text-sm text-muted-foreground mt-0.5">{formatDate(currentDate)}</p>
+          )}
         </div>
 
-        {/* Notifications */}
-        <button className="relative p-2 rounded-lg hover:bg-muted transition-colors">
-          <Bell className="w-5 h-5 text-muted-foreground" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
-        </button>
-
-        {/* User Avatar */}
-        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-          <span className="text-sm font-medium text-primary">U</span>
-        </div>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={goToNextDay} 
+          className="rounded-full hover:bg-muted"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </Button>
       </div>
+
+      {/* Right: Notifications */}
+      <button 
+        onClick={toggleNotifications}
+        className="relative p-2 rounded-full hover:bg-muted transition-colors"
+      >
+        <Bell className="w-5 h-5 text-muted-foreground" />
+        {unreadCount > 0 && (
+          <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
+        )}
+      </button>
     </header>
   )
 }

@@ -157,59 +157,64 @@ Aquí transformamos las quejas del cliente (`CLIENT_CHAT.MD`) en soluciones téc
 
 Asumiendo un desarrollador Senior dedicado.
 
-#### **Semana 1: Cimientos y Datos (The Engine)**
+#### **Semana 1: Cimientos y Datos (The Engine)** ✅ COMPLETED
 
 * **Objetivo:** Tener Electron corriendo con SQLite y el esquema de base de datos validado.
 * **Tareas:**
-* [ ] Inicializar repositorio Monorepo (Turborepo opcional) o estructura limpia Vite+Electron.
-* [ ] Configurar GitHub Actions (Lint, Build, Test).
-* [ ] **Diseño de Schema Drizzle:** Tablas para `Users`, `Trackers`, `Entries`, `Tags`, `Assets`.
-* *Detalle:* Tabla `Entries` polimórfica o tablas separadas (`WeightEntries`, `MoodEntries`) unificadas por vistas. Recomiendo tablas separadas para integridad de datos.
+* [x] Inicializar repositorio Monorepo (Turborepo opcional) o estructura limpia Vite+Electron.
+* [x] **Diseño de Schema Drizzle:** Tablas para `settings`, `Trackers`, `Entries`, `Tags`, `Assets`.
+* *Detalle:* Tabla `Entries` unificada con `trackerId`, `value`, `metadata` JSON, `dateStr` para agrupaciones SQL.
+* [x] Implementar IPC Bridge seguro (Context Isolation enabled).
 
 
-* [ ] Implementar IPC Bridge seguro (Context Isolation enabled).
-* [ ] Script de migración: Importar datos JSON del MVP actual a SQLite.
-
-
-
-#### **Semana 2: Core Features & Quick Entry (The Input)**
+#### **Semana 2: Core Features & Quick Entry (The Input)** ✅ COMPLETED (Autocomplete pendiente → carryover)
 
 * **Objetivo:** El usuario puede meter datos de forma ultra-rápida.
 * **Tareas:**
-* [ ] Desarrollar componente `QuickEntry` (tipo Spotlight/CommandBar - `Ctrl+K`).
-* [ ] Implementar lógica de Backend para: Tareas, Peso, Mood (1-10 multi-entry), Media.
-* [ ] CRUD básico en UI (sin drag & drop complejo aún, solo formularios funcionales).
-* [ ] Sistema de Autocompletado (Recent/Favorites) consultando SQLite.
-* [ ] Tests unitarios de la lógica de inserción y validación (Zod).
+* [x] Desarrollar componente `QuickEntry` (tipo Spotlight/CommandBar - `Ctrl+K`).
+* [x] Implementar lógica de Backend para: Tareas, Peso, Mood (1-10 multi-entry), Media.
+* [x] CRUD básico en UI (sin drag & drop complejo aún, solo formularios funcionales).
+* [ ] Sistema de Autocompletado (Recent/Favorites) consultando SQLite — *en ejecución*. (Need the backend (Crud system for trackers) for testing)
 
 
 
-#### **Semana 3: Dashboard & Visualización (The View)**
+#### **Semana 3: Dashboard & Visualización (The View)** 🔄 IN PROGRESS / HIGH PRIORITY
 
 * **Objetivo:** Recrear el "Bento Grid" pero optimizado.
 * **Tareas:**
-* [ ] Implementar `dnd-kit` para el Grid Layout.
+* [ ] Implementar `dnd-kit` para el Grid Layout (persistencia de orden). (I think this's done)
 * [ ] Crear Widgets individuales:
 * *Mood Graph:* Gráfico de líneas (Recharts) con agregación diaria SQL.
 * *Tasks:* Lista virtualizada con checkbox.
 * *Media:* Grid de portadas con lazy loading.
-
-
-* [ ] Conectar Widgets a TanStack Query (auto-refresco al cambiar DB).
+* [ ] Conectar Widgets a TanStack Query (auto-refresco al cambiar DB). (I think this's done too)
 * [ ] Implementar sistema de Themes (Dark/Low-contrast).
 
 
 
-#### **Semana 4: Analytics, Polish & Deploy (The Value)**
+#### **Semana 4: Analytics & Polish (The Value)** — Scope reducido para MVP
 
-* **Objetivo:** Estadísticas avanzadas y entrega de ejecutable.
+* **Objetivo:** Pulido final y preparación de valor entregable.
 * **Tareas:**
-* [ ] Página de Estadísticas: Queries SQL para correlaciones (Pearson) y Rachas (Streaks). [Imagen de correlación estadística básica]
 * [ ] Pulido de UI: Animaciones de entrada, tooltips, manejo de errores.
-* [ ] Configuración de `electron-builder` para firmar código (opcional) o generar builds portables.
-* [ ] Setup de Backups automáticos locales.
-* [ ] **Playwright Test:** Verificar flujo crítico (Abrir app -> Crear Tarea -> Ver en Dashboard).
+
+
+
+---
+
+### 5. Post-MVP / Optimization Phase
+
+Elementos diferidos para una fase posterior (no prioritarios en el MVP actual):
+
+* [ ] **GitHub Actions:** Lint, Build, Test en CI.
+* [ ] **Tests unitarios:** Zustand/Zod, lógica de inserción y validación.
+* [ ] **electron-builder:** Packaging, firma de código, builds portables.
+* [ ] **Backups automáticos** locales.
+* [ ] **Playwright E2E:** Flujo crítico (Abrir app → Crear Tarea → Ver en Dashboard).
+* [ ] **Estadísticas avanzadas:** Correlaciones (Pearson), Rachas (Streaks).
 
 
 
 Este plan preserva la esencia visual que el cliente aprobó en el MVP, pero reemplaza el motor interno "de juguete" (JSON) por uno de "grado industrial" (SQLite + Electron optimizado), asegurando la escalabilidad y velocidad que busca.
+
+The project uses PNPM and the terminal uses POWERSHELL

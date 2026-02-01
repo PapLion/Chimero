@@ -2,9 +2,10 @@
 
 import { useState } from "react"
 import { cn } from "../lib/utils"
-import { useAppStore, type Tracker } from "../lib/store"
+import { type Tracker } from "../lib/store"
+import { useTrackers, useDeleteTrackerMutation } from "../lib/queries"
 import { CreateTrackerDialog } from "../components/modals/CreateTrackerDialog"
-import { Plus, Pencil, Trash2, Flame, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, Sparkles, Type as type, LucideIcon } from "lucide-react"
+import { Plus, Pencil, Trash2, Flame, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, Sparkles, LucideIcon } from "lucide-react"
 
 // Icon mapping for dynamic rendering
 const iconMap: Record<string, LucideIcon> = {
@@ -27,7 +28,8 @@ const iconMap: Record<string, LucideIcon> = {
 }
 
 export function CustomTrackersPage() {
-  const { trackers, deleteTracker } = useAppStore()
+  const { data: trackers = [] } = useTrackers()
+  const deleteTrackerMutation = useDeleteTrackerMutation()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingTracker, setEditingTracker] = useState<Tracker | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
@@ -40,8 +42,7 @@ export function CustomTrackersPage() {
   }
 
   const handleDelete = (id: number) => {
-    deleteTracker(id)
-    setDeleteConfirmId(null)
+    deleteTrackerMutation.mutate(id, { onSettled: () => setDeleteConfirmId(null) })
   }
 
   const handleDialogClose = (open: boolean) => {
@@ -119,7 +120,7 @@ export function CustomTrackersPage() {
         /* Tracker Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {customTrackers.map((tracker) => {
-            const Icon = iconMap[tracker.icon] || Flame
+            const Icon = iconMap[tracker.icon ?? ""] || Flame
             const isDeleting = deleteConfirmId === tracker.id
 
             return (
@@ -211,7 +212,7 @@ export function CustomTrackersPage() {
                 </div>
 
                 <p className="text-xs text-[hsl(210_12%_47%)]">
-                  Created {formatDate(tracker.createdAt)}
+                  Created {formatDate(Number(tracker.createdAt))}
                 </p>
               </div>
             )

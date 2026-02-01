@@ -1,10 +1,26 @@
 import { resolve } from 'path'
+import { copyFileSync, mkdirSync, existsSync } from 'fs'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
+function copySplashPlugin() {
+  return {
+    name: 'copy-splash',
+    closeBundle() {
+      const src = resolve(__dirname, 'src/main/splash.html')
+      const outDir = resolve(__dirname, 'out/main')
+      const dest = resolve(outDir, 'splash.html')
+      if (existsSync(src)) {
+        if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true })
+        copyFileSync(src, dest)
+      }
+    }
+  }
+}
+
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin(), copySplashPlugin()],
     // 👇 AGREGA ESTO PARA ARREGLAR LA DB
     build: {
       rollupOptions: {

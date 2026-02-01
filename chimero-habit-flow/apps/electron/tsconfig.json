@@ -28,6 +28,7 @@
     "paths": {
       "@renderer/*": ["src/renderer/src/*"],
       "@packages/ui/*": ["../../packages/ui/*"],
+      "@packages/db": ["../../packages/db/src/index.ts"],
       "@packages/db/*": ["../../packages/db/src/*"]
     }
   },

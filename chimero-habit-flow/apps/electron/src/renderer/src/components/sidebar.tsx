@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import { cn } from "../lib/utils"
-import { useAppStore, type PageType, type Tracker } from "../lib/store"
+import { useAppStore, type PageType } from "../lib/store"
+import { useTrackers } from "../lib/queries"
 import { Home, Calendar, ImageIcon, Flame, ChevronDown, ChevronRight, Scale, Dumbbell, Salad, CheckSquare, Tv, Book, Gamepad2, Smartphone, Smile, Users, Settings, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Type as type, LucideIcon } from "lucide-react"
 import { CustomTrackersSection } from "./CustomTrackersSection" // Import CustomTrackersSection
 
@@ -54,7 +55,10 @@ const trackingNavigation = [
 
 export function Sidebar() {
   const { activeTracker, setActiveTracker, currentPage, setCurrentPage } = useAppStore()
+  const { data: trackers = [] } = useTrackers()
   const [activeTrackingItem, setActiveTrackingItem] = useState<string | null>(null)
+
+  const trackerByName = Object.fromEntries(trackers.map((t) => [t.name.toLowerCase().replace(/\s+/g, ""), t.id])) as Record<string, number>
   const [trackingExpanded, setTrackingExpanded] = useState(true)
 
   const isTrackingActive = activeTrackingItem !== null
@@ -145,16 +149,9 @@ export function Sidebar() {
                         onClick={() => {
                           setActiveTrackingItem(item.id)
                           setCurrentPage("home")
-                          // Map to tracker ID if exists
-                          const trackerMap: Record<string, number> = {
-                            weight: 1,
-                            mood: 2,
-                            exercise: 3,
-                            social: 4,
-                            tasks: 5,
-                            assets: 6,
-                          }
-                          setActiveTracker(trackerMap[item.id] || null)
+                          const key = item.name.toLowerCase().replace(/\s+/g, "")
+                          const id = trackerByName[item.id] ?? trackerByName[key] ?? null
+                          setActiveTracker(id ?? null)
                         }}
                         className={cn(
                           "w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-sm",

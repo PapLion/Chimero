@@ -4,7 +4,8 @@ import React from "react"
 
 import { useState, useEffect } from "react"
 import { cn } from "../../lib/utils"
-import { useAppStore, type Tracker, type TrackerType, type TrackerConfig } from "../../lib/store"
+import { type Tracker, type TrackerType, type TrackerConfig } from "../../lib/store"
+import { useCreateTrackerMutation, useUpdateTrackerMutation } from "../../lib/queries"
 import { X, Flame, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, Type as type, LucideIcon } from "lucide-react"
 
 interface CreateTrackerDialogProps {
@@ -53,7 +54,8 @@ const trackerTypes: { type: TrackerType; label: string; description: string }[] 
 ]
 
 export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateTrackerDialogProps) {
-  const { addTracker, updateTracker } = useAppStore()
+  const createMutation = useCreateTrackerMutation()
+  const updateMutation = useUpdateTrackerMutation()
   
   const [name, setName] = useState("")
   const [selectedIcon, setSelectedIcon] = useState("flame")
@@ -66,10 +68,10 @@ export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateT
     if (open) {
       if (editTracker) {
         setName(editTracker.name)
-        setSelectedIcon(editTracker.icon)
-        setSelectedColor(editTracker.color)
+        setSelectedIcon(editTracker.icon ?? "flame")
+        setSelectedColor(editTracker.color ?? "#a855f7")
         setSelectedType(editTracker.type)
-        setConfig(editTracker.config)
+        setConfig(editTracker.config ?? {})
       } else {
         setName("")
         setSelectedIcon("flame")
@@ -82,7 +84,7 @@ export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateT
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!name.trim()) return
 
     const trackerData = {
@@ -92,15 +94,36 @@ export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateT
       type: selectedType,
       config,
       isCustom: true,
+      order: 0,
+      archived: false,
     }
 
     if (editTracker) {
-      updateTracker(editTracker.id, trackerData)
+      updateMutation.mutate(
+        {
+          id: editTracker.id,
+          updates: {
+            name: trackerData.name,
+            icon: trackerData.icon,
+            color: trackerData.color,
+            type: trackerData.type,
+            config: trackerData.config,
+          },
+        },
+        { onSuccess: () => onOpenChange(false) }
+      )
     } else {
-      addTracker(trackerData)
+      createMutation.mutate(
+        {
+          name: trackerData.name,
+          type: trackerData.type,
+          icon: trackerData.icon,
+          color: trackerData.color,
+          config: trackerData.config,
+        },
+        { onSuccess: () => onOpenChange(false) }
+      )
     }
-
-    onOpenChange(false)
   }
 
   if (!open) return null

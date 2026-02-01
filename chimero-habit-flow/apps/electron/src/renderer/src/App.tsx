@@ -1,9 +1,11 @@
 "use client"
 
 import { Sidebar } from "./components/sidebar"
+import { Header } from "./components/header"
 import { BentoGrid } from "./components/bento-grid"
 import { QuickEntry } from "./components/quick-entry"
 import { FloatingActionButton } from "./components/floating-action-button"
+import { NotificationsModal } from "./components/modals/NotificationsModal"
 import { CalendarPage } from "./pages/CalendarPage"
 import { AssetsPage } from "./pages/AssetsPage"
 import { CustomTrackersPage } from "./pages/CustomTrackersPage"
@@ -35,6 +37,9 @@ export default function ChimeroApp() {
 
         {/* Main Content */}
         <main className="flex-1 flex flex-col overflow-hidden">
+          {/* Header */}
+          <Header />
+          
           {/* Dashboard Content */}
           <div className="flex-1 overflow-y-auto p-8">
             {renderPage()}
@@ -44,6 +49,9 @@ export default function ChimeroApp() {
 
       {/* Quick Entry Command Bar */}
       <QuickEntry />
+
+      {/* Notifications Modal */}
+      <NotificationsModal />
 
       {/* Floating Action Button */}
       <FloatingActionButton />

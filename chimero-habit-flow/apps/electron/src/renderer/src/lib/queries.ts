@@ -1,0 +1,149 @@
+/**
+ * TanStack Query hooks for Chimero - fetches real data via IPC.
+ */
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { api } from './api'
+import type { Tracker, Entry } from './store'
+
+export const queryKeys = {
+  trackers: ['trackers'] as const,
+  entries: (opts?: { trackerId?: number }) => ['entries', opts] as const,
+  recentTrackers: (limit?: number) => ['recent-trackers', limit] as const,
+  favoriteTrackers: ['favorite-trackers'] as const,
+  moodAggregates: (trackerId?: number, days?: number) => ['mood-aggregates', trackerId, days] as const,
+  taskEntries: (trackerId: number) => ['task-entries', trackerId] as const,
+  assets: (opts?: { limit?: number; offset?: number }) => ['assets', opts] as const,
+  dashboardLayout: ['dashboard-layout'] as const,
+}
+
+export function useTrackers() {
+  return useQuery({
+    queryKey: queryKeys.trackers,
+    queryFn: () => api.getTrackers() as Promise<Tracker[]>,
+    staleTime: 30_000,
+  })
+}
+
+export function useEntries(options?: { limit?: number; trackerId?: number }) {
+  return useQuery({
+    queryKey: queryKeys.entries(options),
+    queryFn: () => api.getEntries(options) as Promise<Entry[]>,
+    staleTime: 10_000,
+  })
+}
+
+export function useRecentTrackers(limit = 10) {
+  return useQuery({
+    queryKey: queryKeys.recentTrackers(limit),
+    queryFn: () => api.getRecentTrackers(limit) as Promise<Tracker[]>,
+    staleTime: 15_000,
+  })
+}
+
+export function useFavoriteTrackers() {
+  return useQuery({
+    queryKey: queryKeys.favoriteTrackers,
+    queryFn: () => api.getFavoriteTrackers() as Promise<Tracker[]>,
+    staleTime: 30_000,
+  })
+}
+
+export function useMoodDailyAggregates(trackerId?: number, days = 30) {
+  return useQuery({
+    queryKey: queryKeys.moodAggregates(trackerId, days),
+    queryFn: () => api.getMoodDailyAggregates({ trackerId, days }),
+    staleTime: 60_000,
+  })
+}
+
+export function useTaskEntries(trackerId: number) {
+  return useQuery({
+    queryKey: queryKeys.taskEntries(trackerId),
+    queryFn: () => api.getTaskEntries(trackerId) as Promise<Entry[]>,
+    enabled: !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
+export function useAssets(options?: { limit?: number; offset?: number }) {
+  return useQuery({
+    queryKey: queryKeys.assets(options),
+    queryFn: () => api.getAssets(options),
+    staleTime: 60_000,
+  })
+}
+
+export function useDashboardLayout() {
+  return useQuery({
+    queryKey: queryKeys.dashboardLayout,
+    queryFn: () => api.getDashboardLayout(),
+    staleTime: 60_000,
+  })
+}
+
+export function useAddEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { trackerId: number; value?: number; metadata?: Record<string, unknown>; timestamp: number }) =>
+      api.addEntry(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['entries'] })
+      qc.invalidateQueries({ queryKey: ['recent-trackers'] })
+      qc.invalidateQueries({ queryKey: ['mood-aggregates'] })
+      qc.invalidateQueries({ queryKey: ['task-entries'] })
+    },
+  })
+}
+
+export function useSaveDashboardLayoutMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (layout: Array<{ id: string; trackerId: number; position: number; size: string }>) =>
+      api.saveDashboardLayout(layout),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.dashboardLayout })
+    },
+  })
+}
+
+export function useUpdateTrackerMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      updates,
+    }: {
+      id: number
+      updates: { order?: number; isFavorite?: boolean; name?: string; icon?: string | null; color?: string | null; type?: string; config?: Record<string, unknown> }
+    }) => api.updateTracker(id, updates),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.trackers })
+      qc.invalidateQueries({ queryKey: queryKeys.favoriteTrackers })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackers() })
+    },
+  })
+}
+
+export function useCreateTrackerMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { name: string; type: string; icon?: string; color?: string; config?: Record<string, unknown> }) =>
+      api.createTracker(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.trackers })
+      qc.invalidateQueries({ queryKey: queryKeys.dashboardLayout })
+    },
+  })
+}
+
+export function useDeleteTrackerMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.deleteTracker(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.trackers })
+      qc.invalidateQueries({ queryKey: queryKeys.dashboardLayout })
+      qc.invalidateQueries({ queryKey: queryKeys.entries() })
+    },
+  })
+}

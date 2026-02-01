@@ -8,6 +8,7 @@ export const settings = sqliteTable("settings", {
   theme: text("theme").default("dark"),
   currency: text("currency").default("USD"),
   language: text("language").default("es"),
+  dashboardLayout: text("dashboard_layout", { mode: "json" }), // JSON: [{ id, trackerId, position, size }]
   createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
 });
 
@@ -24,8 +25,12 @@ export const trackers = sqliteTable("trackers", {
   
   // Configuración JSON para validar la entrada
   // Ej: { "min": 1, "max": 10, "unit": "kg", "step": 0.5 }
-  config: text("config", { mode: "json" }).default("{}"), 
-  
+  config: text("config", { mode: "json" }).default("{}"),
+
+  // Distingue trackers predefinidos (Weight, Mood...) de los creados por el usuario
+  isCustom: integer("is_custom", { mode: "boolean" }).default(false),
+  isFavorite: integer("is_favorite", { mode: "boolean" }).default(false),
+
   archived: integer("archived", { mode: "boolean" }).default(false),
   createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
 });
@@ -59,7 +64,19 @@ export const entries = sqliteTable("entries", {
   timestampIdx: index("timestamp_idx").on(table.timestamp), // Para ordenamiento cronológico
 }));
 
-// --- 4. ASSETS (Archivos Locales) ---
+// --- 4. REMINDERS (Notificaciones / Recordatorios) ---
+// Soporta el modal de Notifications y el modo "Set Reminder" en QuickEntry
+export const reminders = sqliteTable("reminders", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  description: text("description"),
+  dueDateTime: integer("due_date_time").notNull(), // Unix ms
+  isCompleted: integer("is_completed", { mode: "boolean" }).default(false),
+  linkedTrackerId: integer("linked_tracker_id").references(() => trackers.id, { onDelete: "set null" }),
+  createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
+});
+
+// --- 5. ASSETS (Archivos Locales) ---
 export const assets = sqliteTable("assets", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   filename: text("filename").notNull(),
@@ -73,7 +90,7 @@ export const assets = sqliteTable("assets", {
   createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
 });
 
-// --- 5. TAGS (Categorización transversal) ---
+// --- 6. TAGS (Categorización transversal) ---
 export const tags = sqliteTable("tags", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").unique().notNull(),

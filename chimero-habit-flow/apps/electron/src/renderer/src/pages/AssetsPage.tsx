@@ -4,7 +4,8 @@ import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { Upload, Search, Grid3x3, List, Trash2, Edit, Download, X, AlertCircle, Check, ImageIcon } from "lucide-react"
 import { cn } from "../lib/utils"
-import { useAppStore, type Asset, type AssetCategory } from "../lib/store"
+import { useAssets } from "../lib/queries"
+import { type Asset, type AssetCategory } from "../lib/store"
 
 const assetCategories: { id: AssetCategory | "all"; name: string }[] = [
   { id: "all", name: "All Assets" },
@@ -22,8 +23,17 @@ interface StagedAsset {
   category: AssetCategory
 }
 
+// Assets mutations: no IPC yet; no-ops until API exists
+const noopAddAsset = (_a: Omit<Asset, "id" | "createdAt">) => {}
+const noopUpdateAsset = (_id: string, _updates: Partial<Asset>) => {}
+const noopDeleteAsset = (_id: string) => {}
+
 export function AssetsPage() {
-  const { assets, addAsset, updateAsset, deleteAsset } = useAppStore()
+  const { data } = useAssets()
+  const assets = (data ?? []) as Asset[]
+  const addAsset = noopAddAsset
+  const updateAsset = noopUpdateAsset
+  const deleteAsset = noopDeleteAsset
   const [selectedCategory, setSelectedCategory] = useState<AssetCategory | "all">("all")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [searchQuery, setSearchQuery] = useState("")
@@ -63,8 +73,8 @@ export function AssetsPage() {
     e.preventDefault()
     setIsDragging(false)
 
-    const files = Array.from(e.dataTransfer.files)
-    const imageFile = files.find((file) => file.type.startsWith("image/"))
+    const files = Array.from(e.dataTransfer.files) as File[]
+    const imageFile = files.find((file: File) => file.type.startsWith("image/"))
 
     if (!imageFile) {
       showNotification("error", "Please drop an image file")
@@ -76,7 +86,7 @@ export function AssetsPage() {
 
   const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
+    if (file instanceof File) {
       await stageFile(file)
     }
     if (fileInputRef.current) {

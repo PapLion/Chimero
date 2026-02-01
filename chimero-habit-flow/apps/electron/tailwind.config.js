@@ -3,7 +3,8 @@ module.exports = {
   content: [
     "./src/renderer/index.html",
     "./src/renderer/src/**/*.{js,ts,jsx,tsx}",
-    "../../packages/ui/src/**/*.{js,ts,jsx,tsx}" // <--- CRUCIAL: Detecta cambios en tu UI package
+    // UI package: only source files at root (no ** to avoid matching node_modules)
+    "../../packages/ui/*.{js,ts,jsx,tsx}"
   ],
   theme: {
     extend: {
@@ -59,6 +60,6 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  plugins: [require('tailwindcss-animate')],
   darkMode: 'class', // Usaremos clases para el modo oscuro
 }
