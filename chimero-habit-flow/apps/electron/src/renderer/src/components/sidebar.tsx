@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { cn } from "../lib/utils"
 import { useAppStore, type PageType } from "../lib/store"
-import { useTrackers } from "../lib/queries"
+import { useTrackers, useStats } from "../lib/queries"
 import { Home, Calendar, ImageIcon, Flame, ChevronDown, ChevronRight, Scale, Dumbbell, Salad, CheckSquare, Tv, Book, Gamepad2, Smartphone, Smile, Users, Settings, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Type as type, LucideIcon } from "lucide-react"
 import { CustomTrackersSection } from "./CustomTrackersSection" // Import CustomTrackersSection
 
@@ -56,6 +56,7 @@ const trackingNavigation = [
 export function Sidebar() {
   const { activeTracker, setActiveTracker, currentPage, setCurrentPage } = useAppStore()
   const { data: trackers = [] } = useTrackers()
+  const { data: stats } = useStats()
   const [activeTrackingItem, setActiveTrackingItem] = useState<string | null>(null)
 
   const trackerByName = Object.fromEntries(trackers.map((t) => [t.name.toLowerCase().replace(/\s+/g, ""), t.id])) as Record<string, number>
@@ -194,7 +195,7 @@ export function Sidebar() {
             <Flame className="w-4 h-4 text-[hsl(266_73%_63%)]" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-display font-bold text-[hsl(266_73%_63%)]">14</span>
+            <span className="text-3xl font-display font-bold text-[hsl(266_73%_63%)]">{stats?.currentStreak ?? 0}</span>
             <span className="text-sm text-[hsl(210_12%_47%)]">days</span>
           </div>
         </div>

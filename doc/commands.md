@@ -42,7 +42,24 @@ cd chimero-habit-flow/apps/electron
 pnpm exec electron-rebuild -f -w better-sqlite3
 ```
 
+## Backend – Development Log & Commands
+
+### Successes
+- **Migración 0003:** Añadida manualmente `0003_backend_mvp_reminders_assets.sql` (reminders con time/days/enabled; assets con original_name, type). Entrada añadida en `drizzle/meta/_journal.json`.
+- **Migración 0004:** `0004_reminders_date.sql` – columna `date` (text, nullable) en `reminders` para recordatorios puntuales (YYYY-MM-DD). Entrada en `_journal.json`.
+- **Migración 0005:** `0005_reminders_completed_at.sql` – columna `completed_at` (integer, nullable) en `reminders` para persistir “completado” en UI. Entrada en `_journal.json`.
+- **Migraciones en runtime:** Al arrancar la app (`pnpm dev` o ejecutable), las migraciones 0000–0005 se aplican automáticamente desde `packages/db/drizzle/`. No es necesario ejecutar `db:push` ni `db:migrate` manualmente.
+- **Columnas `date` y `completed_at` en reminders:** Si la DB existía antes de las migraciones 0004/0005, al arrancar la app se ejecuta `ensureRemindersColumns()` (en `apps/electron/src/main/database.ts`), que añade las columnas si faltan. Si ves `SqliteError: no such column: date`, reinicia `pnpm dev` una vez; el fallback las creará. Opcional: borrar `userData/chimero.db` (carpeta Chimero en `%LOCALAPPDATA%` o `%APPDATA%`) y volver a arrancar para empezar con DB limpia.
+- **Schema:** Cambios en `packages/db/src/schema.ts` (reminders, assets) y generación de migración manual (Drizzle interactivo no usado).
+- **Build:** `pnpm build` (turbo + electron-vite) compila correctamente main, preload y renderer.
+- **Backend integration:** Nuevo IPC `update-asset(id, { originalName })`; protocolo `chimero-asset` con sanitización de path; queryKeys.reminders añadido en queries.ts.
+
+### Failures / Manual Actions Required
+- **db:generate:** Si se ejecuta `pnpm --filter db db:generate` tras cambiar el schema, Drizzle puede preguntar si una columna es nueva o renombrada (interactivo). Para evitar prompts, crear/editar la migración SQL a mano y actualizar `_journal.json`.
+- **electron-builder:** `pnpm build` puede fallar en la fase de empaquetado con: *Package "electron" is only allowed in "devDependencies"*. Solución: mover `electron` a `devDependencies` en el `package.json` donde se declare (raíz o apps/electron según la configuración).
+- **SQLite/Electron:** Si hay errores nativos con better-sqlite3, ejecutar `pnpm exec electron-rebuild -f -w better-sqlite3` desde `apps/electron`.
+
 ## Notas
 
 - **Migraciones en runtime:** Al iniciar Electron, las migraciones de `packages/db/drizzle/` se aplican automáticamente.
-- La DB vive en `app.getPath('userData')/chimero.db` (ej: `%APPDATA%/chimero-electron/chimero.db`).
+- La DB vive en `app.getPath('userData')/chimero.db` (en dev: carpeta `Chimero` en LOCALAPPDATA/APPDATA).

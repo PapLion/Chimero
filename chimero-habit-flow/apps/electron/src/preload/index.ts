@@ -12,12 +12,21 @@ const api = {
   getRecentTrackers: (limit?: number) => ipcRenderer.invoke('get-recent-trackers', limit ?? 10),
   getFavoriteTrackers: () => ipcRenderer.invoke('get-favorite-trackers'),
   toggleTrackerFavorite: (trackerId: number) => ipcRenderer.invoke('toggle-tracker-favorite', trackerId),
+  getDashboardStats: () => ipcRenderer.invoke('get-dashboard-stats'),
+  getCalendarMonth: (year: number, month: number) => ipcRenderer.invoke('get-calendar-month', year, month),
   getMoodDailyAggregates: (options?: { trackerId?: number; days?: number }) =>
     ipcRenderer.invoke('get-mood-daily-aggregates', options),
   getTaskEntries: (trackerId: number, options?: { limit?: number }) =>
     ipcRenderer.invoke('get-task-entries', trackerId, options),
   getAssets: (options?: { limit?: number; offset?: number }) =>
     ipcRenderer.invoke('get-assets', options),
+  openFileDialog: (options?: { filters?: { name: string; extensions: string[] }[] }) =>
+    ipcRenderer.invoke('open-file-dialog', options),
+  uploadAsset: (sourcePath: string) => ipcRenderer.invoke('upload-asset', sourcePath),
+  updateAsset: (id: number, updates: { originalName?: string | null }) =>
+    ipcRenderer.invoke('update-asset', id, updates),
+  deleteAsset: (id: number) => ipcRenderer.invoke('delete-asset', id),
+  downloadAsset: (id: number, suggestedName: string) => ipcRenderer.invoke('download-asset', id, suggestedName),
   getDashboardLayout: () => ipcRenderer.invoke('get-dashboard-layout'),
   saveDashboardLayout: (layout: Array<{ id: string; trackerId: number; position: number; size: string }>) =>
     ipcRenderer.invoke('save-dashboard-layout', layout),
@@ -25,6 +34,14 @@ const api = {
     id: number,
     updates: { order?: number; isFavorite?: boolean; name?: string; icon?: string | null; color?: string | null; type?: string; config?: Record<string, unknown> }
   ) => ipcRenderer.invoke('update-tracker', id, updates),
+  reorderTrackers: (ids: number[]) => ipcRenderer.invoke('reorder-trackers', ids),
+  getReminders: () => ipcRenderer.invoke('get-reminders'),
+  upsertReminder: (data: { id?: number; title: string; trackerId?: number | null; time: string; date?: string | null; days?: number[] | null; enabled?: boolean }) =>
+    ipcRenderer.invoke('upsert-reminder', data),
+  deleteReminder: (id: number) => ipcRenderer.invoke('delete-reminder', id),
+  toggleReminder: (id: number, enabled: boolean) => ipcRenderer.invoke('toggle-reminder', id, enabled),
+  completeReminder: (id: number) => ipcRenderer.invoke('complete-reminder', id),
+  uncompleteReminder: (id: number) => ipcRenderer.invoke('uncomplete-reminder', id),
 }
 
 // Exponer la API al mundo principal (Window object)

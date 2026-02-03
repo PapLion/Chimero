@@ -65,21 +65,40 @@ export interface TrackerInsert {
   archived?: boolean
 }
 
-/** Reminder/Notification (NotificationsModal, QuickEntry "Set Reminder") */
+/** Reminder/Notification (recurring: time HH:MM + days 0-6; one-off: optional date YYYY-MM-DD) */
 export interface Reminder {
   id: number
+  trackerId?: number | null
   title: string
   description?: string | null
-  dueDateTime: number
-  isCompleted: boolean
-  linkedTrackerId?: number | null
+  time: string // "HH:MM" 24h
+  date?: string | null // YYYY-MM-DD one-off; null = recurring by days
+  days: number[] | null // 0=Sun .. 6=Sat
+  enabled: boolean
+  lastTriggered?: number | null
+  completedAt?: number | null
   createdAt: number | null
 }
 
 export interface ReminderInsert {
   title: string
   description?: string | null
-  dueDateTime: number
-  isCompleted?: boolean
-  linkedTrackerId?: number | null
+  trackerId?: number | null
+  time: string
+  date?: string | null
+  days?: number[] | null
+  enabled?: boolean
+}
+
+/** Asset (file reference in userData/assets) */
+export interface Asset {
+  id: number
+  filename: string
+  originalName?: string | null
+  path: string
+  type: string // 'image' | 'video'
+  mimeType?: string | null
+  size?: number | null
+  thumbnailPath?: string | null
+  createdAt: number | null
 }

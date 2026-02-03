@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react"
 import { useAppStore } from "../lib/store"
-import { useTrackers, useRecentTrackers, useFavoriteTrackers, useAddEntryMutation } from "../lib/queries"
+import { useTrackers, useRecentTrackers, useFavoriteTrackers, useAddEntryMutation, useUpsertReminderMutation } from "../lib/queries"
 import { cn } from "../lib/utils"
 import type { Tracker } from "../lib/store"
 import {
@@ -39,8 +39,7 @@ type QuickEntryMode = "activity" | "reminder"
 
 export function QuickEntry() {
   const { commandBarOpen, setQuickEntryOpen } = useAppStore()
-  // Reminders: no IPC yet; no-op until API exists
-  const addReminder = (_r: Omit<import("../lib/store").Reminder, "id" | "createdAt">) => {}
+  const upsertReminderMutation = useUpsertReminderMutation()
   const { data: trackers = [], isLoading: trackersLoading } = useTrackers()
   const { data: recentTrackers = [] } = useRecentTrackers(10)
   const { data: favoriteTrackers = [] } = useFavoriteTrackers()
@@ -144,18 +143,21 @@ export function QuickEntry() {
   }, [selectedTracker, value, addEntryMutation, setQuickEntryOpen])
 
   const handleReminderSubmit = useCallback(() => {
-    if (reminderTitle && reminderDate && reminderTime) {
-      const dueDateTime = new Date(`${reminderDate}T${reminderTime}`).getTime()
-      addReminder({
+    if (!reminderTitle || !reminderDate || !reminderTime) return
+    upsertReminderMutation.mutate(
+      {
         title: reminderTitle,
-        description: reminderDescription || undefined,
-        dueDateTime,
-        isCompleted: false,
-        linkedTrackerId,
-      })
-      setQuickEntryOpen(false)
-    }
-  }, [reminderTitle, reminderDescription, reminderDate, reminderTime, linkedTrackerId, addReminder, setQuickEntryOpen])
+        description: reminderDescription.trim() || null,
+        time: reminderTime.slice(0, 5),
+        date: reminderDate,
+        trackerId: linkedTrackerId ?? null,
+        enabled: true,
+      },
+      {
+        onSuccess: () => setQuickEntryOpen(false),
+      }
+    )
+  }, [reminderTitle, reminderDescription, reminderDate, reminderTime, linkedTrackerId, upsertReminderMutation, setQuickEntryOpen])
 
   const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
 

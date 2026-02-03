@@ -65,28 +65,32 @@ export const entries = sqliteTable("entries", {
 }));
 
 // --- 4. REMINDERS (Notificaciones / Recordatorios) ---
-// Soporta el modal de Notifications y el modo "Set Reminder" en QuickEntry
+// Recurring: time (HH:MM) + days (0-6). One-off: optional date (YYYY-MM-DD). Main process cron checks every 60s.
 export const reminders = sqliteTable("reminders", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  trackerId: integer("tracker_id").references(() => trackers.id, { onDelete: "set null" }), // Opcional
   title: text("title").notNull(),
-  description: text("description"),
-  dueDateTime: integer("due_date_time").notNull(), // Unix ms
-  isCompleted: integer("is_completed", { mode: "boolean" }).default(false),
-  linkedTrackerId: integer("linked_tracker_id").references(() => trackers.id, { onDelete: "set null" }),
+  description: text("description"), // Optional note for the reminder
+  time: text("time").notNull(), // "HH:MM" 24h
+  date: text("date"), // YYYY-MM-DD one-off; null = recurring by days
+  days: text("days", { mode: "json" }).$type<number[]>(), // [0,1,2,3,4,5,6] Domingo-Sábado
+  enabled: integer("enabled", { mode: "boolean" }).default(true),
+  lastTriggered: integer("last_triggered", { mode: "timestamp" }), // Evitar doble disparo
+  completedAt: integer("completed_at", { mode: "timestamp" }), // Cuando el usuario marca como hecho (persiste en UI)
   createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
 });
 
 // --- 5. ASSETS (Archivos Locales) ---
+// Files on disk in userData/assets; DB stores references only.
 export const assets = sqliteTable("assets", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  filename: text("filename").notNull(),
-  path: text("path").notNull(), // Ruta relativa en disco local
+  filename: text("filename").notNull(), // Nombre físico en disco (UUID.ext)
+  originalName: text("original_name"), // Nombre original subido
+  path: text("path").notNull(), // Ruta relativa desde userData/assets
+  type: text("type").notNull(), // 'image', 'video'
   mimeType: text("mime_type"),
   size: integer("size"),
-  
-  // Thumbnail generado por sharp (base64 o ruta) para carga rápida en UI
   thumbnailPath: text("thumbnail_path"),
-  
   createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
 });
 

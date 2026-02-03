@@ -4,7 +4,7 @@ import { useState, useMemo } from "react"
 import { ChevronLeft, ChevronRight, Filter, Scale, Dumbbell, Smile, Users, CheckSquare, Wallet, Bell, Clock, Check } from "lucide-react"
 import { cn } from "../lib/utils"
 import type { Reminder } from "../lib/store"
-import { useEntries, useTrackers } from "../lib/queries"
+import { useTrackers, useCalendarMonth, useStats, useReminders } from "../lib/queries"
 
 const categories = [
   { id: "weight", name: "Weight", icon: Scale, color: "bg-[hsl(266_73%_63%)]" },
@@ -22,74 +22,68 @@ const months = [
   "July", "August", "September", "October", "November", "December",
 ]
 
-// Reminders: no IPC yet; use empty list. Toggle is no-op until API exists.
-const REMINDERS_EMPTY: Reminder[] = []
-const noopToggleReminder = (_id: number) => {}
-
 export function CalendarPage() {
-  const reminders = REMINDERS_EMPTY
-  const toggleReminder = noopToggleReminder
-  const { data: entries = [] } = useEntries({ limit: 500 })
+  const { data: reminders = [] } = useReminders()
   const { data: trackers = [] } = useTrackers()
+  const { data: stats } = useStats()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
 
   const currentYear = currentDate.getFullYear()
   const currentMonth = currentDate.getMonth()
+  const { data: calendarData } = useCalendarMonth(currentYear, currentMonth)
+
+  const activeDays = calendarData?.activeDays ?? []
+  const entriesByDate = calendarData?.entriesByDate ?? {}
 
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay()
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
 
-  // Get days with activity from entries
-  const activeDays = useMemo(() => {
-    const days = new Set<number>()
-    entries.forEach((entry) => {
-      const entryDate = new Date(entry.timestamp)
-      if (entryDate.getMonth() === currentMonth && entryDate.getFullYear() === currentYear) {
-        days.add(entryDate.getDate())
-      }
-    })
-    return Array.from(days)
-  }, [entries, currentMonth, currentYear])
-
-  // Get entries for selected day
+  // Get entries for selected day from calendar API
   const selectedDayEntries = useMemo(() => {
     if (!selectedDay) return []
-    return entries.filter((entry) => {
-      const entryDate = new Date(entry.timestamp)
-      return (
-        entryDate.getDate() === selectedDay &&
-        entryDate.getMonth() === currentMonth &&
-        entryDate.getFullYear() === currentYear
-      )
-    })
-  }, [entries, selectedDay, currentMonth, currentYear])
+    const dateStr = new Date(currentYear, currentMonth, selectedDay).toISOString().slice(0, 10)
+    return entriesByDate[dateStr] ?? []
+  }, [entriesByDate, selectedDay, currentMonth, currentYear])
 
-  // Get reminders for selected day
+  // For selected day: show reminders that apply (one-off date match or recurring weekday match).
   const selectedDayReminders = useMemo(() => {
     if (!selectedDay) return []
-    return reminders.filter((reminder) => {
-      const reminderDate = new Date(reminder.dueDateTime)
-      return (
-        reminderDate.getDate() === selectedDay &&
-        reminderDate.getMonth() === currentMonth &&
-        reminderDate.getFullYear() === currentYear
-      )
+    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(selectedDay).padStart(2, "0")}`
+    const dayOfWeek = new Date(currentYear, currentMonth, selectedDay).getDay()
+    return (reminders as Reminder[]).filter((r) => {
+      if (!r.enabled) return false
+      if (r.date != null && r.date !== "") return r.date === dateStr
+      return !r.days || r.days.length === 0 || r.days.includes(dayOfWeek)
     })
   }, [reminders, selectedDay, currentMonth, currentYear])
 
-  // Check if a day has reminders
+  const pendingDayReminders = useMemo(
+    () => selectedDayReminders.filter((r) => r.completedAt == null || r.completedAt === undefined),
+    [selectedDayReminders]
+  )
+  const completedDayReminders = useMemo(
+    () => selectedDayReminders.filter((r) => r.completedAt != null && r.completedAt !== undefined),
+    [selectedDayReminders]
+  )
+
+  // Days that have at least one reminder: one-off (date) = only that day; recurring (days) = every matching weekday
   const daysWithReminders = useMemo(() => {
+    const list = (reminders as Reminder[]).filter((r) => r.enabled)
+    if (list.length === 0) return []
     const days = new Set<number>()
-    reminders.forEach((reminder) => {
-      const reminderDate = new Date(reminder.dueDateTime)
-      if (reminderDate.getMonth() === currentMonth && reminderDate.getFullYear() === currentYear) {
-        days.add(reminderDate.getDate())
-      }
-    })
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+      const dayOfWeek = new Date(currentYear, currentMonth, d).getDay()
+      const hasReminder = list.some((r) => {
+        if (r.date != null && r.date !== "") return r.date === dateStr
+        return r.days && r.days.length > 0 && r.days.includes(dayOfWeek)
+      })
+      if (hasReminder) days.add(d)
+    }
     return Array.from(days)
-  }, [reminders, currentMonth, currentYear])
+  }, [reminders, currentMonth, currentYear, daysInMonth])
 
   const goToPreviousMonth = () => {
     setCurrentDate(new Date(currentYear, currentMonth - 1, 1))
@@ -267,15 +261,15 @@ export function CalendarPage() {
                         <div className={cn("w-2 h-2 rounded-full", category?.color || "bg-[hsl(266_73%_63%)]")} />
                       </div>
                       <p className="text-2xl font-display font-bold text-[hsl(266_73%_63%)]">
-                        {entry.value}
-                        {tracker?.config.unit && (
+                        {entry.value ?? "—"}
+                        {tracker?.config?.unit && (
                           <span className="text-sm font-normal text-[hsl(210_12%_47%)] ml-1">
                             {tracker.config.unit as string}
                           </span>
                         )}
                       </p>
-                      {entry.metadata?.note && (
-                        <p className="text-sm text-[hsl(210_12%_47%)] mt-2">{entry.metadata.note as string}</p>
+                      {entry.note && (
+                        <p className="text-sm text-[hsl(210_12%_47%)] mt-2">{entry.note}</p>
                       )}
                     </div>
                   )
@@ -297,72 +291,82 @@ export function CalendarPage() {
               </h4>
             </div>
             {selectedDayReminders.length > 0 ? (
-              <div className="space-y-2">
-                {selectedDayReminders.map((reminder) => {
-                  const linkedTracker = reminder.linkedTrackerId
-                    ? trackers.find((t) => t.id === reminder.linkedTrackerId)
-                    : null
-                  const time = new Date(reminder.dueDateTime).toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    hour12: true,
-                  })
-
-                  return (
-                    <div
-                      key={reminder.id}
-                      className={cn(
-                        "flex items-center gap-4 p-4 rounded-xl border transition-all",
-                        reminder.isCompleted
-                          ? "bg-[hsl(210_20%_15%)/50] border-[hsl(210_18%_22%)/50]"
-                          : "bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] hover:border-amber-400/30"
-                      )}
-                    >
-                      {/* Checkbox */}
-                      <button
-                        onClick={() => toggleReminder(reminder.id)}
-                        className={cn(
-                          "w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all",
-                          reminder.isCompleted
-                            ? "bg-[hsl(266_73%_63%)] border-[hsl(266_73%_63%)]"
-                            : "border-[hsl(210_18%_22%)] hover:border-[hsl(266_73%_63%)]"
-                        )}
-                      >
-                        {reminder.isCompleted && <Check className="w-4 h-4 text-white" />}
-                      </button>
-
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className={cn(
-                            "font-medium",
-                            reminder.isCompleted
-                              ? "text-[hsl(210_12%_47%)] line-through"
-                              : "text-[hsl(210_25%_97%)]"
-                          )}
-                        >
-                          {reminder.title}
-                        </p>
-                        {reminder.description && (
-                          <p className="text-sm text-[hsl(210_12%_47%)] truncate">
-                            {reminder.description}
-                          </p>
-                        )}
-                        {linkedTracker && (
-                          <p className="text-xs text-[hsl(266_73%_63%)] mt-1">
-                            Linked to: {linkedTracker.name}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Time */}
-                      <div className="flex items-center gap-1.5 text-sm text-[hsl(210_12%_47%)]">
-                        <Clock className="w-4 h-4" />
-                        {time}
-                      </div>
+              <div className="space-y-4">
+                {/* Pending */}
+                {pendingDayReminders.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-[hsl(210_12%_47%)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                      Pending ({pendingDayReminders.length})
+                    </p>
+                    <div className="space-y-2">
+                      {pendingDayReminders.map((reminder) => {
+                        const linkedTracker = reminder.trackerId
+                          ? trackers.find((t) => t.id === reminder.trackerId)
+                          : null
+                        return (
+                          <div
+                            key={reminder.id}
+                            className="flex items-center gap-4 p-4 rounded-xl border border-[hsl(210_18%_22%)] bg-[hsl(210_20%_15%)] hover:border-amber-400/30 transition-all"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-[hsl(210_25%_97%)]">{reminder.title}</p>
+                              {reminder.description && (
+                                <p className="text-xs text-[hsl(210_12%_47%)] mt-1 line-clamp-2">{reminder.description}</p>
+                              )}
+                              {linkedTracker && (
+                                <p className="text-xs text-[hsl(266_73%_63%)] mt-1">Linked to: {linkedTracker.name}</p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 text-sm text-[hsl(210_12%_47%)]">
+                              <Clock className="w-4 h-4" />
+                              {reminder.time}
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
-                  )
-                })}
+                  </div>
+                )}
+                {/* Completed */}
+                {completedDayReminders.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-[hsl(210_12%_47%)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-500" />
+                      Completed ({completedDayReminders.length})
+                    </p>
+                    <div className="space-y-2">
+                      {completedDayReminders.map((reminder) => {
+                        const linkedTracker = reminder.trackerId
+                          ? trackers.find((t) => t.id === reminder.trackerId)
+                          : null
+                        return (
+                          <div
+                            key={reminder.id}
+                            className="flex items-center gap-4 p-4 rounded-xl border border-[hsl(210_18%_22%)]/60 bg-[hsl(210_20%_15%)]/60 opacity-75"
+                          >
+                            <div className="flex-shrink-0 w-6 h-6 rounded-md bg-emerald-500/20 flex items-center justify-center">
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-[hsl(210_12%_47%)] line-through">{reminder.title}</p>
+                              {reminder.description && (
+                                <p className="text-xs text-[hsl(210_12%_47%)]/80 mt-1 line-clamp-2">{reminder.description}</p>
+                              )}
+                              {linkedTracker && (
+                                <p className="text-xs text-[hsl(266_73%_63%)]/70 mt-1">Linked to: {linkedTracker.name}</p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 text-sm text-[hsl(210_12%_47%)]/80">
+                              <Clock className="w-4 h-4" />
+                              {reminder.time}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-6 bg-[hsl(210_20%_15%)] rounded-xl border border-[hsl(210_18%_22%)]">
@@ -380,21 +384,18 @@ export function CalendarPage() {
           <p className="text-2xl font-display font-bold text-[hsl(266_73%_63%)]">{activeDays.length}</p>
         </div>
         <div className="bg-[hsl(210_25%_11%)] border border-[hsl(210_18%_22%)] rounded-xl p-4">
-          <p className="text-sm text-[hsl(210_12%_47%)] mb-1">Total Entries</p>
+          <p className="text-sm text-[hsl(210_12%_47%)] mb-1">Total Entries (month)</p>
           <p className="text-2xl font-display font-bold text-[hsl(280_65%_60%)]">
-            {entries.filter((e) => {
-              const d = new Date(e.timestamp)
-              return d.getMonth() === currentMonth && d.getFullYear() === currentYear
-            }).length}
+            {Object.values(entriesByDate).flat().length}
           </p>
         </div>
         <div className="bg-[hsl(210_25%_11%)] border border-[hsl(210_18%_22%)] rounded-xl p-4">
           <p className="text-sm text-[hsl(210_12%_47%)] mb-1">Current Streak</p>
-          <p className="text-2xl font-display font-bold text-[hsl(250_70%_65%)]">14 days</p>
+          <p className="text-2xl font-display font-bold text-[hsl(250_70%_65%)]">{stats?.currentStreak ?? 0} days</p>
         </div>
         <div className="bg-[hsl(210_25%_11%)] border border-[hsl(210_18%_22%)] rounded-xl p-4">
           <p className="text-sm text-[hsl(210_12%_47%)] mb-1">Best Streak</p>
-          <p className="text-2xl font-display font-bold text-[hsl(290_60%_58%)]">21 days</p>
+          <p className="text-2xl font-display font-bold text-[hsl(290_60%_58%)]">{stats?.bestStreak ?? 0} days</p>
         </div>
       </div>
     </div>

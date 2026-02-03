@@ -2,14 +2,14 @@
 
 import { useState } from "react"
 import { useAppStore } from "../lib/store"
-import { useTrackers } from "../lib/queries"
+import { useTrackers, useStats } from "../lib/queries"
 import { Bell, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@packages/ui/button"
 
 export function Header() {
   const { activeTracker, toggleNotifications } = useAppStore()
   const { data: trackers = [] } = useTrackers()
-  // Reminders: no IPC yet; badge hidden until API exists
+  const { data: stats } = useStats()
   const unreadCount = 0
   const [currentDate, setCurrentDate] = useState(new Date())
 
@@ -49,13 +49,13 @@ export function Header() {
       {/* Left: Stats Block */}
       <div className="hidden lg:flex items-center gap-6">
         <div className="text-center">
-          <div className="text-2xl font-display font-bold text-accent">8</div>
+          <div className="text-2xl font-display font-bold text-accent">{stats?.totalActivities ?? 0}</div>
           <div className="text-xs text-muted-foreground">Activities</div>
         </div>
         <div className="w-px h-10 bg-border" />
         <div className="text-center">
-          <div className="text-2xl font-display font-bold text-primary">12h</div>
-          <div className="text-xs text-muted-foreground">Tracked</div>
+          <div className="text-2xl font-display font-bold text-primary">{stats?.totalEntriesMonth ?? 0}</div>
+          <div className="text-xs text-muted-foreground">Entries this month</div>
         </div>
       </div>
 

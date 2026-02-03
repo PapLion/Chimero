@@ -2,11 +2,15 @@
  * IPC handlers for Chimero - Bridge between Renderer and SQLite.
  * Maps DB snake_case to app camelCase for consistent API.
  */
-import { ipcMain } from 'electron';
+import { ipcMain, app, dialog } from 'electron';
+import { copyFileSync, existsSync } from 'fs';
 import { getDb } from '@packages/db/database';
-import { trackers, entries, settings, assets } from '@packages/db';
-import type { Tracker, Entry, TrackerInsert, EntryInsert } from '@packages/db';
+import { trackers, entries, settings, assets, reminders } from '@packages/db';
+import type { Tracker, Entry, TrackerInsert, EntryInsert, Asset, Reminder, ReminderInsert } from '@packages/db';
 import { eq, desc, and, sql, asc } from 'drizzle-orm';
+import { saveFile, deleteFile, getAssetAbsolutePath } from './services/asset-manager';
+import { getDashboardStats, getCalendarMonth } from './services/stats-service';
+import { startReminderLoop, setMainWindowRef as setReminderMainWindow } from './services/reminder-service';
 
 function db() {
   return getDb();
@@ -49,6 +53,52 @@ function mapEntry(row: Record<string, unknown>): Entry {
     metadata: (row.metadata as Record<string, unknown>) || {},
     timestamp: row.timestamp as number,
     dateStr: (row.dateStr ?? row.date_str) as string,
+  };
+}
+
+function toTimestampMs(val: unknown): number | null {
+  if (val == null) return null;
+  if (val instanceof Date) return val.getTime();
+  const n = Number(val);
+  return Number.isFinite(n) ? n : null;
+}
+
+function mapReminder(row: Record<string, unknown>): Reminder {
+  const daysRaw = row.days;
+  let days: number[] | null = null;
+  if (Array.isArray(daysRaw)) days = daysRaw;
+  else if (typeof daysRaw === 'string') try { days = JSON.parse(daysRaw); } catch { /* ignore */ }
+  const completedRaw = row.completedAt ?? row.completed_at;
+  const lastTriggeredRaw = row.lastTriggered ?? row.last_triggered;
+  return {
+    id: row.id as number,
+    trackerId: (row.trackerId ?? row.tracker_id) as number | null ?? null,
+    title: row.title as string,
+    description: (row.description as string) ?? null,
+    time: (row.time as string) ?? '',
+    date: (row.date as string) ?? null,
+    days,
+    enabled: !!(row.enabled as number | boolean),
+    lastTriggered: toTimestampMs(lastTriggeredRaw),
+    completedAt: toTimestampMs(completedRaw),
+    createdAt: (row.createdAt ?? row.created_at) as number | null,
+  };
+}
+
+function mapAsset(row: Record<string, unknown>): Asset & { assetUrl: string } {
+  const path = (row.path as string) ?? '';
+  const assetUrl = `chimero-asset:///${path.replace(/^\/+/, '')}`;
+  return {
+    id: row.id as number,
+    filename: (row.filename as string) ?? '',
+    originalName: (row.originalName ?? row.original_name) as string | null ?? null,
+    path,
+    type: (row.type as string) ?? 'image',
+    mimeType: (row.mimeType ?? row.mime_type) as string | null ?? null,
+    size: (row.size as number) ?? null,
+    thumbnailPath: (row.thumbnailPath ?? row.thumbnail_path) as string | null ?? null,
+    createdAt: (row.createdAt ?? row.created_at) as number | null,
+    assetUrl,
   };
 }
 
@@ -155,7 +205,8 @@ export function registerIpcHandlers(): void {
   // --- addEntry ---
   ipcMain.handle('add-entry', async (_, data: Omit<EntryInsert, 'dateStr'>) => {
     try {
-      const dateStr = new Date(data.timestamp).toISOString().slice(0, 10); // YYYY-MM-DD
+      const d = new Date(data.timestamp);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; // YYYY-MM-DD local
       const [inserted] = await db()
         .insert(entries)
         .values({
@@ -237,6 +288,111 @@ export function registerIpcHandlers(): void {
     }
   });
 
+  // --- getDashboardStats --- (Header: streak, activities, entries this month)
+  ipcMain.handle('get-dashboard-stats', async () => {
+    try {
+      return await getDashboardStats();
+    } catch (e) {
+      console.error('get-dashboard-stats error:', e);
+      return { currentStreak: 0, bestStreak: 0, totalActivities: 0, totalEntriesMonth: 0 };
+    }
+  });
+
+  // --- getCalendarMonth --- (Calendar page: entries by date, active days)
+  ipcMain.handle('get-calendar-month', async (_, year: number, month: number) => {
+    try {
+      return await getCalendarMonth(year, month);
+    } catch (e) {
+      console.error('get-calendar-month error:', e);
+      return { year: 0, month: 0, entriesByDate: {}, activeDays: [] };
+    }
+  });
+
+  // --- getReminders ---
+  ipcMain.handle('get-reminders', async () => {
+    try {
+      const rows = await db().select().from(reminders).orderBy(reminders.id);
+      return rows.map((r) => mapReminder(r as unknown as Record<string, unknown>));
+    } catch (e) {
+      console.error('get-reminders error:', e);
+      return [];
+    }
+  });
+
+  // --- upsertReminder --- (create or update by id)
+  ipcMain.handle('upsert-reminder', async (_, data: ReminderInsert & { id?: number }) => {
+    try {
+      const id = data.id;
+      const payload = {
+        title: data.title,
+        description: data.description ?? null,
+        trackerId: data.trackerId ?? null,
+        time: data.time,
+        date: data.date ?? null,
+        days: data.days ? JSON.stringify(data.days) : null,
+        enabled: data.enabled ?? true,
+      };
+      if (id != null && id > 0) {
+        await db().update(reminders).set(payload).where(eq(reminders.id, id));
+        const [updated] = await db().select().from(reminders).where(eq(reminders.id, id));
+        return updated ? mapReminder(updated as unknown as Record<string, unknown>) : null;
+      }
+      const [inserted] = await db().insert(reminders).values(payload).returning();
+      return inserted ? mapReminder(inserted as unknown as Record<string, unknown>) : null;
+    } catch (e) {
+      console.error('upsert-reminder error:', e);
+      return null;
+    }
+  });
+
+  // --- deleteReminder ---
+  ipcMain.handle('delete-reminder', async (_, id: number) => {
+    try {
+      await db().delete(reminders).where(eq(reminders.id, id));
+      return true;
+    } catch (e) {
+      console.error('delete-reminder error:', e);
+      return false;
+    }
+  });
+
+  // --- toggleReminder ---
+  ipcMain.handle('toggle-reminder', async (_, id: number, enabled: boolean) => {
+    try {
+      await db().update(reminders).set({ enabled }).where(eq(reminders.id, id));
+      const [updated] = await db().select().from(reminders).where(eq(reminders.id, id));
+      return updated ? mapReminder(updated as unknown as Record<string, unknown>) : null;
+    } catch (e) {
+      console.error('toggle-reminder error:', e);
+      return null;
+    }
+  });
+
+  // --- completeReminder --- (mark as done: set completedAt so it moves to Completed section, does not disappear)
+  ipcMain.handle('complete-reminder', async (_, id: number) => {
+    try {
+      const completedAt = new Date(); // Drizzle timestamp mode expects Date, not number
+      await db().update(reminders).set({ completedAt }).where(eq(reminders.id, id));
+      const [updated] = await db().select().from(reminders).where(eq(reminders.id, id));
+      return updated ? mapReminder(updated as unknown as Record<string, unknown>) : null;
+    } catch (e) {
+      console.error('complete-reminder error:', e);
+      return null;
+    }
+  });
+
+  // --- uncompleteReminder --- (move back to Pending: clear completedAt)
+  ipcMain.handle('uncomplete-reminder', async (_, id: number) => {
+    try {
+      await db().update(reminders).set({ completedAt: null }).where(eq(reminders.id, id));
+      const [updated] = await db().select().from(reminders).where(eq(reminders.id, id));
+      return updated ? mapReminder(updated as unknown as Record<string, unknown>) : null;
+    } catch (e) {
+      console.error('uncomplete-reminder error:', e);
+      return null;
+    }
+  });
+
   // --- getMoodDailyAggregates --- (for Mood Graph widget)
   ipcMain.handle('get-mood-daily-aggregates', async (_, options?: { trackerId?: number; days?: number }) => {
     try {
@@ -290,7 +446,40 @@ export function registerIpcHandlers(): void {
     }
   });
 
-  // --- getAssets --- (for Media Grid)
+  // --- openFileDialog --- (for upload: Main gets path, then upload-asset(path))
+  ipcMain.handle('open-file-dialog', async (_, options?: { filters?: { name: string; extensions: string[] }[] }) => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: options?.filters ?? [{ name: 'Images & Video', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'mp4', 'webm', 'mov'] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) return { path: null as string | null };
+    return { path: result.filePaths[0] };
+  });
+
+  // --- uploadAsset --- copy file to userData/assets, insert DB, return asset
+  ipcMain.handle('upload-asset', async (_, sourcePath: string) => {
+    try {
+      const userDataPath = app.getPath('userData');
+      const saved = saveFile(sourcePath, userDataPath);
+      const [inserted] = await db()
+        .insert(assets)
+        .values({
+          filename: saved.filename,
+          originalName: saved.originalName,
+          path: saved.path,
+          type: saved.type,
+          size: saved.size,
+        })
+        .returning();
+      if (!inserted) return null;
+      return mapAsset(inserted as unknown as Record<string, unknown>);
+    } catch (e) {
+      console.error('upload-asset error:', e);
+      return null;
+    }
+  });
+
+  // --- getAssets --- (for Media Grid / AssetsPage)
   ipcMain.handle('get-assets', async (_, options?: { limit?: number; offset?: number }) => {
     try {
       const limit = options?.limit ?? 50;
@@ -301,18 +490,62 @@ export function registerIpcHandlers(): void {
         .orderBy(desc(assets.createdAt))
         .limit(limit)
         .offset(offset);
-      return rows.map((r) => ({
-        id: String(r.id),
-        filename: r.filename,
-        path: r.path,
-        mimeType: r.mimeType,
-        size: r.size,
-        thumbnailPath: r.thumbnailPath,
-        createdAt: r.createdAt ?? 0,
-      }));
+      return rows.map((r) => mapAsset(r as unknown as Record<string, unknown>));
     } catch (e) {
       console.error('get-assets error:', e);
       return [];
+    }
+  });
+
+  // --- updateAsset --- persist originalName (display name)
+  ipcMain.handle('update-asset', async (_, id: number, updates: { originalName?: string | null }) => {
+    try {
+      if (updates.originalName !== undefined) {
+        await db().update(assets).set({ originalName: updates.originalName || null }).where(eq(assets.id, id));
+      }
+      const [updated] = await db().select().from(assets).where(eq(assets.id, id));
+      return updated ? mapAsset(updated as unknown as Record<string, unknown>) : null;
+    } catch (e) {
+      console.error('update-asset error:', e);
+      return null;
+    }
+  });
+
+  // --- deleteAsset --- remove file from disk and DB record
+  ipcMain.handle('delete-asset', async (_, id: number) => {
+    try {
+      const rows = await db().select().from(assets).where(eq(assets.id, id));
+      const row = rows[0];
+      if (!row) return false;
+      const userDataPath = app.getPath('userData');
+      deleteFile(userDataPath, row.path as string);
+      await db().delete(assets).where(eq(assets.id, id));
+      return true;
+    } catch (e) {
+      console.error('delete-asset error:', e);
+      return false;
+    }
+  });
+
+  // --- downloadAsset --- save file to user-chosen path (avoids opening chimero-asset:// in system)
+  ipcMain.handle('download-asset', async (_, id: number, suggestedName: string) => {
+    try {
+      const rows = await db().select().from(assets).where(eq(assets.id, id));
+      const row = rows[0];
+      if (!row) return { ok: false, error: 'not_found' };
+      const userDataPath = app.getPath('userData');
+      const sourcePath = getAssetAbsolutePath(userDataPath, row.path as string);
+      if (!existsSync(sourcePath)) return { ok: false, error: 'file_not_found' };
+      const result = await dialog.showSaveDialog({
+        defaultPath: suggestedName,
+        title: 'Save asset',
+      });
+      if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+      copyFileSync(sourcePath, result.filePath);
+      return { ok: true, path: result.filePath };
+    } catch (e) {
+      console.error('download-asset error:', e);
+      return { ok: false, error: String(e) };
     }
   });
 
@@ -343,6 +576,20 @@ export function registerIpcHandlers(): void {
       return true;
     } catch (e) {
       console.error('save-dashboard-layout error:', e);
+      return false;
+    }
+  });
+
+  // --- reorderTrackers ---
+  ipcMain.handle('reorder-trackers', async (_, ids: number[]) => {
+    try {
+      const database = db();
+      for (let i = 0; i < ids.length; i++) {
+        await database.update(trackers).set({ order: i }).where(eq(trackers.id, ids[i]));
+      }
+      return true;
+    } catch (e) {
+      console.error('reorder-trackers error:', e);
       return false;
     }
   });

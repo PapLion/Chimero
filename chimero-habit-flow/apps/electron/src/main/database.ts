@@ -118,6 +118,30 @@ function runSchemaDiagnostic(): SchemaDiagnostic {
   }
 }
 
+/** Ensure reminders table has date and completed_at (migrations 0004/0005). Run after migrate() so old DBs get columns without user deleting chimero.db. */
+function ensureRemindersColumns(): void {
+  const raw = getRawDb();
+  if (!raw) return;
+  try {
+    const info = raw.prepare('PRAGMA table_info(reminders)').all() as Array<{ name: string }>;
+    const columns = new Set(info.map((c) => c.name));
+    if (!columns.has('date')) {
+      raw.prepare('ALTER TABLE reminders ADD COLUMN date text').run();
+      console.log('[DB] Added column reminders.date');
+    }
+    if (!columns.has('completed_at')) {
+      raw.prepare('ALTER TABLE reminders ADD COLUMN completed_at integer').run();
+      console.log('[DB] Added column reminders.completed_at');
+    }
+    if (!columns.has('description')) {
+      raw.prepare('ALTER TABLE reminders ADD COLUMN description text').run();
+      console.log('[DB] Added column reminders.description');
+    }
+  } catch (e) {
+    console.warn('[DB] ensureRemindersColumns failed (reminders table may not exist yet):', e);
+  }
+}
+
 /**
  * If schema drift is detected (missing is_favorite or dashboard_layout), hard-reset the DB:
  * close connection, delete file, re-init, re-run migrations.
@@ -210,6 +234,7 @@ export function setupDatabase(): void {
   try {
     migrate(db, { migrationsFolder });
     console.log('[DB] Migrations success!');
+    ensureRemindersColumns();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;

@@ -10,9 +10,12 @@ export const queryKeys = {
   entries: (opts?: { trackerId?: number }) => ['entries', opts] as const,
   recentTrackers: (limit?: number) => ['recent-trackers', limit] as const,
   favoriteTrackers: ['favorite-trackers'] as const,
+  stats: ['stats'] as const,
+  calendarMonth: (year: number, month: number) => ['calendar-month', year, month] as const,
   moodAggregates: (trackerId?: number, days?: number) => ['mood-aggregates', trackerId, days] as const,
   taskEntries: (trackerId: number) => ['task-entries', trackerId] as const,
   assets: (opts?: { limit?: number; offset?: number }) => ['assets', opts] as const,
+  reminders: ['reminders'] as const,
   dashboardLayout: ['dashboard-layout'] as const,
 }
 
@@ -56,6 +59,22 @@ export function useMoodDailyAggregates(trackerId?: number, days = 30) {
   })
 }
 
+export function useStats() {
+  return useQuery({
+    queryKey: queryKeys.stats,
+    queryFn: () => api.getDashboardStats(),
+    staleTime: 60_000,
+  })
+}
+
+export function useCalendarMonth(year: number, month: number) {
+  return useQuery({
+    queryKey: queryKeys.calendarMonth(year, month),
+    queryFn: () => api.getCalendarMonth(year, month),
+    staleTime: 30_000,
+  })
+}
+
 export function useTaskEntries(trackerId: number) {
   return useQuery({
     queryKey: queryKeys.taskEntries(trackerId),
@@ -81,6 +100,14 @@ export function useDashboardLayout() {
   })
 }
 
+export function useReminders() {
+  return useQuery({
+    queryKey: queryKeys.reminders,
+    queryFn: () => api.getReminders(),
+    staleTime: 30_000,
+  })
+}
+
 export function useAddEntryMutation() {
   const qc = useQueryClient()
   return useMutation({
@@ -89,6 +116,8 @@ export function useAddEntryMutation() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['entries'] })
       qc.invalidateQueries({ queryKey: ['recent-trackers'] })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: ['calendar-month'] })
       qc.invalidateQueries({ queryKey: ['mood-aggregates'] })
       qc.invalidateQueries({ queryKey: ['task-entries'] })
     },
@@ -144,6 +173,94 @@ export function useDeleteTrackerMutation() {
       qc.invalidateQueries({ queryKey: queryKeys.trackers })
       qc.invalidateQueries({ queryKey: queryKeys.dashboardLayout })
       qc.invalidateQueries({ queryKey: queryKeys.entries() })
+    },
+  })
+}
+
+export function useUploadAssetMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const { path } = await api.openFileDialog()
+      if (!path) return null
+      return api.uploadAsset(path)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.assets() })
+    },
+  })
+}
+
+export function useUpdateAssetMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, originalName }: { id: number; originalName?: string | null }) =>
+      api.updateAsset(id, { originalName }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.assets() })
+    },
+  })
+}
+
+export function useDeleteAssetMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.deleteAsset(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.assets() })
+    },
+  })
+}
+
+export function useUpsertReminderMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { id?: number; title: string; description?: string | null; trackerId?: number | null; time: string; date?: string | null; days?: number[] | null; enabled?: boolean }) =>
+      api.upsertReminder(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.reminders })
+    },
+  })
+}
+
+export function useDeleteReminderMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.deleteReminder(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.reminders })
+    },
+  })
+}
+
+export function useToggleReminderMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) => api.toggleReminder(id, enabled),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.reminders })
+    },
+  })
+}
+
+export function useCompleteReminderMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.completeReminder(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.reminders })
+      qc.refetchQueries({ queryKey: queryKeys.reminders })
+    },
+  })
+}
+
+export function useUncompleteReminderMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.uncompleteReminder(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.reminders })
+      qc.refetchQueries({ queryKey: queryKeys.reminders })
     },
   })
 }

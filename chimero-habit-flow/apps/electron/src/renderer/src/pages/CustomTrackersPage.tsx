@@ -167,18 +167,20 @@ export function CustomTrackersPage() {
                     <Icon className="w-6 h-6" style={{ color: tracker.color }} />
                   </div>
                   
-                  {/* Actions */}
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {/* Actions: z-10 and pointer-events-auto so buttons stay clickable above card content */}
+                  <div className="relative z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto">
                     <button
-                      onClick={() => handleEdit(tracker)}
-                      className="p-2 rounded-lg hover:bg-[hsl(210_20%_15%)] transition-colors"
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleEdit(tracker); }}
+                      className="p-2 rounded-lg hover:bg-[hsl(210_20%_15%)] transition-colors pointer-events-auto"
                       title="Edit"
                     >
                       <Pencil className="w-4 h-4 text-[hsl(210_12%_47%)]" />
                     </button>
                     <button
-                      onClick={() => setDeleteConfirmId(tracker.id)}
-                      className="p-2 rounded-lg hover:bg-red-500/10 transition-colors"
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(tracker.id); }}
+                      className="p-2 rounded-lg hover:bg-red-500/10 transition-colors pointer-events-auto"
                       title="Delete"
                     >
                       <Trash2 className="w-4 h-4 text-[hsl(210_12%_47%)] hover:text-red-400" />

@@ -1,7 +1,15 @@
-import { app, BrowserWindow } from 'electron'
-import { join } from 'path'
+import { app, BrowserWindow, protocol, net } from 'electron'
+import { join, resolve, normalize } from 'path'
+import { pathToFileURL } from 'url'
+import { existsSync } from 'fs'
 import { setupDatabase } from './database'
 import { registerIpcHandlers } from './ipc-handlers'
+import { startReminderLoop, setMainWindowRef as setReminderMainWindow } from './services/reminder-service'
+
+// Allow chimero-asset:// to load files from userData (must be before app.ready)
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'chimero-asset', privileges: { standard: true, supportFetchAPI: true, secure: true } },
+])
 
 // --- Cache path (fix GPU/disk cache "Access denied" 0x5 on Windows) ---
 // Force userData (and thus disk/GPU cache) to a writable dir *before* ready.
@@ -74,8 +82,34 @@ app.whenReady().then(() => {
     return
   }
 
+  const userDataPath = app.getPath('userData')
+  const baseDir = normalize(resolve(userDataPath))
+  const pathSep = process.platform === 'win32' ? '\\' : '/'
+  const assetsDir = 'assets'
+  protocol.handle('chimero-asset', (request) => {
+    let pathname: string
+    try {
+      pathname = decodeURIComponent(new URL(request.url).pathname)
+    } catch {
+      return new Response(null, { status: 404 })
+    }
+    pathname = pathname.replace(/^\/+/, '').replace(/\\/g, '/').trim()
+    if (!pathname || pathname.includes('..')) {
+      return new Response(null, { status: 404 })
+    }
+    const parts = pathname.split('/').filter(Boolean)
+    const underAssets = parts[0] === assetsDir ? parts : [assetsDir, ...parts]
+    const filePath = normalize(resolve(join(userDataPath, ...underAssets)))
+    if (!filePath.startsWith(baseDir + pathSep) || !existsSync(filePath)) {
+      return new Response(null, { status: 404 })
+    }
+    return net.fetch(pathToFileURL(filePath).href)
+  })
+
   registerIpcHandlers()
   const mainWindow = createMainWindow()
+  setReminderMainWindow(mainWindow)
+  startReminderLoop()
 
   let shown = false
   const showMainAndCloseSplash = () => {

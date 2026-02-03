@@ -1,11 +1,23 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useEffect } from "react"
-import { Upload, Search, Grid3x3, List, Trash2, Edit, Download, X, AlertCircle, Check, ImageIcon } from "lucide-react"
+import { useState, useRef } from "react"
+import { Upload, Search, Grid3x3, List, Trash2, Edit, Download, AlertCircle, ImageIcon } from "lucide-react"
 import { cn } from "../lib/utils"
-import { useAssets } from "../lib/queries"
-import { type Asset, type AssetCategory } from "../lib/store"
+import { useAssets, useUploadAssetMutation, useUpdateAssetMutation, useDeleteAssetMutation } from "../lib/queries"
+import { type AssetCategory } from "../lib/store"
+
+/** API asset shape (from get-assets / upload-asset) */
+interface ApiAsset {
+  id: number
+  filename: string
+  originalName?: string | null
+  path: string
+  type: string
+  assetUrl: string
+  size?: number | null
+  createdAt?: number | null
+}
 
 const assetCategories: { id: AssetCategory | "all"; name: string }[] = [
   { id: "all", name: "All Assets" },
@@ -16,39 +28,78 @@ const assetCategories: { id: AssetCategory | "all"; name: string }[] = [
   { id: "other", name: "Other" },
 ]
 
-interface StagedAsset {
-  file: File | null
-  base64: string | null
-  name: string
-  category: AssetCategory
+function EditAssetForm({
+  asset,
+  nameFor,
+  onSave,
+  onClose,
+  isSaving,
+}: {
+  asset: ApiAsset
+  nameFor: (a: ApiAsset) => string
+  onSave: (originalName: string) => void
+  onClose: () => void
+  isSaving: boolean
+}) {
+  const [editName, setEditName] = useState(nameFor(asset))
+  return (
+    <div className="space-y-4">
+      <div className="aspect-video bg-[hsl(210_20%_15%)] rounded-xl flex items-center justify-center overflow-hidden border border-[hsl(210_18%_22%)]">
+        <img
+          src={asset.assetUrl}
+          alt={nameFor(asset)}
+          className="w-full h-full object-contain p-4"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-[hsl(210_25%_97%)] mb-1.5">Name</label>
+        <input
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-lg bg-[hsl(210_20%_15%)] border border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] focus:outline-none focus:border-[hsl(266_73%_63%)]"
+        />
+      </div>
+      <p className="text-sm text-[hsl(210_12%_47%)]">Type: {asset.type}</p>
+      <div className="flex gap-3 pt-2">
+        <button
+          onClick={() => onSave(editName)}
+          disabled={isSaving}
+          className="flex-1 px-4 py-2.5 rounded-lg bg-[hsl(266_73%_63%)] text-white font-medium hover:bg-[hsl(266_73%_58%)] transition-colors disabled:opacity-50"
+        >
+          {isSaving ? "Saving…" : "Save Changes"}
+        </button>
+        <button
+          onClick={onClose}
+          className="flex-1 px-4 py-2.5 rounded-lg bg-transparent border border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] font-medium hover:bg-[hsl(210_20%_15%)] transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
 }
-
-// Assets mutations: no IPC yet; no-ops until API exists
-const noopAddAsset = (_a: Omit<Asset, "id" | "createdAt">) => {}
-const noopUpdateAsset = (_id: string, _updates: Partial<Asset>) => {}
-const noopDeleteAsset = (_id: string) => {}
 
 export function AssetsPage() {
   const { data } = useAssets()
-  const assets = (data ?? []) as Asset[]
-  const addAsset = noopAddAsset
-  const updateAsset = noopUpdateAsset
-  const deleteAsset = noopDeleteAsset
+  const assets = (data ?? []) as ApiAsset[]
+  const uploadMutation = useUploadAssetMutation()
+  const updateAssetMutation = useUpdateAssetMutation()
+  const deleteMutation = useDeleteAssetMutation()
   const [selectedCategory, setSelectedCategory] = useState<AssetCategory | "all">("all")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [searchQuery, setSearchQuery] = useState("")
   const [isDragging, setIsDragging] = useState(false)
 
-  const [stagedAsset, setStagedAsset] = useState<StagedAsset | null>(null)
-  const [editingAsset, setEditingAsset] = useState<Asset | null>(null)
-  const [deletingAsset, setDeletingAsset] = useState<Asset | null>(null)
+  const [editingAsset, setEditingAsset] = useState<ApiAsset | null>(null)
+  const [deletingAsset, setDeletingAsset] = useState<ApiAsset | null>(null)
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
 
+  const nameFor = (asset: ApiAsset) => asset.originalName || asset.filename
+
   const filteredAssets = assets.filter((asset) => {
-    const matchesCategory = selectedCategory === "all" || asset.category === selectedCategory
-    const matchesSearch = asset.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesCategory = selectedCategory === "all"
+    const matchesSearch = nameFor(asset).toLowerCase().includes(searchQuery.toLowerCase())
     return matchesCategory && matchesSearch
   })
 
@@ -69,129 +120,58 @@ export function AssetsPage() {
     }
   }
 
-  const handleDrop = async (e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-
-    const files = Array.from(e.dataTransfer.files) as File[]
-    const imageFile = files.find((file: File) => file.type.startsWith("image/"))
-
-    if (!imageFile) {
-      showNotification("error", "Please drop an image file")
-      return
-    }
-
-    await stageFile(imageFile)
+    handleUploadClick()
   }
 
-  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file instanceof File) {
-      await stageFile(file)
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
-    }
-  }
-
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.readAsDataURL(file)
-      reader.onload = () => resolve(reader.result as string)
-      reader.onerror = (error) => reject(error)
-    })
-  }
-
-  const stageFile = async (file: File) => {
-    try {
-      const base64 = await fileToBase64(file)
-      setStagedAsset({
-        file,
-        base64,
-        name: file.name.replace(/\.[^/.]+$/, ""),
-        category: "other",
-      })
-    } catch (error) {
-      showNotification("error", `Failed to process ${file.name}`)
-    }
-  }
-
-  const confirmStagedAsset = () => {
-    if (!stagedAsset || !stagedAsset.base64 || !stagedAsset.name.trim()) {
-      showNotification("error", "Please provide a name for the asset")
-      return
-    }
-
-    const extension = stagedAsset.file?.name.split(".").pop() || "png"
-
-    addAsset({
-      name: stagedAsset.name.trim(),
-      category: stagedAsset.category,
-      url: stagedAsset.base64,
-      type: extension as Asset["type"],
-      size: stagedAsset.file?.size,
-    })
-
-    setStagedAsset(null)
-    showNotification("success", "Asset added successfully")
-  }
-
-  const cancelStagedAsset = () => {
-    setStagedAsset(null)
-  }
-
-  // Handle paste from clipboard
-  useEffect(() => {
-    const handlePaste = async (e: ClipboardEvent) => {
-      const items = Array.from(e.clipboardData?.items || [])
-      const imageItem = items.find((item) => item.type.startsWith("image/"))
-
-      if (imageItem) {
-        e.preventDefault()
-        const file = imageItem.getAsFile()
-        if (file) {
-          await stageFile(file)
+  const handleUploadClick = () => {
+    uploadMutation.mutate(undefined, {
+      onSuccess: (result) => {
+        if (result) {
+          showNotification("success", "Asset uploaded successfully")
         }
-      }
-    }
-
-    document.addEventListener("paste", handlePaste)
-    return () => document.removeEventListener("paste", handlePaste)
-  }, [])
-
-  const handleEditAsset = () => {
-    if (!editingAsset) return
-
-    updateAsset(editingAsset.id, {
-      name: editingAsset.name,
-      category: editingAsset.category,
+      },
+      onError: () => {
+        showNotification("error", "Upload failed")
+      },
     })
+  }
 
-    setEditingAsset(null)
-    showNotification("success", "Asset updated successfully")
+
+
+  const handleEditAsset = (originalName: string) => {
+    if (!editingAsset) return
+    updateAssetMutation.mutate(
+      { id: editingAsset.id, originalName: originalName.trim() || null },
+      {
+        onSuccess: () => {
+          setEditingAsset(null)
+          showNotification("success", "Saved")
+        },
+        onError: () => showNotification("error", "Failed to save"),
+      }
+    )
   }
 
   const handleDeleteAsset = () => {
     if (!deletingAsset) return
-
-    deleteAsset(deletingAsset.id)
-    setDeletingAsset(null)
-    showNotification("success", "Asset deleted successfully")
+    deleteMutation.mutate(deletingAsset.id, {
+      onSuccess: () => {
+        setDeletingAsset(null)
+        showNotification("success", "Asset deleted")
+      },
+      onError: () => showNotification("error", "Delete failed"),
+    })
   }
 
-  const handleDownload = (asset: Asset) => {
-    try {
-      const link = document.createElement("a")
-      link.href = asset.url
-      link.download = `${asset.name}.${asset.type}`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      showNotification("success", "Download started")
-    } catch {
-      showNotification("error", "Failed to download asset")
-    }
+  const handleDownload = (asset: ApiAsset) => {
+    window.api.downloadAsset(asset.id, nameFor(asset)).then((result) => {
+      if (result.ok) showNotification("success", "Saved")
+      else if (result.canceled) { /* user cancelled */ }
+      else showNotification("error", result.error ?? "Failed to download")
+    }).catch(() => showNotification("error", "Failed to download asset"))
   }
 
   return (
@@ -219,125 +199,42 @@ export function AssetsPage() {
         </div>
 
         <button
-          onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[hsl(266_73%_63%)] text-white font-medium hover:bg-[hsl(266_73%_58%)] transition-colors"
+          onClick={handleUploadClick}
+          disabled={uploadMutation.isPending}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[hsl(266_73%_63%)] text-white font-medium hover:bg-[hsl(266_73%_58%)] transition-colors disabled:opacity-50"
         >
           <Upload className="w-4 h-4" />
-          Upload Assets
+          {uploadMutation.isPending ? "Uploading…" : "Upload Assets"}
         </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleFileInput}
-        />
       </div>
 
-      {/* Drop Zone */}
+      {/* Drop Zone - click opens native file dialog */}
       <div
         ref={dropZoneRef}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={cn(
-          "bg-[hsl(210_25%_11%)] border-2 border-dashed rounded-2xl p-8 transition-colors",
+          "bg-[hsl(210_25%_11%)] border-2 border-dashed rounded-2xl p-8 transition-colors cursor-pointer",
           isDragging
             ? "border-[hsl(266_73%_63%)] bg-[hsl(266_73%_63%/0.05)]"
-            : "border-[hsl(210_18%_22%)] hover:border-[hsl(266_73%_63%/0.5)]",
-          !stagedAsset && "cursor-pointer"
+            : "border-[hsl(210_18%_22%)] hover:border-[hsl(266_73%_63%/0.5)]"
         )}
-        onClick={() => !stagedAsset && fileInputRef.current?.click()}
+        onClick={handleUploadClick}
       >
-        {stagedAsset ? (
-          // Staged Asset Preview
-          <div className="space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display font-semibold text-lg text-[hsl(210_25%_97%)]">Preview Asset</h3>
-              <button
-                onClick={cancelStagedAsset}
-                className="p-2 rounded-lg hover:bg-[hsl(210_20%_15%)] transition-colors"
-              >
-                <X className="w-4 h-4 text-[hsl(210_12%_47%)]" />
-              </button>
-            </div>
-
-            <div className="w-full max-w-md mx-auto aspect-square bg-[hsl(210_20%_15%)] rounded-xl flex items-center justify-center overflow-hidden border border-[hsl(210_18%_22%)]">
-              <img
-                src={stagedAsset.base64 || ""}
-                alt="Preview"
-                className="w-full h-full object-contain p-8"
-              />
-            </div>
-
-            <div className="w-full max-w-md mx-auto space-y-4">
-              <div>
-                <label htmlFor="staged-name" className="block text-sm font-medium text-[hsl(210_25%_97%)] mb-1.5">
-                  Asset Name *
-                </label>
-                <input
-                  id="staged-name"
-                  value={stagedAsset.name}
-                  onChange={(e) => setStagedAsset({ ...stagedAsset, name: e.target.value })}
-                  placeholder="Enter asset name"
-                  className="w-full px-4 py-2.5 rounded-lg bg-[hsl(210_20%_15%)] border border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)] focus:outline-none focus:border-[hsl(266_73%_63%)]"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="staged-category" className="block text-sm font-medium text-[hsl(210_25%_97%)] mb-1.5">
-                  Category *
-                </label>
-                <select
-                  id="staged-category"
-                  value={stagedAsset.category}
-                  onChange={(e) => setStagedAsset({ ...stagedAsset, category: e.target.value as AssetCategory })}
-                  className="w-full px-4 py-2.5 rounded-lg bg-[hsl(210_20%_15%)] border border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] focus:outline-none focus:border-[hsl(266_73%_63%)]"
-                >
-                  {assetCategories
-                    .filter((c) => c.id !== "all")
-                    .map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={confirmStagedAsset}
-                  disabled={!stagedAsset.name.trim()}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[hsl(266_73%_63%)] text-white font-medium hover:bg-[hsl(266_73%_58%)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Check className="w-4 h-4" />
-                  Add Asset
-                </button>
-                <button
-                  onClick={cancelStagedAsset}
-                  className="flex-1 px-4 py-2.5 rounded-lg bg-transparent border border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] font-medium hover:bg-[hsl(210_20%_15%)] transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
+        <div className="flex flex-col items-center justify-center gap-4 text-center">
+          <div className="w-16 h-16 rounded-xl bg-[hsl(266_73%_63%/0.1)] flex items-center justify-center">
+            <Upload className="w-8 h-8 text-[hsl(266_73%_63%)]" />
           </div>
-        ) : (
-          // Upload Prompt
-          <div className="flex flex-col items-center justify-center gap-4 text-center">
-            <div className="w-16 h-16 rounded-xl bg-[hsl(266_73%_63%/0.1)] flex items-center justify-center">
-              <Upload className="w-8 h-8 text-[hsl(266_73%_63%)]" />
-            </div>
-            <div>
-              <h3 className="font-display font-semibold text-lg mb-1 text-[hsl(210_25%_97%)]">
-                Drop files here or click to upload
-              </h3>
-              <p className="text-sm text-[hsl(210_12%_47%)]">
-                Supports SVG, PNG, JPG, GIF, WebP. Paste from clipboard with Ctrl+V
-              </p>
-            </div>
+          <div>
+            <h3 className="font-display font-semibold text-lg mb-1 text-[hsl(210_25%_97%)]">
+              Click or drop to open file picker
+            </h3>
+            <p className="text-sm text-[hsl(210_12%_47%)]">
+              Supports images and video. Files are saved to app data.
+            </p>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Filters and Search */}
@@ -408,15 +305,15 @@ export function AssetsPage() {
             >
               <div className="aspect-square bg-[hsl(210_20%_15%)] rounded-lg mb-3 flex items-center justify-center overflow-hidden">
                 <img
-                  src={asset.url || "/placeholder.svg"}
-                  alt={asset.name}
+                  src={asset.assetUrl}
+                  alt={nameFor(asset)}
                   className="w-full h-full object-contain p-4"
                 />
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm truncate text-[hsl(210_25%_97%)]">{asset.name}</span>
+                  <span className="font-medium text-sm truncate text-[hsl(210_25%_97%)]">{nameFor(asset)}</span>
                   <span className="text-xs px-2 py-0.5 rounded bg-[hsl(210_20%_15%)] text-[hsl(210_12%_47%)] border border-[hsl(210_18%_22%)]">
                     {asset.type.toUpperCase()}
                   </span>
@@ -455,15 +352,15 @@ export function AssetsPage() {
             >
               <div className="w-16 h-16 bg-[hsl(210_20%_15%)] rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                 <img
-                  src={asset.url || "/placeholder.svg"}
-                  alt={asset.name}
+                  src={asset.assetUrl}
+                  alt={nameFor(asset)}
                   className="w-full h-full object-contain p-2"
                 />
               </div>
 
               <div className="flex-1 min-w-0">
-                <h4 className="font-medium truncate text-[hsl(210_25%_97%)]">{asset.name}</h4>
-                <p className="text-sm text-[hsl(210_12%_47%)] capitalize">{asset.category}</p>
+                <h4 className="font-medium truncate text-[hsl(210_25%_97%)]">{nameFor(asset)}</h4>
+                <p className="text-sm text-[hsl(210_12%_47%)] capitalize">{asset.type}</p>
               </div>
 
               <span className="text-xs px-2 py-1 rounded bg-[hsl(210_20%_15%)] text-[hsl(210_12%_47%)] border border-[hsl(210_18%_22%)]">
@@ -506,7 +403,7 @@ export function AssetsPage() {
             {searchQuery ? "Try a different search term" : "Start by uploading your first asset"}
           </p>
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={handleUploadClick}
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[hsl(266_73%_63%)] text-white font-medium hover:bg-[hsl(266_73%_58%)] transition-colors"
           >
             <Upload className="w-4 h-4" />
@@ -517,60 +414,16 @@ export function AssetsPage() {
 
       {/* Edit Modal */}
       {editingAsset && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div key={editingAsset.id} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-[hsl(210_25%_11%)] border border-[hsl(210_18%_22%)] rounded-2xl p-6 w-full max-w-md mx-4">
             <h3 className="text-xl font-display font-bold mb-4 text-[hsl(210_25%_97%)]">Edit Asset</h3>
-
-            <div className="space-y-4">
-              <div className="aspect-video bg-[hsl(210_20%_15%)] rounded-xl flex items-center justify-center overflow-hidden border border-[hsl(210_18%_22%)]">
-                <img
-                  src={editingAsset.url || "/placeholder.svg"}
-                  alt={editingAsset.name}
-                  className="w-full h-full object-contain p-4"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[hsl(210_25%_97%)] mb-1.5">Name</label>
-                <input
-                  value={editingAsset.name}
-                  onChange={(e) => setEditingAsset({ ...editingAsset, name: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-lg bg-[hsl(210_20%_15%)] border border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] focus:outline-none focus:border-[hsl(266_73%_63%)]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[hsl(210_25%_97%)] mb-1.5">Category</label>
-                <select
-                  value={editingAsset.category}
-                  onChange={(e) => setEditingAsset({ ...editingAsset, category: e.target.value as AssetCategory })}
-                  className="w-full px-4 py-2.5 rounded-lg bg-[hsl(210_20%_15%)] border border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] focus:outline-none focus:border-[hsl(266_73%_63%)]"
-                >
-                  {assetCategories
-                    .filter((c) => c.id !== "all")
-                    .map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={handleEditAsset}
-                  className="flex-1 px-4 py-2.5 rounded-lg bg-[hsl(266_73%_63%)] text-white font-medium hover:bg-[hsl(266_73%_58%)] transition-colors"
-                >
-                  Save Changes
-                </button>
-                <button
-                  onClick={() => setEditingAsset(null)}
-                  className="flex-1 px-4 py-2.5 rounded-lg bg-transparent border border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] font-medium hover:bg-[hsl(210_20%_15%)] transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
+            <EditAssetForm
+              asset={editingAsset}
+              nameFor={nameFor}
+              onSave={handleEditAsset}
+              onClose={() => setEditingAsset(null)}
+              isSaving={updateAssetMutation.isPending}
+            />
           </div>
         </div>
       )}
@@ -581,7 +434,7 @@ export function AssetsPage() {
           <div className="bg-[hsl(210_25%_11%)] border border-[hsl(210_18%_22%)] rounded-2xl p-6 w-full max-w-sm mx-4">
             <h3 className="text-xl font-display font-bold mb-2 text-[hsl(210_25%_97%)]">Delete Asset</h3>
             <p className="text-[hsl(210_12%_47%)] mb-6">
-              Are you sure you want to delete "{deletingAsset.name}"? This action cannot be undone.
+              Are you sure you want to delete "{nameFor(deletingAsset)}"? This action cannot be undone.
             </p>
 
             <div className="flex gap-3">

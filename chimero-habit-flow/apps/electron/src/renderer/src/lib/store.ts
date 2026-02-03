@@ -1,7 +1,7 @@
 import { create } from "zustand"
-import type { Tracker, Entry, TrackerConfig } from "@packages/db"
+import type { Tracker, Entry, TrackerConfig, Reminder } from "@packages/db"
 
-export type { Tracker, Entry, TrackerConfig }
+export type { Tracker, Entry, TrackerConfig, Reminder }
 export type TrackerType = Tracker["type"]
 export type PageType = "home" | "calendar" | "assets" | "custom-trackers" | "tracking"
 export type AssetCategory = "games" | "books" | "tv" | "apps" | "other"
@@ -21,16 +21,6 @@ export interface Asset {
   url: string
   type: AssetType
   size?: number
-  createdAt: number
-}
-
-export interface Reminder {
-  id: number
-  title: string
-  description?: string
-  dueDateTime: number
-  isCompleted: boolean
-  linkedTrackerId?: number
   createdAt: number
 }
 
