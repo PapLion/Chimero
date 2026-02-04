@@ -5,7 +5,7 @@ import { type Widget, type Tracker, type Entry } from "../lib/store"
 import { useMoodDailyAggregates } from "../lib/queries"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, type LucideIcon } from "lucide-react"
+import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, type LucideIcon } from "lucide-react"
 import {
   LineChart,
   Line,
@@ -23,6 +23,17 @@ const iconMap: Record<string, LucideIcon> = {
   users: Users,
   "check-square": CheckSquare,
   wallet: Wallet,
+  flame: Flame,
+  book: Book,
+  heart: Heart,
+  coffee: Coffee,
+  moon: Moon,
+  sun: Sun,
+  zap: Zap,
+  target: Target,
+  music: Music,
+  camera: Camera,
+  "gamepad-2": Gamepad2,
 }
 
 // Premium card classes for the Bento Grid
@@ -120,7 +131,8 @@ function CounterWidget({
 }) {
   const latestEntry = entries[entries.length - 1]
   const trend = getTrend(entries)
-  const Icon = iconMap[tracker.icon ?? ""] || CheckSquare
+  const iconKey = (tracker.icon ?? "").trim() || "check-square"
+  const Icon = iconMap[iconKey] || CheckSquare
 
   const chartData = entries.slice(-7).map((entry) => ({
     value: entry.value ?? 0,
@@ -271,6 +283,7 @@ export function WidgetCard({ widget, tracker, entries }: WidgetCardProps) {
     if (tracker.type === "list") {
       return <TaskWidget entries={entries} tracker={tracker} />
     }
+    // counter, numeric, range, or any custom/unknown type → generic counter widget
     return <CounterWidget entries={entries} tracker={tracker} size={widget.size} />
   }
 

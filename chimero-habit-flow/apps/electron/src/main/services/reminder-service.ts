@@ -46,7 +46,7 @@ export function startReminderLoop(): void {
           if (days.length > 0 && !days.includes(day)) continue;
         }
         const id = r.id;
-        await db.update(reminders).set({ lastTriggered: Date.now() }).where(eq(reminders.id, id));
+        await db.update(reminders).set({ lastTriggered: new Date() }).where(eq(reminders.id, id));
         if (mainWindowRef && !mainWindowRef.isDestroyed()) {
           mainWindowRef.webContents.send('on-reminder', { id, title: r.title });
         } else {

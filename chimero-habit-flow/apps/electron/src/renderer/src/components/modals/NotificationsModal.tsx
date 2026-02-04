@@ -81,7 +81,7 @@
                 </div>
                 <p className="text-[hsl(210_25%_97%)] font-medium mb-1">No notifications</p>
                 <p className="text-sm text-[hsl(210_12%_47%)] text-center">
-                  You're all caught up! Use Quick Entry (⌘K) → Reminder tab to add one.
+                  You&apos;re all caught up! Use Quick Entry (⌘K) → Reminder tab to add one.
                 </p>
               </div>
             ) : (

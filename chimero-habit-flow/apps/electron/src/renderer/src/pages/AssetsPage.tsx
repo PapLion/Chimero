@@ -434,7 +434,7 @@ export function AssetsPage() {
           <div className="bg-[hsl(210_25%_11%)] border border-[hsl(210_18%_22%)] rounded-2xl p-6 w-full max-w-sm mx-4">
             <h3 className="text-xl font-display font-bold mb-2 text-[hsl(210_25%_97%)]">Delete Asset</h3>
             <p className="text-[hsl(210_12%_47%)] mb-6">
-              Are you sure you want to delete "{nameFor(deletingAsset)}"? This action cannot be undone.
+              Are you sure you want to delete &quot;{nameFor(deletingAsset)}&quot;? This action cannot be undone.
             </p>
 
             <div className="flex gap-3">

@@ -5,6 +5,9 @@
 import { getDb } from '@packages/db/database';
 import { entries, trackers } from '@packages/db';
 import { sql, eq, and, gte, lte, desc } from 'drizzle-orm';
+import { computeCurrentStreak, computeBestStreak } from './streak-utils';
+
+export { computeCurrentStreak, computeBestStreak } from './streak-utils';
 
 export interface DashboardStats {
   currentStreak: number;
@@ -23,47 +26,6 @@ async function getDistinctDatesDesc(limit = 365): Promise<string[]> {
     .orderBy(desc(entries.dateStr))
     .limit(limit);
   return (rows as { dateStr: string }[]).map((r) => r.dateStr);
-}
-
-/** Compute current streak: consecutive days up to today/yesterday from most recent. */
-function computeCurrentStreak(dates: string[]): number {
-  if (dates.length === 0) return 0;
-  const today = new Date().toISOString().slice(0, 10);
-  const sorted = [...dates].sort((a, b) => (b < a ? 1 : -1));
-  let streak = 0;
-  let expected = today;
-  for (const d of sorted) {
-    if (d > expected) break;
-    if (d === expected) {
-      streak++;
-      const next = new Date(expected);
-      next.setDate(next.getDate() - 1);
-      expected = next.toISOString().slice(0, 10);
-    } else {
-      break;
-    }
-  }
-  return streak;
-}
-
-/** Best streak = longest run of consecutive dates in the last 365 days. */
-function computeBestStreak(dates: string[]): number {
-  if (dates.length === 0) return 0;
-  const sorted = [...dates].sort();
-  let best = 1;
-  let current = 1;
-  for (let i = 1; i < sorted.length; i++) {
-    const prev = new Date(sorted[i - 1]);
-    prev.setDate(prev.getDate() + 1);
-    const want = prev.toISOString().slice(0, 10);
-    if (sorted[i] === want) {
-      current++;
-      best = Math.max(best, current);
-    } else {
-      current = 1;
-    }
-  }
-  return best;
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {

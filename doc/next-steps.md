@@ -61,11 +61,13 @@
     - **Assets broken image previews:** Protocol handler builds path with `join(userDataPath, ...pathname.split('/').filter(Boolean))` for correct resolution on all platforms; security check uses `baseDir + pathSep` so file must be under userData. Thumbnails in AssetsPage use same `assetUrl` from backend.
     - **Sidebar mocked streak:** Sidebar footer "Current Streak" now uses `useStats()` (same as CalendarPage); hardcoded "14" removed. Value matches Calendar quick stats.
 
-    ### Pending / Post-MVP
-    - Cloud backups, correlaciones SQL avanzadas, heatmaps anuales.
-    - Tests E2E (Playwright).
-    - Thumbnails/compresión para assets (sharp).
-    - electron-builder: mover `electron` a devDependencies si falla el empaquetado.
+    ### CI/CD – Implementado
+    - Lint (ESLint), unit tests (Vitest), E2E (Playwright + Electron), CI (GitHub Actions), release skeleton. Ver `chimero-habit-flow/docs/ci-cd.md`.
+
+        ### Pending / Post-MVP
+        - Cloud backups, correlaciones SQL avanzadas, heatmaps anuales.
+        - Thumbnails/compresión para assets (sharp).
+        - electron-builder: mover `electron` a devDependencies si falla el empaquetado.
 
     ## Tipos de Datos
 

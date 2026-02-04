@@ -1,0 +1,53 @@
+# Release workflow: builds the Electron app and (when fully configured) publishes to GitHub Releases.
+# Trigger: push a tag matching v* (e.g. git tag v1.0.0 && git push --tags)
+#
+# To enable publishing:
+# 1. Configure electron-builder in package.json (publish, productName, etc.).
+# 2. Add GH token with repo permissions (e.g. GITHUB_TOKEN or a PAT) for publishing.
+# 3. Uncomment the "Build and publish" step below and remove the placeholder.
+# 4. For signed Windows .exe: configure code signing (certificate, env vars). See electron-builder docs.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build app (electron-vite)
+        run: pnpm build
+
+      # Placeholder: publish to GitHub Releases via electron-builder.
+      # Uncomment and set GH token when ready:
+      # - name: Build and publish
+      #   env:
+      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   run: pnpm package
+      #   # Or: pnpm exec electron-builder --publish always
+      - name: Build package (no publish)
+        run: pnpm package

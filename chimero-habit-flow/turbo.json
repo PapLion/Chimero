@@ -15,6 +15,9 @@
     "test": {
       "outputs": ["coverage/**"],
       "dependsOn": []
+    },
+    "check-types": {
+      "dependsOn": []
     }
   }
 }

@@ -6,7 +6,7 @@ import { useState, useEffect } from "react"
 import { cn } from "../../lib/utils"
 import { type Tracker, type TrackerType, type TrackerConfig } from "../../lib/store"
 import { useCreateTrackerMutation, useUpdateTrackerMutation } from "../../lib/queries"
-import { X, Flame, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, Type as type, LucideIcon } from "lucide-react"
+import { X, Flame, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, LucideIcon } from "lucide-react"
 
 interface CreateTrackerDialogProps {
   open: boolean

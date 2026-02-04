@@ -64,6 +64,5 @@ if (process.contextIsolated) {
 } else {
   // @ts-expect-error fallback when contextIsolation is disabled
   window.electron = { ipcRenderer: { invoke: ipcRenderer.invoke.bind(ipcRenderer), on: ipcRenderer.on.bind(ipcRenderer) } }
-  // @ts-expect-error fallback when contextIsolation is disabled
-  window.api = api
+  ;(window as Window & { api: typeof api }).api = api
 }

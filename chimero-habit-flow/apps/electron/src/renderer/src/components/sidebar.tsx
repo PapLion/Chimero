@@ -4,32 +4,8 @@ import { useState } from "react"
 import { cn } from "../lib/utils"
 import { useAppStore, type PageType } from "../lib/store"
 import { useTrackers, useStats } from "../lib/queries"
-import { Home, Calendar, ImageIcon, Flame, ChevronDown, ChevronRight, Scale, Dumbbell, Salad, CheckSquare, Tv, Book, Gamepad2, Smartphone, Smile, Users, Settings, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Type as type, LucideIcon } from "lucide-react"
-import { CustomTrackersSection } from "./CustomTrackersSection" // Import CustomTrackersSection
-
-// Icon mapping for custom trackers
-const iconMap: Record<string, LucideIcon> = {
-  flame: Flame,
-  book: Book,
-  dumbbell: Dumbbell,
-  "gamepad-2": Gamepad2,
-  smile: Smile,
-  scale: Scale,
-  heart: Heart,
-  coffee: Coffee,
-  moon: Moon,
-  sun: Sun,
-  zap: Zap,
-  target: Target,
-  music: Music,
-  camera: Camera,
-  wallet: Wallet,
-  users: Users,
-  "check-square": CheckSquare,
-  tv: Tv,
-  salad: Salad,
-  smartphone: Smartphone,
-}
+import { Home, Calendar, ImageIcon, Flame, ChevronDown, ChevronRight, Scale, Dumbbell, Salad, CheckSquare, Tv, Book, Gamepad2, Smartphone, Smile, Users, Settings } from "lucide-react"
+import { CustomTrackersSection } from "./CustomTrackersSection"
 
 // Main navigation items
 const navigation: { name: string; id: PageType; icon: typeof Home }[] = [
@@ -54,7 +30,7 @@ const trackingNavigation = [
 ]
 
 export function Sidebar() {
-  const { activeTracker, setActiveTracker, currentPage, setCurrentPage } = useAppStore()
+  const { setActiveTracker, currentPage, setCurrentPage } = useAppStore()
   const { data: trackers = [] } = useTrackers()
   const { data: stats } = useStats()
   const [activeTrackingItem, setActiveTrackingItem] = useState<string | null>(null)

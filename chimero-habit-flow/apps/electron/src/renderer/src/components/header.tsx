@@ -75,7 +75,7 @@ export function Header() {
             {activeTrackerData ? activeTrackerData.name : formatDate(currentDate)}
           </h2>
           {isToday && !activeTrackerData && (
-            <p className="text-sm text-muted-foreground mt-0.5">Today's Overview</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Today&apos;s Overview</p>
           )}
           {activeTrackerData && (
             <p className="text-sm text-muted-foreground mt-0.5">{formatDate(currentDate)}</p>

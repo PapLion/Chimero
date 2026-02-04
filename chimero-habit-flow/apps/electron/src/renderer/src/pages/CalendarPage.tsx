@@ -35,7 +35,10 @@ export function CalendarPage() {
   const { data: calendarData } = useCalendarMonth(currentYear, currentMonth)
 
   const activeDays = calendarData?.activeDays ?? []
-  const entriesByDate = calendarData?.entriesByDate ?? {}
+  const entriesByDate = useMemo(
+    () => calendarData?.entriesByDate ?? {},
+    [calendarData?.entriesByDate]
+  )
 
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay()
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()

@@ -10,7 +10,6 @@ import type { Tracker, Entry, TrackerInsert, EntryInsert, Asset, Reminder, Remin
 import { eq, desc, and, sql, asc } from 'drizzle-orm';
 import { saveFile, deleteFile, getAssetAbsolutePath } from './services/asset-manager';
 import { getDashboardStats, getCalendarMonth } from './services/stats-service';
-import { startReminderLoop, setMainWindowRef as setReminderMainWindow } from './services/reminder-service';
 
 function db() {
   return getDb();
@@ -275,7 +274,7 @@ export function registerIpcHandlers(): void {
       const rows = await db().select().from(trackers).where(eq(trackers.id, trackerId));
       const row = rows[0];
       if (!row) return null;
-      const current = !!(row as { isFavorite?: number }).isFavorite;
+      const current = !!row.isFavorite;
       await db()
         .update(trackers)
         .set({ isFavorite: !current })
@@ -329,7 +328,7 @@ export function registerIpcHandlers(): void {
         trackerId: data.trackerId ?? null,
         time: data.time,
         date: data.date ?? null,
-        days: data.days ? JSON.stringify(data.days) : null,
+        days: data.days ?? null,
         enabled: data.enabled ?? true,
       };
       if (id != null && id > 0) {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, type ComponentProps } from "react"
 import { useAppStore } from "../lib/store"
 import { useTrackers, useEntries, useDashboardLayout, useSaveDashboardLayoutMutation } from "../lib/queries"
 import { WidgetCard } from "./widget-card"
@@ -21,14 +21,46 @@ import {
   rectSortingStrategy,
 } from "@dnd-kit/sortable"
 
+const DEFAULT_SIZE_CYCLE: Widget["size"][] = ["large", "medium", "medium", "small", "small", "large"]
+
 function buildDefaultWidgets(trackers: { id: number }[]): Widget[] {
-  const sizes: ("small" | "medium" | "large")[] = ["large", "medium", "medium", "small", "small", "large"]
-  return trackers.slice(0, 6).map((t, i) => ({
+  return trackers.map((t, i) => ({
     id: `widget-${t.id}`,
     trackerId: t.id,
     position: i,
-    size: sizes[i] ?? "medium",
+    size: DEFAULT_SIZE_CYCLE[i % DEFAULT_SIZE_CYCLE.length],
   }))
+}
+
+/** Merge saved layout with current trackers: add a widget for any tracker not in the layout. */
+function mergeLayoutWithTrackers(
+  savedLayout: Array<{ id: string; trackerId: number; position: number; size: string }>,
+  trackers: { id: number }[]
+): Widget[] {
+  const byTrackerId = new Map(savedLayout.map((w) => [w.trackerId, w]))
+  const maxPosition = savedLayout.length > 0 ? Math.max(...savedLayout.map((w) => w.position), -1) + 1 : 0
+  let nextPosition = maxPosition
+  let newWidgetIndex = 0
+  const result: Widget[] = []
+  for (const t of trackers) {
+    const existing = byTrackerId.get(t.id)
+    if (existing) {
+      result.push({
+        id: existing.id,
+        trackerId: existing.trackerId,
+        position: existing.position,
+        size: (existing.size as Widget["size"]) || "medium",
+      })
+    } else {
+      result.push({
+        id: `widget-${t.id}`,
+        trackerId: t.id,
+        position: nextPosition++,
+        size: DEFAULT_SIZE_CYCLE[newWidgetIndex++ % DEFAULT_SIZE_CYCLE.length],
+      })
+    }
+  }
+  return result.sort((a, b) => a.position - b.position)
 }
 
 export function BentoGrid() {
@@ -40,12 +72,7 @@ export function BentoGrid() {
 
   const widgets = useMemo((): Widget[] => {
     if (savedLayout && Array.isArray(savedLayout) && savedLayout.length > 0) {
-      return savedLayout.map((w) => ({
-        id: w.id,
-        trackerId: w.trackerId,
-        position: w.position,
-        size: (w.size as Widget["size"]) || "medium",
-      }))
+      return mergeLayoutWithTrackers(savedLayout, trackers)
     }
     return buildDefaultWidgets(trackers)
   }, [savedLayout, trackers])
@@ -68,10 +95,8 @@ export function BentoGrid() {
       const oldIndex = widgets.findIndex((w) => w.id === active.id)
       const newIndex = widgets.findIndex((w) => w.id === over.id)
       if (oldIndex < 0 || newIndex < 0) return
-      const newWidgets = arrayMove(widgets, oldIndex, newIndex).map((w, i) => ({
-        ...w,
-        position: i,
-      }))
+      const moved = arrayMove(widgets, oldIndex, newIndex) as Widget[]
+      const newWidgets = moved.map((w, i) => ({ ...w, position: i }))
       saveLayoutMutation.mutate(
         newWidgets.map((w) => ({ id: w.id, trackerId: w.trackerId, position: w.position, size: w.size }))
       )
@@ -103,14 +128,12 @@ export function BentoGrid() {
 
             if (!tracker) return null
 
-            return (
-              <WidgetCard
-                key={widget.id}
-                widget={widget}
-                tracker={tracker}
-                entries={trackerEntries}
-              />
-            )
+            const widgetCardProps: ComponentProps<typeof WidgetCard> = {
+              widget,
+              tracker,
+              entries: trackerEntries,
+            }
+            return <WidgetCard key={widget.id} {...widgetCardProps} />
           })}
         </div>
       </SortableContext>

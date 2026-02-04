@@ -6,8 +6,13 @@
   "scripts": {
     "dev": "turbo run dev",
     "db:migrate": "turbo run db:migrate",
-    "build": "turbo run build && electron-builder",
-    "test": "turbo run test"
+    "lint": "eslint \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\" --max-warnings 0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "build": "pnpm --filter chimero-electron build",
+    "package": "turbo run build && electron-builder",
+    "check-types": "pnpm --filter chimero-electron exec tsc --noEmit"
   },
   "keywords": [],
   "author": "",
@@ -19,8 +24,24 @@
   },
   "devDependencies": {
     "@types/node": "^25.1.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "electron-builder": "^26.4.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.37.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "jsdom": "^25.0.0",
+    "@playwright/test": "^1.49.0",
+    "playwright": "^1.49.0",
     "turbo": "^2.7.6",
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/react": "^16.0.0",
+    "@tanstack/react-query": "^5.90.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.1.2",
+    "vitest": "^2.1.0",
+    "@vitest/ui": "^2.1.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"
   }

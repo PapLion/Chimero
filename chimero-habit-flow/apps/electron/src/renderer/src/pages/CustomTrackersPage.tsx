@@ -120,8 +120,10 @@ export function CustomTrackersPage() {
         /* Tracker Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {customTrackers.map((tracker) => {
-            const Icon = iconMap[tracker.icon ?? ""] || Flame
+            const iconKey = (tracker.icon ?? "").trim() || "flame"
+            const Icon = iconMap[iconKey] || Flame
             const isDeleting = deleteConfirmId === tracker.id
+            const color = tracker.color ?? "hsl(266 73% 63%)"
 
             return (
               <div
@@ -136,7 +138,7 @@ export function CustomTrackersPage() {
                 {isDeleting && (
                   <div className="absolute inset-0 bg-[hsl(210_25%_11%)/95] backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center z-10 p-6">
                     <p className="text-[hsl(210_25%_97%)] font-medium text-center mb-4">
-                      Delete "{tracker.name}"?
+                      Delete &quot;{tracker.name}&quot;?
                     </p>
                     <p className="text-[hsl(210_12%_47%)] text-sm text-center mb-6">
                       This will also remove all associated entries.
@@ -162,9 +164,9 @@ export function CustomTrackersPage() {
                 <div className="flex items-start justify-between mb-4">
                   <div
                     className="w-12 h-12 rounded-xl flex items-center justify-center"
-                    style={{ backgroundColor: `${tracker.color}20` }}
+                    style={{ backgroundColor: `${color}20` }}
                   >
-                    <Icon className="w-6 h-6" style={{ color: tracker.color }} />
+                    <Icon className="w-6 h-6" style={{ color }} />
                   </div>
                   
                   {/* Actions: z-10 and pointer-events-auto so buttons stay clickable above card content */}
