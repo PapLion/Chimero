@@ -7,8 +7,10 @@ const api = {
   deleteTracker: (id: number) => ipcRenderer.invoke('delete-tracker', id),
   getEntries: (options?: { limit?: number; trackerId?: number }) =>
     ipcRenderer.invoke('get-entries', options),
-  addEntry: (data: { trackerId: number; value?: number; metadata?: Record<string, unknown>; timestamp: number }) =>
+  addEntry: (data: { trackerId: number; value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp: number; assetId?: number | null }) =>
     ipcRenderer.invoke('add-entry', data),
+  updateEntry: (id: number, updates: { value?: number | null; note?: string | null }) =>
+    ipcRenderer.invoke('update-entry', id, updates),
   getRecentTrackers: (limit?: number) => ipcRenderer.invoke('get-recent-trackers', limit ?? 10),
   getFavoriteTrackers: () => ipcRenderer.invoke('get-favorite-trackers'),
   toggleTrackerFavorite: (trackerId: number) => ipcRenderer.invoke('toggle-tracker-favorite', trackerId),

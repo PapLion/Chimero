@@ -22,6 +22,8 @@ export interface Asset {
   type: AssetType
   size?: number
   createdAt: number
+  // Optional optimized thumbnail URL for previews (when available from backend)
+  thumbnailUrl?: string | null
 }
 
 /** UI-only state. Server data lives in TanStack Query (lib/queries.ts). */
@@ -32,6 +34,7 @@ interface AppState {
   commandBarOpen: boolean
   isQuickEntryOpen: boolean
   isNotificationsOpen: boolean
+  selectedDate: Date
   setActiveTracker: (id: number | null) => void
   setCurrentPage: (page: PageType) => void
   toggleSidebar: () => void
@@ -39,6 +42,10 @@ interface AppState {
   setQuickEntryOpen: (open: boolean) => void
   toggleNotifications: () => void
   setNotificationsOpen: (open: boolean) => void
+  setSelectedDate: (date: Date) => void
+  goToPreviousDay: () => void
+  goToNextDay: () => void
+  goToToday: () => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -48,6 +55,7 @@ export const useAppStore = create<AppState>((set) => ({
   commandBarOpen: false,
   isQuickEntryOpen: false,
   isNotificationsOpen: false,
+  selectedDate: new Date(),
   setActiveTracker: (id) => set({ activeTracker: id }),
   setCurrentPage: (page) => set({ currentPage: page }),
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
@@ -55,4 +63,16 @@ export const useAppStore = create<AppState>((set) => ({
   setQuickEntryOpen: (open) => set({ isQuickEntryOpen: open, commandBarOpen: open }),
   toggleNotifications: () => set((state) => ({ isNotificationsOpen: !state.isNotificationsOpen })),
   setNotificationsOpen: (open) => set({ isNotificationsOpen: open }),
+  setSelectedDate: (date) => set({ selectedDate: date }),
+  goToPreviousDay: () => set((state) => {
+    const newDate = new Date(state.selectedDate)
+    newDate.setDate(newDate.getDate() - 1)
+    return { selectedDate: newDate }
+  }),
+  goToNextDay: () => set((state) => {
+    const newDate = new Date(state.selectedDate)
+    newDate.setDate(newDate.getDate() + 1)
+    return { selectedDate: newDate }
+  }),
+  goToToday: () => set({ selectedDate: new Date() }),
 }))

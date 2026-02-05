@@ -2,8 +2,9 @@
 
 import { useMemo, type ComponentProps } from "react"
 import { useAppStore } from "../lib/store"
-import { useTrackers, useEntries, useDashboardLayout, useSaveDashboardLayoutMutation } from "../lib/queries"
+import { useTrackers, useEntries, useDashboardLayout, useSaveDashboardLayoutMutation, useAssets } from "../lib/queries"
 import { WidgetCard } from "./widget-card"
+import { TrackerDetailView } from "./TrackerDetailView"
 import type { Widget } from "../lib/store"
 import {
   DndContext,
@@ -64,11 +65,27 @@ function mergeLayoutWithTrackers(
 }
 
 export function BentoGrid() {
-  const { activeTracker } = useAppStore()
+  const { activeTracker, selectedDate } = useAppStore()
   const { data: trackers = [], isLoading: trackersLoading } = useTrackers()
   const { data: entries = [] } = useEntries({ limit: 500 })
   const { data: savedLayout } = useDashboardLayout()
+  const { data: assetsData = [] } = useAssets({ limit: 200 })
   const saveLayoutMutation = useSaveDashboardLayoutMutation()
+  
+  // Map assets by ID for quick lookup (API returns unknown[]; we expect { id, thumbnailUrl?, assetUrl? })
+  interface AssetRecord {
+    id: number
+    thumbnailUrl?: string
+    assetUrl?: string
+    [key: string]: unknown
+  }
+  const assetsById = useMemo(() => {
+    const map = new Map<number, AssetRecord>()
+    ;(assetsData as AssetRecord[]).forEach((asset) => {
+      if (asset?.id != null) map.set(asset.id, asset)
+    })
+    return map
+  }, [assetsData])
 
   const widgets = useMemo((): Widget[] => {
     if (savedLayout && Array.isArray(savedLayout) && savedLayout.length > 0) {
@@ -118,12 +135,24 @@ export function BentoGrid() {
     )
   }
 
+  // Show TrackerDetailView when a specific tracker is selected
+  if (activeTracker) {
+    return (
+      <TrackerDetailView
+        trackerId={activeTracker}
+        selectedDate={selectedDate}
+        assets={assetsById}
+      />
+    )
+  }
+
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={sortedWidgets.map((w) => w.id)} strategy={rectSortingStrategy}>
         <div className="grid grid-cols-12 gap-6 auto-rows-[minmax(140px,auto)]">
           {sortedWidgets.map((widget) => {
             const tracker = trackers.find((t) => t.id === widget.trackerId)
+            // Pass all entries for this tracker (widgets filter by selectedDate internally for daily display, need full history for charts)
             const trackerEntries = entries.filter((e) => e.trackerId === widget.trackerId)
 
             if (!tracker) return null
@@ -132,6 +161,8 @@ export function BentoGrid() {
               widget,
               tracker,
               entries: trackerEntries,
+              assets: assetsById,
+              selectedDate,
             }
             return <WidgetCard key={widget.id} {...widgetCardProps} />
           })}

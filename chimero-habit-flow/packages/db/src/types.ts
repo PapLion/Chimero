@@ -43,6 +43,7 @@ export interface Entry {
   metadata: Record<string, unknown>
   timestamp: number
   dateStr: string
+  assetId?: number | null
 }
 
 export interface EntryInsert {
@@ -52,6 +53,7 @@ export interface EntryInsert {
   metadata?: Record<string, unknown>
   timestamp: number
   dateStr: string
+  assetId?: number | null
 }
 
 export interface TrackerInsert {

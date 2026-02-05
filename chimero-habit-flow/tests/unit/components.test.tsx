@@ -7,6 +7,10 @@ vi.mock('../../apps/electron/src/renderer/src/lib/store', () => ({
   useAppStore: () => ({
     activeTracker: null,
     toggleNotifications: vi.fn(),
+    selectedDate: new Date(),
+    goToPreviousDay: vi.fn(),
+    goToNextDay: vi.fn(),
+    goToToday: vi.fn(),
   }),
 }))
 

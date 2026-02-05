@@ -1,37 +1,19 @@
 "use client"
 
-import { useState } from "react"
 import { useAppStore } from "../lib/store"
 import { useTrackers, useStats } from "../lib/queries"
-import { Bell, ChevronLeft, ChevronRight } from "lucide-react"
+import { Bell, ChevronLeft, ChevronRight, Home } from "lucide-react"
 import { Button } from "@packages/ui/button"
 
 export function Header() {
-  const { activeTracker, toggleNotifications } = useAppStore()
+  const { activeTracker, toggleNotifications, selectedDate, goToPreviousDay, goToNextDay, goToToday } = useAppStore()
   const { data: trackers = [] } = useTrackers()
   const { data: stats } = useStats()
   const unreadCount = 0
-  const [currentDate, setCurrentDate] = useState(new Date())
 
   const activeTrackerData = activeTracker
     ? trackers.find((t) => t.id === activeTracker)
     : null
-
-  const goToPreviousDay = () => {
-    setCurrentDate((prev) => {
-      const newDate = new Date(prev)
-      newDate.setDate(newDate.getDate() - 1)
-      return newDate
-    })
-  }
-
-  const goToNextDay = () => {
-    setCurrentDate((prev) => {
-      const newDate = new Date(prev)
-      newDate.setDate(newDate.getDate() + 1)
-      return newDate
-    })
-  }
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat("en-US", {
@@ -42,7 +24,7 @@ export function Header() {
     }).format(date)
   }
 
-  const isToday = currentDate.toDateString() === new Date().toDateString()
+  const isToday = selectedDate.toDateString() === new Date().toDateString()
 
   return (
     <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-background/50 backdrop-blur-sm">
@@ -72,13 +54,24 @@ export function Header() {
 
         <div className="text-center">
           <h2 className="text-xl md:text-2xl font-display font-bold tracking-tight text-foreground">
-            {activeTrackerData ? activeTrackerData.name : formatDate(currentDate)}
+            {activeTrackerData ? activeTrackerData.name : formatDate(selectedDate)}
           </h2>
           {isToday && !activeTrackerData && (
             <p className="text-sm text-muted-foreground mt-0.5">Today&apos;s Overview</p>
           )}
           {activeTrackerData && (
-            <p className="text-sm text-muted-foreground mt-0.5">{formatDate(currentDate)}</p>
+            <p className="text-sm text-muted-foreground mt-0.5">{formatDate(selectedDate)}</p>
+          )}
+          {!isToday && !activeTrackerData && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={goToToday}
+              className="mt-1 h-6 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <Home className="w-3 h-3 mr-1" />
+              Back to Today
+            </Button>
           )}
         </div>
 

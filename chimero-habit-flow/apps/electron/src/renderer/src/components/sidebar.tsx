@@ -4,10 +4,9 @@ import { useState } from "react"
 import { cn } from "../lib/utils"
 import { useAppStore, type PageType } from "../lib/store"
 import { useTrackers, useStats } from "../lib/queries"
-import { Home, Calendar, ImageIcon, Flame, ChevronDown, ChevronRight, Scale, Dumbbell, Salad, CheckSquare, Tv, Book, Gamepad2, Smartphone, Smile, Users, Settings } from "lucide-react"
-import { CustomTrackersSection } from "./CustomTrackersSection"
+import { Home, Calendar, ImageIcon, Flame, ChevronDown, ChevronRight, Settings, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, CheckSquare, Tv, Salad, Smartphone, type LucideIcon } from "lucide-react"
 
-// Main navigation items
+// Static main navigation only
 const navigation: { name: string; id: PageType; icon: typeof Home }[] = [
   { name: "Home", id: "home", icon: Home },
   { name: "Calendar", id: "calendar", icon: Calendar },
@@ -15,30 +14,36 @@ const navigation: { name: string; id: PageType; icon: typeof Home }[] = [
   { name: "Custom Trackers", id: "custom-trackers", icon: Settings },
 ]
 
-// Tracking sub-navigation items
-const trackingNavigation = [
-  { name: "Weight", id: "weight", icon: Scale },
-  { name: "Exercise", id: "exercise", icon: Dumbbell },
-  { name: "Diet", id: "diet", icon: Salad },
-  { name: "Tasks", id: "tasks", icon: CheckSquare },
-  { name: "Mood", id: "mood", icon: Smile },
-  { name: "Social", id: "social", icon: Users },
-  { name: "Books", id: "books", icon: Book },
-  { name: "TV Shows", id: "tv", icon: Tv },
-  { name: "Gaming", id: "gaming", icon: Gamepad2 },
-  { name: "Media", id: "media", icon: Smartphone },
-]
+const trackerIconMap: Record<string, LucideIcon> = {
+  flame: Flame,
+  book: Book,
+  dumbbell: Dumbbell,
+  "gamepad-2": Gamepad2,
+  smile: Smile,
+  scale: Scale,
+  heart: Heart,
+  coffee: Coffee,
+  moon: Moon,
+  sun: Sun,
+  zap: Zap,
+  target: Target,
+  music: Music,
+  camera: Camera,
+  wallet: Wallet,
+  users: Users,
+  "check-square": CheckSquare,
+  tv: Tv,
+  salad: Salad,
+  smartphone: Smartphone,
+}
 
 export function Sidebar() {
-  const { setActiveTracker, currentPage, setCurrentPage } = useAppStore()
+  const { activeTracker, setActiveTracker, currentPage, setCurrentPage } = useAppStore()
   const { data: trackers = [] } = useTrackers()
   const { data: stats } = useStats()
-  const [activeTrackingItem, setActiveTrackingItem] = useState<string | null>(null)
-
-  const trackerByName = Object.fromEntries(trackers.map((t) => [t.name.toLowerCase().replace(/\s+/g, ""), t.id])) as Record<string, number>
   const [trackingExpanded, setTrackingExpanded] = useState(true)
 
-  const isTrackingActive = activeTrackingItem !== null
+  const isTrackingActive = activeTracker != null
 
   return (
     <aside className="w-64 border-r border-[hsl(210_18%_22%)] bg-[hsl(210_30%_9%)] flex flex-col h-full">
@@ -65,7 +70,6 @@ export function Sidebar() {
                 <button
                   onClick={() => {
                     setCurrentPage(item.id)
-                    setActiveTrackingItem(null)
                     setActiveTracker(null)
                   }}
                   className={cn(
@@ -118,17 +122,15 @@ export function Sidebar() {
 
             {trackingExpanded && (
               <ul className="mt-1 ml-4 space-y-1 border-l border-[hsl(210_18%_22%)] pl-2">
-                {trackingNavigation.map((item) => {
-                  const isActive = activeTrackingItem === item.id
+                {trackers.map((tracker) => {
+                  const isActive = activeTracker === tracker.id
+                  const Icon = trackerIconMap[tracker.icon ?? ""] ?? Flame
                   return (
-                    <li key={item.name}>
+                    <li key={tracker.id}>
                       <button
                         onClick={() => {
-                          setActiveTrackingItem(item.id)
                           setCurrentPage("home")
-                          const key = item.name.toLowerCase().replace(/\s+/g, "")
-                          const id = trackerByName[item.id] ?? trackerByName[key] ?? null
-                          setActiveTracker(id ?? null)
+                          setActiveTracker(tracker.id)
                         }}
                         className={cn(
                           "w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-sm",
@@ -136,27 +138,23 @@ export function Sidebar() {
                           isActive && "bg-[hsl(266_73%_63%/0.1)] text-[hsl(266_73%_63%)] hover:bg-[hsl(266_73%_63%/0.2)]"
                         )}
                       >
-                        <item.icon
+                        <Icon
                           className={cn(
-                            "w-4 h-4 transition-colors",
-                            isActive
-                              ? "text-[hsl(266_73%_63%)]"
-                              : "text-[hsl(210_12%_47%)] group-hover:text-[hsl(210_25%_97%)]"
+                            "w-4 h-4 transition-colors shrink-0",
+                            isActive ? "text-[hsl(266_73%_63%)]" : "text-[hsl(210_12%_47%)] group-hover:text-[hsl(210_25%_97%)]"
                           )}
+                          style={!isActive && tracker.color ? { color: tracker.color } : undefined}
                         />
-                        <span className="font-medium">{item.name}</span>
+                        <span className="font-medium truncate">{tracker.name}</span>
                       </button>
                     </li>
                   )
                 })}
-
-                {/* Custom Trackers Section */}
-                <CustomTrackersSection 
-                  activeTrackingItem={activeTrackingItem}
-                  setActiveTrackingItem={setActiveTrackingItem}
-                  setCurrentPage={setCurrentPage}
-                  setActiveTracker={setActiveTracker}
-                />
+                {trackers.length === 0 && (
+                  <li className="px-3 py-2 text-xs text-[hsl(210_12%_47%)]">
+                    No trackers yet. Add one in Custom Trackers.
+                  </li>
+                )}
               </ul>
             )}
           </li>

@@ -6,13 +6,98 @@ import { useState, useEffect } from "react"
 import { cn } from "../../lib/utils"
 import { type Tracker, type TrackerType, type TrackerConfig } from "../../lib/store"
 import { useCreateTrackerMutation, useUpdateTrackerMutation } from "../../lib/queries"
-import { X, Flame, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, LucideIcon } from "lucide-react"
+import { X, Flame, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, Salad, LucideIcon } from "lucide-react"
 
 interface CreateTrackerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   editTracker?: Tracker | null
 }
+
+// Lifestyle Presets - Human-centric tracker templates
+interface TrackerPreset {
+  name: string
+  icon: string
+  color: string
+  type: TrackerType
+  config: TrackerConfig
+  description: string
+}
+
+const PRESETS: TrackerPreset[] = [
+  {
+    name: "Reading",
+    icon: "book",
+    color: "#3b82f6",
+    type: "text",
+    config: { unit: "pages" },
+    description: "Track books and pages read",
+  },
+  {
+    name: "Fitness",
+    icon: "dumbbell",
+    color: "#ef4444",
+    type: "counter",
+    config: { unit: "mins", goal: 30 },
+    description: "Log workouts and exercise",
+  },
+  {
+    name: "Hydration",
+    icon: "coffee",
+    color: "#14b8a6",
+    type: "counter",
+    config: { unit: "ml", goal: 2000 },
+    description: "Track daily water intake",
+  },
+  {
+    name: "Mood",
+    icon: "smile",
+    color: "#eab308",
+    type: "rating",
+    config: { min: 1, max: 10 },
+    description: "Rate your daily mood",
+  },
+  {
+    name: "Gaming",
+    icon: "gamepad-2",
+    color: "#a855f7",
+    type: "text",
+    config: { unit: "hours" },
+    description: "Track games and playtime",
+  },
+  {
+    name: "Social",
+    icon: "users",
+    color: "#ec4899",
+    type: "counter",
+    config: {},
+    description: "Log social activities",
+  },
+  {
+    name: "Finance",
+    icon: "wallet",
+    color: "#22c55e",
+    type: "counter",
+    config: { unit: "$" },
+    description: "Track expenses and savings",
+  },
+  {
+    name: "Weight",
+    icon: "scale",
+    color: "#f97316",
+    type: "counter",
+    config: { unit: "kg" },
+    description: "Monitor body weight",
+  },
+  {
+    name: "Diet",
+    icon: "salad",
+    color: "#22c55e",
+    type: "counter",
+    config: { unit: "kcal", goal: 2000 },
+    description: "Track calories and meals",
+  },
+]
 
 // Available icons for the picker
 const availableIcons: { name: string; icon: LucideIcon }[] = [
@@ -32,6 +117,7 @@ const availableIcons: { name: string; icon: LucideIcon }[] = [
   { name: "camera", icon: Camera },
   { name: "wallet", icon: Wallet },
   { name: "users", icon: Users },
+  { name: "salad", icon: Salad },
 ]
 
 // Available colors
@@ -62,6 +148,7 @@ export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateT
   const [selectedColor, setSelectedColor] = useState("#a855f7")
   const [selectedType, setSelectedType] = useState<TrackerType>("counter")
   const [config, setConfig] = useState<TrackerConfig>({})
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(null)
 
   // Reset form when opening or when editTracker changes
   useEffect(() => {
@@ -78,9 +165,19 @@ export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateT
         setSelectedColor("#a855f7")
         setSelectedType("counter")
         setConfig({})
+        setSelectedPreset(null)
       }
     }
   }, [open, editTracker])
+
+  const handlePresetSelect = (preset: TrackerPreset) => {
+    setName(preset.name)
+    setSelectedIcon(preset.icon)
+    setSelectedColor(preset.color)
+    setSelectedType(preset.type)
+    setConfig(preset.config)
+    setSelectedPreset(preset.name)
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -163,6 +260,58 @@ export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateT
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Presets Gallery */}
+          {!editTracker && (
+            <div>
+              <label className="block text-sm font-medium text-[hsl(210_12%_47%)] mb-3">
+                Quick Start - Choose a Preset
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {PRESETS.map((preset) => {
+                  const PresetIcon = availableIcons.find((i) => i.name === preset.icon)?.icon || Flame
+                  const isSelected = selectedPreset === preset.name
+                  return (
+                    <button
+                      key={preset.name}
+                      type="button"
+                      onClick={() => handlePresetSelect(preset)}
+                      className={cn(
+                        "p-3 rounded-xl border transition-all duration-200 text-center group",
+                        isSelected
+                          ? "border-[hsl(266_73%_63%)] bg-[hsl(266_73%_63%/0.1)] ring-2 ring-[hsl(266_73%_63%)]"
+                          : "border-[hsl(210_18%_22%)] bg-[hsl(210_20%_15%)] hover:bg-[hsl(210_20%_18%)] hover:border-[hsl(266_73%_63%/0.3)]"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2 transition-colors",
+                          isSelected ? "bg-white/10" : ""
+                        )}
+                        style={{ backgroundColor: isSelected ? `${preset.color}20` : undefined }}
+                      >
+                        <PresetIcon
+                          className="w-4 h-4"
+                          style={{ color: isSelected ? preset.color : "hsl(210 12% 47%)" }}
+                        />
+                      </div>
+                      <div className="text-xs font-medium text-[hsl(210_25%_97%)] mb-0.5">
+                        {preset.name}
+                      </div>
+                      <div className="text-[10px] text-[hsl(210_12%_47%)] line-clamp-2">
+                        {preset.description}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="mt-4 pt-4 border-t border-[hsl(210_18%_22%)]">
+                <p className="text-xs text-[hsl(210_12%_47%)] text-center">
+                  Or customize manually below
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Name */}
           <div>
             <label className="block text-sm font-medium text-[hsl(210_12%_47%)] mb-2">
@@ -171,7 +320,10 @@ export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateT
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value)
+                setSelectedPreset(null) // Clear preset selection when manually editing
+              }}
               placeholder="e.g., Reading Hours, Water Intake..."
               className="w-full px-4 py-3 bg-[hsl(210_20%_15%)] border border-[hsl(210_18%_22%)] rounded-lg text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)/50] focus:outline-none focus:ring-2 focus:ring-[hsl(266_73%_63%)] transition-all"
             />
@@ -187,7 +339,10 @@ export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateT
                 <button
                   key={iconName}
                   type="button"
-                  onClick={() => setSelectedIcon(iconName)}
+                  onClick={() => {
+                    setSelectedIcon(iconName)
+                    setSelectedPreset(null) // Clear preset when manually selecting icon
+                  }}
                   className={cn(
                     "p-2.5 rounded-lg transition-all duration-200",
                     selectedIcon === iconName
@@ -218,7 +373,10 @@ export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateT
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setSelectedColor(value)}
+                  onClick={() => {
+                    setSelectedColor(value)
+                    setSelectedPreset(null) // Clear preset when manually selecting color
+                  }}
                   className={cn(
                     "w-8 h-8 rounded-full transition-all duration-200",
                     selectedColor === value && "ring-2 ring-offset-2 ring-offset-[hsl(210_25%_11%)]"
@@ -236,7 +394,7 @@ export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateT
           {/* Type Selector */}
           <div>
             <label className="block text-sm font-medium text-[hsl(210_12%_47%)] mb-2">
-              Tracker Type
+              Tracker Type <span className="text-xs text-[hsl(210_12%_47%)]">(Advanced)</span>
             </label>
             <div className="space-y-2">
               {trackerTypes.map(({ type, label, description }) => (
@@ -245,6 +403,7 @@ export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateT
                   type="button"
                   onClick={() => {
                     setSelectedType(type)
+                    setSelectedPreset(null) // Clear preset when manually selecting type
                     // Reset config based on type
                     if (type === "rating") {
                       setConfig({ min: 1, max: 5 })

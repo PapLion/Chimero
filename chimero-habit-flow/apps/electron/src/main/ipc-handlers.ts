@@ -52,6 +52,7 @@ function mapEntry(row: Record<string, unknown>): Entry {
     metadata: (row.metadata as Record<string, unknown>) || {},
     timestamp: row.timestamp as number,
     dateStr: (row.dateStr ?? row.date_str) as string,
+    assetId: (row.assetId ?? row.asset_id) as number | null,
   };
 }
 
@@ -84,9 +85,15 @@ function mapReminder(row: Record<string, unknown>): Reminder {
   };
 }
 
-function mapAsset(row: Record<string, unknown>): Asset & { assetUrl: string } {
+export type AssetWithUrls = Asset & { assetUrl: string; thumbnailUrl: string };
+
+function mapAsset(row: Record<string, unknown>): AssetWithUrls {
   const path = (row.path as string) ?? '';
+  const thumbnailPath = (row.thumbnailPath ?? row.thumbnail_path) as string | null ?? null;
   const assetUrl = `chimero-asset:///${path.replace(/^\/+/, '')}`;
+  const thumbnailUrl = thumbnailPath
+    ? `chimero-asset:///${thumbnailPath.replace(/^\/+/, '')}`
+    : assetUrl;
   return {
     id: row.id as number,
     filename: (row.filename as string) ?? '',
@@ -95,9 +102,10 @@ function mapAsset(row: Record<string, unknown>): Asset & { assetUrl: string } {
     type: (row.type as string) ?? 'image',
     mimeType: (row.mimeType ?? row.mime_type) as string | null ?? null,
     size: (row.size as number) ?? null,
-    thumbnailPath: (row.thumbnailPath ?? row.thumbnail_path) as string | null ?? null,
+    thumbnailPath,
     createdAt: (row.createdAt ?? row.created_at) as number | null,
     assetUrl,
+    thumbnailUrl,
   };
 }
 
@@ -215,11 +223,28 @@ export function registerIpcHandlers(): void {
           metadata: JSON.stringify(data.metadata ?? {}),
           timestamp: data.timestamp,
           dateStr,
+          assetId: (data as EntryInsert).assetId ?? null,
         })
         .returning();
       return inserted ? mapEntry(inserted as unknown as Record<string, unknown>) : null;
     } catch (e) {
       console.error('add-entry error:', e);
+      return null;
+    }
+  });
+
+  // --- updateEntry --- (for toggling task completion, etc.)
+  ipcMain.handle('update-entry', async (_, id: number, updates: { value?: number | null; note?: string | null }) => {
+    try {
+      const set: Record<string, unknown> = {};
+      if (updates.value !== undefined) set.value = updates.value;
+      if (updates.note !== undefined) set.note = updates.note;
+      if (Object.keys(set).length === 0) return null;
+      await db().update(entries).set(set).where(eq(entries.id, id));
+      const [updated] = await db().select().from(entries).where(eq(entries.id, id));
+      return updated ? mapEntry(updated as unknown as Record<string, unknown>) : null;
+    } catch (e) {
+      console.error('update-entry error:', e);
       return null;
     }
   });
@@ -459,7 +484,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('upload-asset', async (_, sourcePath: string) => {
     try {
       const userDataPath = app.getPath('userData');
-      const saved = saveFile(sourcePath, userDataPath);
+      const saved = await saveFile(sourcePath, userDataPath);
       const [inserted] = await db()
         .insert(assets)
         .values({
@@ -468,6 +493,7 @@ export function registerIpcHandlers(): void {
           path: saved.path,
           type: saved.type,
           size: saved.size,
+          thumbnailPath: saved.thumbnailPath,
         })
         .returning();
       if (!inserted) return null;
@@ -510,14 +536,19 @@ export function registerIpcHandlers(): void {
     }
   });
 
-  // --- deleteAsset --- remove file from disk and DB record
+  // --- deleteAsset --- remove main file, thumbnail (if separate), and DB record
   ipcMain.handle('delete-asset', async (_, id: number) => {
     try {
       const rows = await db().select().from(assets).where(eq(assets.id, id));
       const row = rows[0];
       if (!row) return false;
       const userDataPath = app.getPath('userData');
-      deleteFile(userDataPath, row.path as string);
+      const mainPath = row.path as string;
+      const thumbnailPath = (row.thumbnailPath ?? row.thumbnail_path) as string | null | undefined;
+      deleteFile(userDataPath, mainPath);
+      if (thumbnailPath && thumbnailPath !== mainPath) {
+        deleteFile(userDataPath, thumbnailPath);
+      }
       await db().delete(assets).where(eq(assets.id, id));
       return true;
     } catch (e) {

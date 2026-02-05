@@ -15,6 +15,7 @@ interface ApiAsset {
   path: string
   type: string
   assetUrl: string
+  thumbnailUrl?: string | null
   size?: number | null
   createdAt?: number | null
 }
@@ -305,7 +306,7 @@ export function AssetsPage() {
             >
               <div className="aspect-square bg-[hsl(210_20%_15%)] rounded-lg mb-3 flex items-center justify-center overflow-hidden">
                 <img
-                  src={asset.assetUrl}
+                  src={asset.thumbnailUrl || asset.assetUrl}
                   alt={nameFor(asset)}
                   className="w-full h-full object-contain p-4"
                 />
@@ -352,7 +353,7 @@ export function AssetsPage() {
             >
               <div className="w-16 h-16 bg-[hsl(210_20%_15%)] rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                 <img
-                  src={asset.assetUrl}
+                  src={asset.thumbnailUrl || asset.assetUrl}
                   alt={nameFor(asset)}
                   className="w-full h-full object-contain p-2"
                 />

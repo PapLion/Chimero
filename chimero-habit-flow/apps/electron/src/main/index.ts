@@ -23,6 +23,10 @@ const writableUserData = join(
 )
 app.setPath('userData', writableUserData)
 
+const preloadPath = join(__dirname, '../preload/index.js')
+const rendererHtmlPath = join(__dirname, '../renderer/index.html')
+const iconPath = resolve(__dirname, '..', '..', 'resources', 'icon.png')
+
 function getSplashPath(): string {
   return join(__dirname, 'splash.html')
 }
@@ -53,10 +57,11 @@ function createMainWindow(): BrowserWindow {
     height: 800,
     show: false,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: preloadPath,
       sandbox: false,
       contextIsolation: true
     },
+    icon: iconPath,
     titleBarStyle: 'hidden',
     backgroundColor: '#0f172a'
   })
@@ -64,13 +69,18 @@ function createMainWindow(): BrowserWindow {
   if (process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    mainWindow.loadFile(rendererHtmlPath)
   }
 
   return mainWindow
 }
 
 app.whenReady().then(() => {
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[Main] __dirname:', __dirname)
+    console.log('[Main] preloadPath:', preloadPath)
+    console.log('[Main] iconPath:', iconPath)
+  }
   const splash = createSplashWindow()
 
   try {
@@ -125,6 +135,5 @@ app.whenReady().then(() => {
     mainWindow.once('ready-to-show', showMainAndCloseSplash)
   }
 
-  // Fallback: show main after a short delay if ready-to-show/did-finish-load don't fire
   setTimeout(showMainAndCloseSplash, 3000)
 })

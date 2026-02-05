@@ -7,55 +7,39 @@
  * between Electron (NODE_MODULE_VERSION 143) and Node.js (127) for better-sqlite3.
  */
 import { app } from 'electron';
-import { join, dirname, resolve } from 'path';
+import { join, resolve, isAbsolute } from 'path';
 import { existsSync, readdirSync, unlinkSync } from 'fs';
 import { initDb, getDb, getRawDb, closeDb } from '@packages/db/database';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
 /**
  * Resolves the path to the Drizzle migrations folder.
- * Tries multiple strategies so it works in Dev (bundled main) and when run from different cwds.
+ * In development: resolves to packages/db/drizzle from monorepo root.
+ * In production (packaged): migrations are copied to out/main/migrations during build.
  */
 function getMigrationsFolder(): string {
-  const attempts: { name: string; path: string }[] = [];
+  // In packaged app, migrations are copied to out/main/migrations by copyMigrationsPlugin
+  const packagedMigrations = resolve(__dirname, 'migrations');
+  
+  // In development, use the source migrations folder
+  const devMigrations = resolve(__dirname, '..', '..', '..', '..', 'packages', 'db', 'drizzle');
+  
+  // Check packaged location first (production), then dev location
+  const migrationsFolder = existsSync(packagedMigrations) ? packagedMigrations : devMigrations;
 
-  // 1) Resolve from the db package (works when db is a real dependency, e.g. pnpm install symlink)
-  try {
-    const dbPackagePath = require.resolve('db/package.json');
-    const dbPackageDir = dirname(dbPackagePath);
-    const candidate = join(dbPackageDir, 'drizzle');
-    attempts.push({ name: 'require.resolve(db/package.json)', path: candidate });
-    if (existsSync(candidate)) return candidate;
-  } catch {
-    // Ignore: in bundled main there may be no 'db/package.json'
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[DB] getMigrationsFolder resolved to:', migrationsFolder);
+    console.log('[DB] migrationsFolder isAbsolute:', isAbsolute(migrationsFolder));
+    console.log('[DB] Using packaged migrations:', existsSync(packagedMigrations));
   }
 
-  // 2) Relative to compiled main: __dirname = apps/electron/out/main → go up to monorepo root
-  const mainDir = __dirname;
-  const fromOutMain = resolve(mainDir, '..', '..', '..', '..', 'packages', 'db', 'drizzle');
-  attempts.push({ name: '__dirname (out/main)', path: fromOutMain });
-  if (existsSync(fromOutMain)) return fromOutMain;
+  if (!existsSync(migrationsFolder)) {
+    console.error('[DB] migrationsFolder does not exist:', migrationsFolder);
+    console.error('[DB] Checked packaged path:', packagedMigrations, 'exists:', existsSync(packagedMigrations));
+    console.error('[DB] Checked dev path:', devMigrations, 'exists:', existsSync(devMigrations));
+  }
 
-  // 3) Same but one less level (e.g. if __dirname is apps/electron/src/main)
-  const fromSrcMain = resolve(mainDir, '..', '..', '..', 'packages', 'db', 'drizzle');
-  attempts.push({ name: '__dirname (src/main)', path: fromSrcMain });
-  if (existsSync(fromSrcMain)) return fromSrcMain;
-
-  // 4) From process.cwd(): when pnpm dev runs from monorepo root
-  const cwd = process.cwd();
-  const fromCwdRoot = join(cwd, 'packages', 'db', 'drizzle');
-  attempts.push({ name: 'process.cwd()/packages/db/drizzle', path: fromCwdRoot });
-  if (existsSync(fromCwdRoot)) return fromCwdRoot;
-
-  // 5) cwd = apps/electron
-  const fromCwdApps = join(cwd, '..', 'packages', 'db', 'drizzle');
-  attempts.push({ name: 'process.cwd()../packages/db/drizzle', path: fromCwdApps });
-  if (existsSync(fromCwdApps)) return fromCwdApps;
-
-  // Return first attempted path so migrate() runs and we get a clear error + logs
-  const fallback = attempts[0]?.path ?? fromOutMain;
-  console.error('[DB] getMigrationsFolder: no candidate folder exists. Attempts:', attempts);
-  return fallback;
+  return migrationsFolder;
 }
 
 /** Expected columns from migration 0002; used to detect schema drift. */
@@ -197,6 +181,31 @@ function ensureSchemaAndMaybeReset(
 }
 
 /**
+ * Handles transition from old migrations (0000-0006) to consolidated migration.
+ * If schema is complete but __drizzle_migrations__ has old entries (2+ rows),
+ * clear them so migrate() will run the consolidated migration (uses IF NOT EXISTS).
+ */
+function prepareConsolidatedMigrationTransition(_migrationsFolder: string): void {
+  const raw = getRawDb();
+  if (!raw) return;
+
+  const diag = runSchemaDiagnostic();
+  const schemaComplete = diag.hasIsFavorite && diag.hasDashboardLayout;
+  if (!schemaComplete) return;
+
+  try {
+    const rows = raw.prepare("SELECT COUNT(*) as cnt FROM __drizzle_migrations").get() as { cnt: number };
+    if (rows.cnt < 2) return;
+
+    // Old multi-migration setup (0000-0006). Clear so migrate() runs consolidated.
+    raw.prepare("DELETE FROM __drizzle_migrations").run();
+    console.log('[DB] Cleared old migration entries for consolidated migration transition.');
+  } catch {
+    // Table may not exist yet (fresh DB) - migrate() will create it
+  }
+}
+
+/**
  * Initializes the database and runs pending migrations.
  * Call from app.whenReady() BEFORE creating BrowserWindow.
  * Verifies schema after migrate; on drift, hard-resets DB and re-migrates (dev auto-recovery).
@@ -205,30 +214,34 @@ function ensureSchemaAndMaybeReset(
 export function setupDatabase(): void {
   const userDataPath = app.getPath('userData');
   const dbPath = join(userDataPath, 'chimero.db');
-
-  console.log('[DB] userDataPath:', userDataPath);
-  console.log('[DB] dbPath:', dbPath);
-
   const migrationsFolder = getMigrationsFolder();
-  console.log('[DB] migrationsFolder:', migrationsFolder);
 
-  const folderExists = existsSync(migrationsFolder);
-  console.log('[DB] migrationsFolder exists:', folderExists);
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[DB] userDataPath:', userDataPath);
+    console.log('[DB] dbPath:', dbPath, 'isAbsolute:', isAbsolute(dbPath));
+    console.log('[DB] migrationsFolder:', migrationsFolder, 'isAbsolute:', isAbsolute(migrationsFolder));
 
-  if (folderExists) {
-    try {
-      const files = readdirSync(migrationsFolder);
-      const sqlFiles = files.filter((f) => f.endsWith('.sql'));
-      console.log('[DB] migration .sql files in folder:', sqlFiles);
-      const metaPath = join(migrationsFolder, 'meta', '_journal.json');
-      console.log('[DB] meta/_journal.json exists:', existsSync(metaPath));
-    } catch (e) {
-      console.warn('[DB] could not list migrations folder:', e);
+    const folderExists = existsSync(migrationsFolder);
+    console.log('[DB] migrationsFolder exists:', folderExists);
+
+    if (folderExists) {
+      try {
+        const files = readdirSync(migrationsFolder);
+        const sqlFiles = files.filter((f) => f.endsWith('.sql'));
+        console.log('[DB] migration .sql files in folder:', sqlFiles);
+        const metaPath = join(migrationsFolder, 'meta', '_journal.json');
+        console.log('[DB] meta/_journal.json exists:', existsSync(metaPath));
+      } catch (e) {
+        console.warn('[DB] could not list migrations folder:', e);
+      }
     }
   }
 
   initDb(dbPath);
   const db = getDb();
+
+  // Transition: if DB has old migrations (0000-0006), clear them so migrate() runs consolidated
+  prepareConsolidatedMigrationTransition(migrationsFolder);
 
   console.log('[DB] Running migrations...');
   try {

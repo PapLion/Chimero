@@ -52,6 +52,9 @@ export const entries = sqliteTable("entries", {
   // Ej. Gym: { "exercises": [{ "name": "Bench", "weight": 100 }] }
   metadata: text("metadata", { mode: "json" }).default("{}"),
   
+  // Optional asset attachment (image/video) linked to the entry
+  assetId: integer("asset_id").references(() => assets.id, { onDelete: "set null" }),
+  
   // Fecha exacta (Milisegundos) para "Mood multiple times a day"
   timestamp: integer("timestamp").notNull(),
   

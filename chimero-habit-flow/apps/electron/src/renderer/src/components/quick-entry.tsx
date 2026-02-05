@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useAppStore } from "../lib/store"
-import { useTrackers, useRecentTrackers, useFavoriteTrackers, useAddEntryMutation, useUpsertReminderMutation } from "../lib/queries"
+import { useTrackers, useRecentTrackers, useFavoriteTrackers, useAddEntryMutation, useUpsertReminderMutation, useAssets } from "../lib/queries"
 import { cn } from "../lib/utils"
+import { getEntryConfig } from "../lib/entry-config"
 import type { Tracker } from "../lib/store"
 import {
   Dialog,
@@ -13,7 +14,7 @@ import {
 } from "@packages/ui/dialog"
 import { Input } from "@packages/ui/input"
 import { Button } from "@packages/ui/button"
-import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Activity, Calendar, Flame, Book, Gamepad2, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, type LucideIcon } from "lucide-react"
+import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Activity, Calendar, Flame, Book, Gamepad2, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, ImageIcon, X, type LucideIcon } from "lucide-react"
 
 const iconMap: Record<string, LucideIcon> = {
   scale: Scale,
@@ -48,6 +49,9 @@ export function QuickEntry() {
   const [search, setSearch] = useState("")
   const [selectedTracker, setSelectedTracker] = useState<number | null>(null)
   const [value, setValue] = useState("")
+  const [note, setNote] = useState("")
+  const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null)
+  const [assetPickerOpen, setAssetPickerOpen] = useState(false)
   const [mode, setMode] = useState<QuickEntryMode>("activity")
   
   // Reminder state
@@ -56,6 +60,12 @@ export function QuickEntry() {
   const [reminderDate, setReminderDate] = useState("")
   const [reminderTime, setReminderTime] = useState("")
   const [linkedTrackerId, setLinkedTrackerId] = useState<number | undefined>(undefined)
+
+  // Assets for picker
+  const { data: assetsData } = useAssets({ limit: 50 })
+  const assets = (assetsData ?? []) as Array<{ id: number; thumbnailUrl: string; assetUrl: string; originalName?: string | null }>
+  const selectedAsset = assets.find((a) => a.id === selectedAssetId)
+  const assetPickerRef = useRef<HTMLDivElement>(null)
 
   // Autocomplete: Favorites + Recents (deduped) + All trackers filtered by search
   const searchLower = search.toLowerCase().trim()
@@ -103,6 +113,9 @@ export function QuickEntry() {
       setSearch("")
       setSelectedTracker(null)
       setValue("")
+      setNote("")
+      setSelectedAssetId(null)
+      setAssetPickerOpen(false)
       setMode("activity")
       setReminderTitle("")
       setReminderDescription("")
@@ -111,6 +124,19 @@ export function QuickEntry() {
       setLinkedTrackerId(undefined)
     }
   }, [commandBarOpen])
+
+  // Close asset picker when clicking outside
+  useEffect(() => {
+    if (!assetPickerOpen) return
+    
+    const handleClickOutside = (event: MouseEvent) => {
+      if (assetPickerRef.current && !assetPickerRef.current.contains(event.target as Node)) {
+        setAssetPickerOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [assetPickerOpen])
 
   // Keyboard shortcut
   useEffect(() => {
@@ -129,18 +155,47 @@ export function QuickEntry() {
   }, [commandBarOpen, setQuickEntryOpen])
 
   const handleSubmit = useCallback(() => {
-    if (selectedTracker && value) {
-      addEntryMutation.mutate(
-        {
-          trackerId: selectedTracker,
-          value: parseFloat(value),
-          metadata: {},
-          timestamp: Date.now(),
-        },
-        { onSuccess: () => setQuickEntryOpen(false) }
-      )
+    if (!selectedTracker) return
+    
+    const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
+    if (!selectedTrackerData) return
+
+    // Determine value and note based on tracker type
+    let entryValue: number | null = null
+    let entryNote: string | null = null
+
+    if (selectedTrackerData.type === "text" || selectedTrackerData.type === "list") {
+      // Text/List trackers: note is main, value is optional number or 1 (count)
+      entryNote = note.trim() || null
+      entryValue = value ? parseFloat(value) : 1
+    } else if (selectedTrackerData.type === "binary" || selectedTrackerData.type === "composite") {
+      // Tasks: text input only, value is 1
+      entryNote = note.trim() || null
+      entryValue = 1
+    } else {
+      // Numeric/Range trackers: value is main, note is optional
+      if (!value) return // Require value for numeric trackers
+      entryValue = parseFloat(value)
+      entryNote = note.trim() || null
     }
-  }, [selectedTracker, value, addEntryMutation, setQuickEntryOpen])
+
+    // For text/list trackers, require at least note or value
+    if ((selectedTrackerData.type === "text" || selectedTrackerData.type === "list") && !note.trim() && !value) {
+      return
+    }
+
+    addEntryMutation.mutate(
+      {
+        trackerId: selectedTracker,
+        value: entryValue,
+        note: entryNote,
+        assetId: selectedAssetId,
+        metadata: {},
+        timestamp: Date.now(),
+      },
+      { onSuccess: () => setQuickEntryOpen(false) }
+    )
+  }, [selectedTracker, value, note, selectedAssetId, trackers, addEntryMutation, setQuickEntryOpen])
 
   const handleReminderSubmit = useCallback(() => {
     if (!reminderTitle || !reminderDate || !reminderTime) return
@@ -160,6 +215,9 @@ export function QuickEntry() {
   }, [reminderTitle, reminderDescription, reminderDate, reminderTime, linkedTrackerId, upsertReminderMutation, setQuickEntryOpen])
 
   const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
+  
+  // Get human-centric entry config for the selected tracker
+  const entryConfig = selectedTrackerData ? getEntryConfig(selectedTrackerData) : null
 
   const renderTrackerList = (trackerList: typeof trackers, title: string) => {
     if (trackerList.length === 0) return null
@@ -322,40 +380,271 @@ export function QuickEntry() {
                   )}
                 </div>
 
-                {selectedTrackerData?.type === "rating" ? (
-                  <div className="flex gap-2 mb-4">
-                    {[1, 2, 3, 4, 5].map((rating) => (
-                      <button
-                        key={rating}
-                        onClick={() => setValue(rating.toString())}
-                        className={cn(
-                          "flex-1 py-3 rounded-lg border transition-all text-lg",
-                          value === rating.toString()
-                            ? "border-[hsl(266_73%_63%)] bg-[hsl(266_73%_63%/0.1)] text-[hsl(266_73%_63%)]"
-                            : "border-[hsl(210_18%_22%)] hover:border-[hsl(266_73%_63%/0.5)] text-[hsl(210_25%_97%)]"
+                {/* Dynamic Input Fields Based on Entry Config */}
+                {entryConfig && entryConfig.mainType === "rating" ? (
+                  <div className="mb-4">
+                    {/* 1-10 Scale for Mood */}
+                    {selectedTrackerData?.icon === "smile" ? (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-5 gap-2">
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => {
+                            const moodEmojis = ["🤬", "😠", "😞", "☹️", "😐", "🙂", "😊", "😄", "🤩", "😍"]
+                            return (
+                              <button
+                                key={rating}
+                                onClick={() => setValue(rating.toString())}
+                                className={cn(
+                                  "py-2 rounded-lg border transition-all text-lg flex flex-col items-center gap-1",
+                                  value === rating.toString()
+                                    ? "border-[hsl(266_73%_63%)] bg-[hsl(266_73%_63%/0.1)] text-[hsl(266_73%_63%)]"
+                                    : "border-[hsl(210_18%_22%)] hover:border-[hsl(266_73%_63%/0.5)] text-[hsl(210_25%_97%)]"
+                                )}
+                              >
+                                <span>{moodEmojis[rating - 1]}</span>
+                                <span className="text-xs">{rating}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {value && (
+                          <div className="text-center text-sm text-[hsl(210_12%_47%)]">
+                            Selected: {value}/10
+                          </div>
                         )}
-                      >
-                        {["😢", "😔", "😐", "🙂", "😄"][rating - 1]}
-                      </button>
-                    ))}
+                        {entryConfig.notePlaceholder && (
+                          <Input
+                            type="text"
+                            placeholder={entryConfig.notePlaceholder}
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            className="bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)] mt-2"
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      /* Default 1-5 scale for other rating types */
+                      <div className="flex gap-2">
+                        {[1, 2, 3, 4, 5].map((rating) => (
+                          <button
+                            key={rating}
+                            onClick={() => setValue(rating.toString())}
+                            className={cn(
+                              "flex-1 py-3 rounded-lg border transition-all text-lg",
+                              value === rating.toString()
+                                ? "border-[hsl(266_73%_63%)] bg-[hsl(266_73%_63%/0.1)] text-[hsl(266_73%_63%)]"
+                                : "border-[hsl(210_18%_22%)] hover:border-[hsl(266_73%_63%/0.5)] text-[hsl(210_25%_97%)]"
+                            )}
+                          >
+                            {["😢", "😔", "😐", "🙂", "😄"][rating - 1]}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : entryConfig && entryConfig.mainType === "text" ? (
+                  /* Text-based Trackers (Books, TV, Games, Tasks) */
+                  <div className="space-y-3 mb-4">
+                    <div>
+                      {entryConfig.mainLabel && (
+                        <label className="block text-xs text-[hsl(210_12%_47%)] mb-1.5">
+                          {entryConfig.mainLabel}
+                        </label>
+                      )}
+                      <Input
+                        type="text"
+                        placeholder={entryConfig.mainPlaceholder}
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && (note.trim() || value)) {
+                            e.preventDefault()
+                            handleSubmit()
+                          }
+                        }}
+                        className="text-lg h-12 bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
+                        autoFocus
+                      />
+                    </div>
+                    {entryConfig.secondaryPlaceholder && (
+                      <div>
+                        {entryConfig.noteLabel && (
+                          <label className="block text-xs text-[hsl(210_12%_47%)] mb-1.5">
+                            {entryConfig.noteLabel}
+                          </label>
+                        )}
+                        <Input
+                          type="number"
+                          placeholder={entryConfig.secondaryPlaceholder}
+                          value={value}
+                          onChange={(e) => setValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && (note.trim() || value)) {
+                              e.preventDefault()
+                              handleSubmit()
+                            }
+                          }}
+                          className="bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ) : entryConfig && entryConfig.mainType === "number" ? (
+                  /* Numeric Trackers (Exercise, Weight, Diet, etc.) */
+                  <div className="space-y-3 mb-4">
+                    <div className="relative">
+                      {entryConfig.mainLabel && (
+                        <label className="block text-xs text-[hsl(210_12%_47%)] mb-1.5">
+                          {entryConfig.mainLabel}
+                        </label>
+                      )}
+                      <Input
+                        type="number"
+                        placeholder={entryConfig.mainPlaceholder}
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && value) {
+                            e.preventDefault()
+                            handleSubmit()
+                          }
+                        }}
+                        className="text-lg h-12 bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
+                        autoFocus
+                      />
+                      {selectedTrackerData?.config.unit && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(210_12%_47%)]">
+                          {selectedTrackerData.config.unit as string}
+                        </span>
+                      )}
+                    </div>
+                    {entryConfig.notePlaceholder && (
+                      <div>
+                        {entryConfig.noteLabel && (
+                          <label className="block text-xs text-[hsl(210_12%_47%)] mb-1.5">
+                            {entryConfig.noteLabel}
+                          </label>
+                        )}
+                        {entryConfig.noteHint && (
+                          <p className="text-xs text-[hsl(210_12%_47%)] mb-1.5">{entryConfig.noteHint}</p>
+                        )}
+                        <Input
+                          type="text"
+                          placeholder={entryConfig.notePlaceholder}
+                          value={note}
+                          onChange={(e) => setNote(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && value) {
+                              e.preventDefault()
+                              handleSubmit()
+                            }
+                          }}
+                          className="bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
+                        />
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="relative mb-4">
+                  /* Fallback: Default behavior */
+                  <div className="space-y-3 mb-4">
                     <Input
-                      type="number"
+                      type="text"
                       placeholder="Enter value..."
-                      value={value}
-                      onChange={(e) => setValue(e.target.value)}
+                      value={note || value}
+                      onChange={(e) => {
+                        if (selectedTrackerData?.type === "text" || selectedTrackerData?.type === "list") {
+                          setNote(e.target.value)
+                        } else {
+                          setValue(e.target.value)
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (note.trim() || value)) {
+                          e.preventDefault()
+                          handleSubmit()
+                        }
+                      }}
                       className="text-lg h-12 bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
                       autoFocus
                     />
-                    {selectedTrackerData?.config.unit && (
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(210_12%_47%)]">
-                        {selectedTrackerData.config.unit as string}
-                      </span>
-                    )}
                   </div>
                 )}
+
+                {/* Asset Attachment */}
+                <div className="mb-4 relative">
+                  <div className="flex items-center gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setAssetPickerOpen(!assetPickerOpen)}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg border transition-all text-sm",
+                        selectedAssetId
+                          ? "border-[hsl(266_73%_63%)] bg-[hsl(266_73%_63%/0.1)] text-[hsl(266_73%_63%)]"
+                          : "border-[hsl(210_18%_22%)] bg-[hsl(210_20%_15%)] text-[hsl(210_25%_97%)] hover:bg-[hsl(210_20%_20%)]"
+                      )}
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                      {selectedAssetId ? "Change Attachment" : "Attach Image"}
+                    </button>
+                    {selectedAssetId && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAssetId(null)}
+                        className="p-2 rounded-lg border border-[hsl(210_18%_22%)] text-[hsl(210_12%_47%)] hover:text-[hsl(210_25%_97%)] hover:bg-[hsl(210_20%_15%)]"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Asset Preview - Large content thumbnail */}
+                  {selectedAsset && (
+                    <div className="mt-2 rounded-xl overflow-hidden border border-[hsl(210_18%_22%)] max-w-xs max-h-[200px] bg-white/[0.04]">
+                      <img
+                        src={selectedAsset.thumbnailUrl}
+                        alt={selectedAsset.originalName || "Asset"}
+                        className="w-full h-auto max-h-[200px] object-contain"
+                      />
+                    </div>
+                  )}
+
+                  {/* Asset Picker Popover */}
+                  {assetPickerOpen && (
+                    <div
+                      ref={assetPickerRef}
+                      className="absolute z-50 top-full left-0 mt-2 p-3 bg-[hsl(210_20%_15%)] border border-[hsl(210_18%_22%)] rounded-lg shadow-lg max-h-64 overflow-y-auto w-full"
+                    >
+                      {assets.length === 0 ? (
+                        <div className="py-4 text-center text-sm text-[hsl(210_12%_47%)]">
+                          No assets available
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-4 gap-2">
+                          {assets.map((asset) => (
+                            <button
+                              key={asset.id}
+                              onClick={() => {
+                                setSelectedAssetId(asset.id)
+                                setAssetPickerOpen(false)
+                              }}
+                              className={cn(
+                                "relative aspect-square rounded-lg overflow-hidden border-2 transition-all",
+                                selectedAssetId === asset.id
+                                  ? "border-[hsl(266_73%_63%)]"
+                                  : "border-[hsl(210_18%_22%)] hover:border-[hsl(266_73%_63%/0.5)]"
+                              )}
+                            >
+                              <img
+                                src={asset.thumbnailUrl}
+                                alt={asset.originalName || "Asset"}
+                                className="w-full h-full object-cover"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div className="flex gap-2">
                   <Button
@@ -368,7 +657,13 @@ export function QuickEntry() {
                   <Button
                     className="flex-1 bg-[hsl(266_73%_63%)] text-white hover:bg-[hsl(266_73%_58%)]"
                     onClick={handleSubmit}
-                    disabled={!value}
+                    disabled={
+                      selectedTrackerData?.type === "text" || selectedTrackerData?.type === "list"
+                        ? !note.trim() && !value
+                        : selectedTrackerData?.type === "binary" || selectedTrackerData?.type === "composite"
+                        ? !note.trim()
+                        : !value
+                    }
                   >
                     Save Entry
                   </Button>

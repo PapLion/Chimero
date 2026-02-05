@@ -53,10 +53,11 @@ pnpm exec electron-rebuild -f -w better-sqlite3
 - **Schema:** Cambios en `packages/db/src/schema.ts` (reminders, assets) y generación de migración manual (Drizzle interactivo no usado).
 - **Build:** `pnpm build` (turbo + electron-vite) compila correctamente main, preload y renderer.
 - **Backend integration:** Nuevo IPC `update-asset(id, { originalName })`; protocolo `chimero-asset` con sanitización de path; queryKeys.reminders añadido en queries.ts.
+ - **Build config Electron:** `electron` movido a `devDependencies` en el `package.json` raíz y en el paquete de Electron. `pnpm package` compila correctamente (turbo + electron-vite) y electron-builder llega a la fase de empaquetado sobre `dist/win-unpacked` antes de fallar por configuración de entrada (`index.js` en app.asar).
 
 ### Failures / Manual Actions Required
 - **db:generate:** Si se ejecuta `pnpm --filter db db:generate` tras cambiar el schema, Drizzle puede preguntar si una columna es nueva o renombrada (interactivo). Para evitar prompts, crear/editar la migración SQL a mano y actualizar `_journal.json`.
-- **electron-builder:** `pnpm build` puede fallar en la fase de empaquetado con: *Package "electron" is only allowed in "devDependencies"*. Solución: mover `electron` a `devDependencies` en el `package.json` donde se declare (raíz o apps/electron según la configuración).
+- **electron-builder (actual):** `pnpm package` llega a empaquetar pero falla con *Application entry file "index.js" ... is corrupted / not found in app.asar*. Pendiente ajustar configuración de `electron-builder` (entrypoint) para que apunte a `out/main/index.js` en lugar de `index.js` en la raíz del paquete.
 - **SQLite/Electron:** Si hay errores nativos con better-sqlite3, ejecutar `pnpm exec electron-rebuild -f -w better-sqlite3` desde `apps/electron`.
 
 ## Notas

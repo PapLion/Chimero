@@ -63,11 +63,12 @@
 
     ### CI/CD – Implementado
     - Lint (ESLint), unit tests (Vitest), E2E (Playwright + Electron), CI (GitHub Actions), release skeleton. Ver `chimero-habit-flow/docs/ci-cd.md`.
+    - **E2E:** El test "app launches and shows Chimero dashboard" está temporalmente en `test.skip` porque con splash la ventana se cierra antes de que Playwright obtenga la main, y con `NODE_ENV=test` (sin splash) la app sale antes de abrir ventana. Siguiente paso: hacer que en test la primera ventana sea la main (p. ej. no mostrar splash cuando se lanza desde Playwright) o usar `waitForEvent('window')` y manejar el orden splash/main.
 
         ### Pending / Post-MVP
         - Cloud backups, correlaciones SQL avanzadas, heatmaps anuales.
-        - Thumbnails/compresión para assets (sharp).
-        - electron-builder: mover `electron` a devDependencies si falla el empaquetado.
+        - Thumbnails/compresión para assets (sharp). **Decisión:** diferido a Post-MVP para evitar optimización prematura; solo se implementará si el rendimiento de la galería empeora con muchos assets de usuario.
+        - electron-builder: mover `electron` a devDependencies si falla el empaquetado. (Ya aplicado en monorepo; pendientes solo ajustes de `electron-builder` sobre `index.js` en app.asar.)
 
     ## Tipos de Datos
 

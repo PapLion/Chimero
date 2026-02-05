@@ -8,13 +8,19 @@ import type { Tracker, Entry } from './store'
 export const queryKeys = {
   trackers: ['trackers'] as const,
   entries: (opts?: { trackerId?: number }) => ['entries', opts] as const,
+  entriesRoot: ['entries'] as const,
   recentTrackers: (limit?: number) => ['recent-trackers', limit] as const,
+  recentTrackersRoot: ['recent-trackers'] as const,
   favoriteTrackers: ['favorite-trackers'] as const,
   stats: ['stats'] as const,
   calendarMonth: (year: number, month: number) => ['calendar-month', year, month] as const,
+  calendarMonthRoot: ['calendar-month'] as const,
   moodAggregates: (trackerId?: number, days?: number) => ['mood-aggregates', trackerId, days] as const,
+  moodAggregatesRoot: ['mood-aggregates'] as const,
   taskEntries: (trackerId: number) => ['task-entries', trackerId] as const,
+  taskEntriesRoot: ['task-entries'] as const,
   assets: (opts?: { limit?: number; offset?: number }) => ['assets', opts] as const,
+  assetsRoot: ['assets'] as const,
   reminders: ['reminders'] as const,
   dashboardLayout: ['dashboard-layout'] as const,
 }
@@ -111,15 +117,19 @@ export function useReminders() {
 export function useAddEntryMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { trackerId: number; value?: number; metadata?: Record<string, unknown>; timestamp: number }) =>
+    mutationFn: (data: { trackerId: number; value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp: number; assetId?: number | null }) =>
       api.addEntry(data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['entries'] })
-      qc.invalidateQueries({ queryKey: ['recent-trackers'] })
+      // Invalidate and refetch all entry-related data so widgets update immediately
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
       qc.invalidateQueries({ queryKey: queryKeys.stats })
-      qc.invalidateQueries({ queryKey: ['calendar-month'] })
-      qc.invalidateQueries({ queryKey: ['mood-aggregates'] })
-      qc.invalidateQueries({ queryKey: ['task-entries'] })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.moodAggregatesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.taskEntriesRoot })
+      // Ensure active queries refetch immediately for a snappy dashboard experience
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+      qc.refetchQueries({ queryKey: queryKeys.stats, type: 'active' })
     },
   })
 }
@@ -172,7 +182,7 @@ export function useDeleteTrackerMutation() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.trackers })
       qc.invalidateQueries({ queryKey: queryKeys.dashboardLayout })
-      qc.invalidateQueries({ queryKey: queryKeys.entries() })
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
     },
   })
 }
@@ -261,6 +271,22 @@ export function useUncompleteReminderMutation() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.reminders })
       qc.refetchQueries({ queryKey: queryKeys.reminders })
+    },
+  })
+}
+
+export function useUpdateEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, updates }: { id: number; updates: { value?: number | null; note?: string | null } }) =>
+      api.updateEntry(id, updates),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.taskEntriesRoot })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
     },
   })
 }
