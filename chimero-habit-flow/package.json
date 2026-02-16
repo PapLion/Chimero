@@ -1,7 +1,12 @@
 {
   "name": "chimero-habit-flow",
   "version": "1.0.0",
-  "description": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PapLion/Chimero.git"
+  },
+  "author": "Dani.pp",
+  "description": "A habit tracker for enchanted flows",
   "main": "index.js",
   "scripts": {
     "dev": "turbo run dev",
@@ -15,11 +20,12 @@
     "check-types": "pnpm --filter chimero-electron exec tsc --noEmit"
   },
   "keywords": [],
-  "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.28.2", 
   "type": "commonjs",
   "build": {
+    "appId": "com.paplion.chimero",
+    "productName": "Chimero",
     "directories": {
       "app": "apps/electron",
       "output": "dist"
@@ -28,7 +34,22 @@
       "out/**/*",
       "package.json"
     ],
-    "asar": true
+    "asar": true,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "PapLion",
+        "repo": "Chimero"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "apps/electron/resources/icon.ico" 
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "devDependencies": {
     "electron": "^40.0.0",

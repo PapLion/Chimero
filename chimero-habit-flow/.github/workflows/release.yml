@@ -18,6 +18,9 @@ defaults:
   run:
     shell: pwsh
 
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: windows-latest
@@ -39,15 +42,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build app (electron-vite)
+      # Primero compilamos el código fuente (React/Vite/TS)
+      - name: Build app code
         run: pnpm build
 
-      # Placeholder: publish to GitHub Releases via electron-builder.
-      # Uncomment and set GH token when ready:
-      # - name: Build and publish
-      #   env:
-      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #   run: pnpm package
-      #   # Or: pnpm exec electron-builder --publish always
-      - name: Build package (no publish)
-        run: pnpm package
+      # Luego empaquetamos y publicamos el .exe
+      # Usamos 'exec electron-builder' directamente para pasarle flags extra
+      - name: Build & Publish Electron App
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec electron-builder --publish always
