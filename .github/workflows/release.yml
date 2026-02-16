@@ -17,6 +17,7 @@ on:
 defaults:
   run:
     shell: pwsh
+    working-directory: ./chimero-habit-flow 
 
 permissions:
   contents: write
@@ -33,21 +34,21 @@ jobs:
         with:
           version: 10
 
+      # No necesitamos working-directory aquí porque setup-node
+      # busca archivos de configuración automáticamente o usa el contexto global
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
+          cache-dependency-path: './chimero-habit-flow/pnpm-lock.yaml' # <--- Ruta explícita para el caché
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Primero compilamos el código fuente (React/Vite/TS)
       - name: Build app code
         run: pnpm build
 
-      # Luego empaquetamos y publicamos el .exe
-      # Usamos 'exec electron-builder' directamente para pasarle flags extra
       - name: Build & Publish Electron App
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
