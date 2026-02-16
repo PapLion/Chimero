@@ -17,7 +17,7 @@ protocol.registerSchemesAsPrivileged([
 // If you still see "Unable to move the cache: Acceso denegado (0x5)" or "Gpu Cache Creation failed":
 // they are often non-critical in dev (Chromium falls back to in-memory cache). Ignore unless the app
 // crashes or hangs; optionally try app.disableHardwareAcceleration() only if needed.
-const writableUserData = join(
+const writableUserData = resolve(
   process.env.LOCALAPPDATA || process.env.APPDATA || process.env.USERPROFILE || '.',
   'Chimero'
 )

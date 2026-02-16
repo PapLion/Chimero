@@ -212,8 +212,8 @@ function prepareConsolidatedMigrationTransition(_migrationsFolder: string): void
  * @throws Error if migration fails - app should quit on failure
  */
 export function setupDatabase(): void {
-  const userDataPath = app.getPath('userData');
-  const dbPath = join(userDataPath, 'chimero.db');
+  const userDataPath = resolve(app.getPath('userData'));
+  const dbPath = resolve(userDataPath, 'chimero.db');
   const migrationsFolder = getMigrationsFolder();
 
   if (process.env.NODE_ENV === 'development') {

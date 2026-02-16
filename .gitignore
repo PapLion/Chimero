@@ -44,6 +44,7 @@ coverage/
 # Electron
 chimero.db
 *.db
+chimero-habit-flow/apps/electron/Chimero/
 
 # Package managers
 package-lock.json
