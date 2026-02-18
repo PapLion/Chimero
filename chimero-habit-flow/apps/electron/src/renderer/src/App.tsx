@@ -9,6 +9,8 @@ import { NotificationsModal } from "./components/modals/NotificationsModal"
 import { CalendarPage } from "./pages/CalendarPage"
 import { AssetsPage } from "./pages/AssetsPage"
 import { CustomTrackersPage } from "./pages/CustomTrackersPage"
+// NEW IMPORT
+import StatsPage from "./pages/StatsPage" 
 import { useAppStore } from "./lib/store"
 
 export default function ChimeroApp() {
@@ -22,6 +24,9 @@ export default function ChimeroApp() {
         return <AssetsPage />
       case "custom-trackers":
         return <CustomTrackersPage />
+      // NEW CASE
+      case "stats":
+        return <StatsPage />
       case "home":
       default:
         return <BentoGrid />
@@ -58,7 +63,7 @@ export default function ChimeroApp() {
 
       {/* Keyboard Shortcut Hint */}
       <div className="fixed bottom-6 left-[272px] hidden md:flex items-center gap-2 text-xs text-[hsl(210_12%_47%)] bg-[hsl(210_25%_11%)] backdrop-blur-md px-3 py-2 rounded-lg border border-[hsl(210_18%_22%)]">
-        <kbd className="px-1.5 py-0.5 bg-[hsl(210_20%_15%)] rounded text-[10px] font-mono text-[hsl(210_25%_97%)]">⌘K</kbd>
+        <kbd className="px-1.5 py-0.5 bg-[hsl(210_20%_15%)] rounded text-[10px] font-mono text-[hsl(210_25%_97%)]">Alt+Q</kbd>
         <span>Quick Entry</span>
       </div>
     </div>

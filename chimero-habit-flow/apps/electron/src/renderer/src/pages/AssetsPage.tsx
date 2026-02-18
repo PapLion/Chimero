@@ -22,6 +22,7 @@ interface ApiAsset {
 
 const assetCategories: { id: AssetCategory | "all"; name: string }[] = [
   { id: "all", name: "All Assets" },
+  { id: "person", name: "People & Social" },
   { id: "games", name: "Games" },
   { id: "books", name: "Books" },
   { id: "tv", name: "TV & Movies" },
@@ -98,8 +99,21 @@ export function AssetsPage() {
 
   const nameFor = (asset: ApiAsset) => asset.originalName || asset.filename
 
+  // Helper function to determine if asset is person/social (for rounded styling)
+  const isPersonAsset = (asset: ApiAsset) => {
+    // Check if asset type or name indicates it's a person/social asset
+    const name = nameFor(asset).toLowerCase()
+    return asset.type === 'person' || 
+           name.includes('person') || 
+           name.includes('people') || 
+           name.includes('social') ||
+           name.includes('profile') ||
+           name.includes('avatar') ||
+           name.includes('contact')
+  }
+
   const filteredAssets = assets.filter((asset) => {
-    const matchesCategory = selectedCategory === "all"
+    const matchesCategory = selectedCategory === "all" || asset.type === selectedCategory
     const matchesSearch = nameFor(asset).toLowerCase().includes(searchQuery.toLowerCase())
     return matchesCategory && matchesSearch
   })
@@ -304,7 +318,10 @@ export function AssetsPage() {
               key={asset.id}
               className="group bg-[hsl(210_25%_11%)] border border-[hsl(210_18%_22%)] rounded-xl p-4 hover:border-[hsl(266_73%_63%/0.5)] transition-all hover:scale-[1.02]"
             >
-              <div className="aspect-square bg-[hsl(210_20%_15%)] rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+              <div className={cn(
+                "aspect-square bg-[hsl(210_20%_15%)] mb-3 flex items-center justify-center overflow-hidden",
+                isPersonAsset(asset) ? "rounded-full" : "rounded-lg"
+              )}>
                 <img
                   src={asset.thumbnailUrl || asset.assetUrl}
                   alt={nameFor(asset)}
@@ -351,7 +368,10 @@ export function AssetsPage() {
               key={asset.id}
               className="bg-[hsl(210_25%_11%)] border border-[hsl(210_18%_22%)] rounded-xl p-4 hover:border-[hsl(266_73%_63%/0.5)] transition-colors flex items-center gap-4"
             >
-              <div className="w-16 h-16 bg-[hsl(210_20%_15%)] rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+              <div className={cn(
+                "w-16 h-16 bg-[hsl(210_20%_15%)] flex items-center justify-center flex-shrink-0 overflow-hidden",
+                isPersonAsset(asset) ? "rounded-full" : "rounded-lg"
+              )}>
                 <img
                   src={asset.thumbnailUrl || asset.assetUrl}
                   alt={nameFor(asset)}

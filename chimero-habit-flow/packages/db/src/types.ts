@@ -104,3 +104,38 @@ export interface Asset {
   thumbnailPath?: string | null
   createdAt: number | null
 }
+
+// === CORRELATION ENGINE TYPES ===
+
+export interface CorrelationResult {
+  sourceTrackerId: number;
+  targetTrackerId: number;
+  offsetDays: number;
+  impact: number; // Percentage difference (-100 to +100)
+  confidence: number; // Sample size (0-100)
+  baselineAvg: number; // Cohort B average
+  impactedAvg: number; // Cohort A average
+  triggeredDays: number; // Days where source > 0
+  baselineDays: number; // Days where source = 0/null
+}
+
+export interface CorrelationMetadata {
+  totalDays: number;
+  dataQuality: 'high' | 'medium' | 'low';
+  hasSufficientData: boolean;
+  recommendedActions: string[];
+}
+
+export interface EnhancedCorrelationResult extends CorrelationResult {
+  metadata: CorrelationMetadata;
+  insightType: 'positive_synergy' | 'destructive_interference' | 'neutral_correlation';
+  userFriendlyConfidence: string;
+}
+
+export interface CorrelationCalculationOptions {
+  sourceTrackerId: number;
+  targetTrackerId: number;
+  offsetDays: number;
+  minSampleSize?: number;
+  confidenceThreshold?: number;
+}

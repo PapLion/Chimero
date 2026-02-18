@@ -9,7 +9,7 @@ import { trackers, entries, settings, assets, reminders } from '@packages/db';
 import type { Tracker, Entry, TrackerInsert, EntryInsert, Asset, Reminder, ReminderInsert } from '@packages/db';
 import { eq, desc, and, sql, asc } from 'drizzle-orm';
 import { saveFile, deleteFile, getAssetAbsolutePath } from './services/asset-manager';
-import { getDashboardStats, getCalendarMonth } from './services/stats-service';
+import { getDashboardStats, getCalendarMonth, calculateImpact } from './services/stats-service';
 
 function db() {
   return getDb();
@@ -72,7 +72,7 @@ function mapReminder(row: Record<string, unknown>): Reminder {
   const lastTriggeredRaw = row.lastTriggered ?? row.last_triggered;
   return {
     id: row.id as number,
-    trackerId: (row.trackerId ?? row.tracker_id) as number | null ?? null,
+    trackerId: (row.trackerId ?? row.tracker_id) as number | null,
     title: row.title as string,
     description: (row.description as string) ?? null,
     time: (row.time as string) ?? '',
@@ -89,7 +89,7 @@ export type AssetWithUrls = Asset & { assetUrl: string; thumbnailUrl: string };
 
 function mapAsset(row: Record<string, unknown>): AssetWithUrls {
   const path = (row.path as string) ?? '';
-  const thumbnailPath = (row.thumbnailPath ?? row.thumbnail_path) as string | null ?? null;
+  const thumbnailPath = (row.thumbnailPath ?? row.thumbnail_path) as string | null;
   const assetUrl = `chimero-asset:///${path.replace(/^\/+/, '')}`;
   const thumbnailUrl = thumbnailPath
     ? `chimero-asset:///${thumbnailPath.replace(/^\/+/, '')}`
@@ -97,10 +97,10 @@ function mapAsset(row: Record<string, unknown>): AssetWithUrls {
   return {
     id: row.id as number,
     filename: (row.filename as string) ?? '',
-    originalName: (row.originalName ?? row.original_name) as string | null ?? null,
+    originalName: (row.originalName ?? row.original_name) as string | null,
     path,
     type: (row.type as string) ?? 'image',
-    mimeType: (row.mimeType ?? row.mime_type) as string | null ?? null,
+    mimeType: (row.mimeType ?? row.mime_type) as string | null,
     size: (row.size as number) ?? null,
     thumbnailPath,
     createdAt: (row.createdAt ?? row.created_at) as number | null,
@@ -156,6 +156,11 @@ export function registerIpcHandlers(): void {
   // --- createTracker ---
   ipcMain.handle('create-tracker', async (_, data: TrackerInsert & { type?: string }) => {
     try {
+      // Basic input validation
+      if (!data.name || typeof data.name !== 'string' || !data.name.trim()) {
+        throw new Error('Invalid tracker name');
+      }
+      
       const uiType = (data.type as string) || 'numeric';
       const schemaType = uiType === 'counter' ? 'numeric' : uiType === 'rating' ? 'range' : uiType === 'list' ? 'text' : uiType;
       const [inserted] = await db()
@@ -483,6 +488,15 @@ export function registerIpcHandlers(): void {
   // --- uploadAsset --- copy file to userData/assets, insert DB, return asset
   ipcMain.handle('upload-asset', async (_, sourcePath: string) => {
     try {
+      // Validate source path
+      if (!sourcePath || typeof sourcePath !== 'string') {
+        throw new Error('Invalid source path');
+      }
+      
+      if (!existsSync(sourcePath)) {
+        throw new Error('Source file does not exist');
+      }
+
       const userDataPath = app.getPath('userData');
       const saved = await saveFile(sourcePath, userDataPath);
       const [inserted] = await db()
@@ -544,7 +558,7 @@ export function registerIpcHandlers(): void {
       if (!row) return false;
       const userDataPath = app.getPath('userData');
       const mainPath = row.path as string;
-      const thumbnailPath = (row.thumbnailPath ?? row.thumbnail_path) as string | null | undefined;
+      const thumbnailPath = (row.thumbnailPath) as string | null | undefined;
       deleteFile(userDataPath, mainPath);
       if (thumbnailPath && thumbnailPath !== mainPath) {
         deleteFile(userDataPath, thumbnailPath);
@@ -614,9 +628,11 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('reorder-trackers', async (_, ids: number[]) => {
     try {
       const database = db();
-      for (let i = 0; i < ids.length; i++) {
-        await database.update(trackers).set({ order: i }).where(eq(trackers.id, ids[i]));
-      }
+      await database.transaction(async (tx) => {
+        for (let i = 0; i < ids.length; i++) {
+          await tx.update(trackers).set({ order: i }).where(eq(trackers.id, ids[i]));
+        }
+      });
       return true;
     } catch (e) {
       console.error('reorder-trackers error:', e);
@@ -658,6 +674,26 @@ export function registerIpcHandlers(): void {
     } catch (e) {
       console.error('update-tracker error:', e);
       return null;
+    }
+  });
+
+  // --- calculateImpact --- (Universal Correlations Engine)
+  ipcMain.handle('calculate-impact', async (_, sourceTrackerId: number, targetTrackerId: number, offsetDays: number) => {
+    try {
+      return await calculateImpact(sourceTrackerId, targetTrackerId, offsetDays);
+    } catch (e) {
+      console.error('calculate-impact error:', e);
+      return {
+        sourceTrackerId,
+        targetTrackerId,
+        offsetDays,
+        impact: 0,
+        confidence: 0,
+        baselineAvg: 0,
+        impactedAvg: 0,
+        triggeredDays: 0,
+        baselineDays: 0
+      };
     }
   });
 }

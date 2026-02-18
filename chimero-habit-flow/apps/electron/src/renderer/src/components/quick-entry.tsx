@@ -14,6 +14,7 @@ import {
 } from "@packages/ui/dialog"
 import { Input } from "@packages/ui/input"
 import { Button } from "@packages/ui/button"
+import { CyberpunkSelect } from "../components/CyberpunkSelect"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Activity, Calendar, Flame, Book, Gamepad2, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, ImageIcon, X, type LucideIcon } from "lucide-react"
 
 const iconMap: Record<string, LucideIcon> = {
@@ -141,7 +142,7 @@ export function QuickEntry() {
   // Keyboard shortcut
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      if (e.altKey && e.key === "q") {
         e.preventDefault()
         setQuickEntryOpen(!commandBarOpen)
       }
@@ -309,7 +310,7 @@ export function QuickEntry() {
                   autoFocus
                 />
                 <kbd className="hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border border-[hsl(210_18%_22%)] bg-[hsl(210_20%_15%)] px-1.5 font-mono text-[10px] font-medium text-[hsl(210_12%_47%)]">
-                  <span className="text-xs">⌘</span>K
+                  <span className="text-xs">Alt</span>+Q
                 </kbd>
               </div>
 
@@ -732,18 +733,15 @@ export function QuickEntry() {
               <label className="block text-sm font-medium text-[hsl(210_12%_47%)] mb-2">
                 Link to Tracker (optional)
               </label>
-              <select
-                value={linkedTrackerId || ""}
-                onChange={(e) => setLinkedTrackerId(e.target.value ? Number(e.target.value) : undefined)}
-                className="w-full px-3 py-2 bg-[hsl(210_20%_15%)] border border-[hsl(210_18%_22%)] rounded-lg text-[hsl(210_25%_97%)] focus:outline-none focus:ring-2 focus:ring-[hsl(266_73%_63%)]"
-              >
-                <option value="">No tracker linked</option>
-                {trackers.map((tracker) => (
-                  <option key={tracker.id} value={tracker.id}>
-                    {tracker.name}
-                  </option>
-                ))}
-              </select>
+              <CyberpunkSelect
+                value={linkedTrackerId || null}
+                onValueChange={(value) => setLinkedTrackerId(value === null ? undefined : Number(value))}
+                options={[
+                  { value: "", label: "No tracker linked" },
+                  ...trackers.map((tracker) => ({ value: tracker.id, label: tracker.name }))
+                ]}
+                placeholder="No tracker linked"
+              />
             </div>
 
             {/* Actions */}

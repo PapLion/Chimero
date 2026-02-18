@@ -27,9 +27,9 @@ export function Header() {
   const isToday = selectedDate.toDateString() === new Date().toDateString()
 
   return (
-    <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-background/50 backdrop-blur-sm">
+    <header className="drag-region flex items-center justify-between px-6 py-4 border-b border-border bg-background/50 backdrop-blur-sm">
       {/* Left: Stats Block */}
-      <div className="hidden lg:flex items-center gap-6">
+      <div className="no-drag hidden lg:flex items-center gap-6">
         <div className="text-center">
           <div className="text-2xl font-display font-bold text-accent">{stats?.totalActivities ?? 0}</div>
           <div className="text-xs text-muted-foreground">Activities</div>
@@ -42,7 +42,7 @@ export function Header() {
       </div>
 
       {/* Center: Date Navigation */}
-      <div className="flex items-center gap-4">
+      <div className="no-drag flex items-center gap-4">
         <Button 
           variant="ghost" 
           size="icon" 
@@ -88,7 +88,7 @@ export function Header() {
       {/* Right: Notifications */}
       <button 
         onClick={toggleNotifications}
-        className="relative p-2 rounded-full hover:bg-muted transition-colors"
+        className="no-drag relative p-2 rounded-full hover:bg-muted transition-colors"
       >
         <Bell className="w-5 h-5 text-muted-foreground" />
         {unreadCount > 0 && (

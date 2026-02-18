@@ -872,18 +872,22 @@ function SocialWidget({ entries, tracker, selectedDate }: { entries: Entry[]; tr
           </div>
         )}
 
-        {/* Names/Tags */}
+        {/* Names/Tags with Initials Bubbles */}
         {allNames.length > 0 && (
           <div className="space-y-2">
             <div className="text-xs text-white/60 mb-2">People</div>
             <div className="flex flex-wrap gap-2">
               {allNames.map((name, idx) => (
-                <span
+                <div
                   key={idx}
-                  className="px-2 py-1 rounded-lg bg-[hsl(266_73%_63%/0.2)] text-xs text-[hsl(266_73%_63%)] border border-[hsl(266_73%_63%/0.3)]"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[hsl(266_73%_63%/0.2)] text-xs text-[hsl(266_73%_63%)] border border-[hsl(266_73%_63%/0.3)]"
                 >
-                  {name}
-                </span>
+                  {/* Initials Bubble */}
+                  <div className="w-6 h-6 rounded-full bg-[hsl(266_73%_63%)] text-white flex items-center justify-center text-xs font-bold">
+                    {name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2) || name.slice(0, 2).toUpperCase()}
+                  </div>
+                  <span>{name}</span>
+                </div>
               ))}
             </div>
           </div>

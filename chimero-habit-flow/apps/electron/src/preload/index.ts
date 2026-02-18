@@ -44,6 +44,8 @@ const api = {
   toggleReminder: (id: number, enabled: boolean) => ipcRenderer.invoke('toggle-reminder', id, enabled),
   completeReminder: (id: number) => ipcRenderer.invoke('complete-reminder', id),
   uncompleteReminder: (id: number) => ipcRenderer.invoke('uncomplete-reminder', id),
+  calculateImpact: (sourceTrackerId: number, targetTrackerId: number, offsetDays: number) =>
+    ipcRenderer.invoke('calculate-impact', sourceTrackerId, targetTrackerId, offsetDays),
 }
 
 // Exponer la API al mundo principal (Window object)

@@ -236,7 +236,7 @@ export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateT
       />
       
       {/* Dialog */}
-      <div className="relative w-full max-w-lg mx-4 bg-[hsl(210_25%_11%)] border border-[hsl(210_18%_22%)] rounded-2xl shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-lg mx-4 bg-[hsl(210_25%_11%)] border border-[hsl(210_18%_22%)] rounded-2xl shadow-2xl overflow-hidden max-h-[80vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[hsl(210_18%_22%)]">
           <div className="flex items-center gap-3">

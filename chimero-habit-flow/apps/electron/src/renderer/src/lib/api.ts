@@ -3,6 +3,8 @@
  * Used with TanStack Query for caching and invalidation.
  */
 
+import type { EnhancedCorrelationResult } from '../types/correlation'
+
 declare global {
   interface Window {
     api: {
@@ -38,6 +40,7 @@ declare global {
       toggleReminder: (id: number, enabled: boolean) => Promise<unknown>
       completeReminder: (id: number) => Promise<unknown>
       uncompleteReminder: (id: number) => Promise<unknown>
+      calculateImpact: (sourceTrackerId: number, targetTrackerId: number, offsetDays: number) => Promise<EnhancedCorrelationResult | Partial<EnhancedCorrelationResult>>
     }
   }
 }

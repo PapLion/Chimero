@@ -3,8 +3,8 @@ import type { Tracker, Entry, TrackerConfig, Reminder } from "@packages/db"
 
 export type { Tracker, Entry, TrackerConfig, Reminder }
 export type TrackerType = Tracker["type"]
-export type PageType = "home" | "calendar" | "assets" | "custom-trackers" | "tracking"
-export type AssetCategory = "games" | "books" | "tv" | "apps" | "other"
+export type PageType = "home" | "calendar" | "assets" | "custom-trackers" | "tracking" | "stats"
+export type AssetCategory = "games" | "books" | "tv" | "apps" | "person" | "other"
 export type AssetType = "svg" | "png" | "jpg" | "gif" | "webp" | "other"
 
 export interface Widget {
