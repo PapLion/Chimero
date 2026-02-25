@@ -1,11 +1,12 @@
 "use client"
 
-import { useMemo } from "react"
+import React, { useMemo, useState } from "react"
 import { useAppStore } from "../lib/store"
-import { useTrackers, useEntries } from "../lib/queries"
+import { useTrackers, useEntries, useDeleteEntryMutation } from "../lib/queries"
 import { filterEntriesByDate } from "../lib/utils"
 import type { Entry } from "../lib/store"
-import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, type LucideIcon } from "lucide-react"
+import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, type LucideIcon } from "lucide-react"
+import { EditEntryDialog } from "./modals/EditEntryDialog"
 import {
   AreaChart,
   Area,
@@ -62,7 +63,7 @@ const CustomTooltip = ({ active, payload, label }: TooltipContentProps) => {
       <div className="bg-[hsl(210_20%_15%)] border border-[hsl(210_18%_22%)] rounded-lg p-2 shadow-lg">
         <p className="text-xs text-white/60 mb-1">{label}</p>
         <p className="text-sm font-medium text-white">
-          {typeof payload[0].value === 'number' 
+          {typeof payload[0].value === 'number'
             ? payload[0].value.toFixed(1)
             : payload[0].value}
         </p>
@@ -76,11 +77,31 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const { selectedDate: storeSelectedDate } = useAppStore()
   const { data: trackers = [] } = useTrackers()
   const { data: allEntries = [] } = useEntries({ limit: 1000 })
-  
+  const deleteEntryMutation = useDeleteEntryMutation()
+
+  const handleDeleteEntry = (e: React.MouseEvent, id: number) => {
+    e.stopPropagation()
+    if (e.shiftKey) {
+      deleteEntryMutation.mutate(id)
+    } else {
+      if (window.confirm("Delete this entry?")) {
+        deleteEntryMutation.mutate(id)
+      }
+    }
+  }
+
+  const [editingEntry, setEditingEntry] = useState<Entry | null>(null)
+
+  const handleEditEntry = (e: React.MouseEvent, entry: Entry) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setEditingEntry(entry)
+  }
+
   // Use store selectedDate if available, fallback to prop
   const selectedDate = storeSelectedDate || propSelectedDate
   const isToday = selectedDate.toDateString() === new Date().toDateString()
-  
+
   const tracker = trackers.find((t) => t.id === trackerId)
 
   // Filter entries for this tracker (hooks must run unconditionally)
@@ -126,7 +147,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
       const trackerNameLower = tracker.name.toLowerCase()
       const isWeightTracker = trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
       const isRatingType = tracker.type === "rating"
-      
+
       let aggregatedValue: number
       if (isWeightTracker || isRatingType) {
         aggregatedValue = dayEntries[dayEntries.length - 1]?.value ?? 0
@@ -150,9 +171,9 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   // Render based on tracker type
   const trackerNameLower = tracker.name.toLowerCase()
   const isMediaType = trackerNameLower.includes("book") || trackerNameLower.includes("tv") ||
-                     trackerNameLower.includes("movie") || trackerNameLower.includes("game") ||
-                     trackerNameLower.includes("media") ||
-                     tracker.icon === "book" || tracker.icon === "gamepad-2" || tracker.icon === "music"
+    trackerNameLower.includes("movie") || trackerNameLower.includes("game") ||
+    trackerNameLower.includes("media") ||
+    tracker.icon === "book" || tracker.icon === "gamepad-2" || tracker.icon === "music"
   const isWeightType = trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
   const isTaskType = tracker.type === "list" || tracker.type === "binary" || trackerNameLower.includes("task")
   const isDietType = trackerNameLower.includes("diet") || trackerNameLower.includes("calorie") || trackerNameLower.includes("food") || trackerNameLower.includes("meal") || tracker.icon === "salad"
@@ -170,11 +191,11 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
           <div>
             <h1 className="text-3xl font-display font-bold text-white">{tracker.name}</h1>
             <p className="text-sm text-white/60 mt-1">
-              {selectedDate.toLocaleDateString("en-US", { 
-                weekday: "long", 
-                year: "numeric", 
-                month: "long", 
-                day: "numeric" 
+              {selectedDate.toLocaleDateString("en-US", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric"
               })}
             </p>
           </div>
@@ -238,7 +259,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
         <h2 className="text-lg font-semibold text-white mb-4">
           {isToday ? "History" : `History for ${selectedDate.toLocaleDateString()}`}
         </h2>
-        
+
         {historyEntries.length === 0 ? (
           <div className="text-center py-12 text-white/40">
             <p className="text-sm">No entries for {selectedDate.toLocaleDateString()}</p>
@@ -249,7 +270,20 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
             {historyEntries.map((entry) => {
               const asset = entry.assetId != null ? assets.get(entry.assetId) : null
               return (
-                <div key={entry.id} className="bg-white/[0.03] border border-white/5 rounded-xl overflow-hidden hover:bg-white/[0.05] transition-colors">
+                <div
+                  key={entry.id}
+                  className="group relative bg-white/[0.03] border border-white/5 rounded-xl overflow-hidden hover:bg-white/[0.05] transition-colors"
+                  onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
+                  onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                >
+                  <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                   <div className="aspect-[2/3] overflow-hidden bg-white/[0.04] flex items-center justify-center">
                     {asset ? (
                       <img
@@ -283,12 +317,25 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
           /* The Gallery - Weight with Photos: Large inline attachments */
           <div className="space-y-4">
             {historyEntries.map((entry) => {
-              const change = historyEntries.length > 1 
+              const change = historyEntries.length > 1
                 ? (entry.value ?? 0) - (historyEntries[historyEntries.indexOf(entry) + 1]?.value ?? entry.value ?? 0)
                 : 0
               const asset = entry.assetId != null ? assets.get(entry.assetId) : null
               return (
-                <div key={entry.id} className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                <div
+                  key={entry.id}
+                  className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
+                  onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
+                  onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                >
+                  <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-sm text-white/60">
                       {new Date(entry.timestamp).toLocaleDateString()}
@@ -328,7 +375,20 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
             {historyEntries.map((entry) => {
               const asset = entry.assetId != null ? assets.get(entry.assetId) : null
               return (
-                <div key={entry.id} className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                <div
+                  key={entry.id}
+                  className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
+                  onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
+                  onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                >
+                  <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                   <div className="flex items-start gap-3">
                     <div className="w-2 h-2 rounded-full bg-[hsl(266_73%_63%)] mt-2 shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -362,7 +422,20 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
               const isHighCal = averageValue > 0 && value > averageValue * 1.3
               const asset = entry.assetId != null ? assets.get(entry.assetId) : null
               return (
-                <div key={entry.id} className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                <div
+                  key={entry.id}
+                  className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
+                  onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
+                  onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                >
+                  <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-sm text-white/60">
                       {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
@@ -400,7 +473,20 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
               const displayValue = unit === "$" ? `$${value.toLocaleString()}` : `${value.toFixed(1)}${unit ?? ""}`
               const asset = entry.assetId != null ? assets.get(entry.assetId) : null
               return (
-                <div key={entry.id} className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                <div
+                  key={entry.id}
+                  className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
+                  onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
+                  onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                >
+                  <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-sm text-white/60">
                       {new Date(entry.timestamp).toLocaleDateString()}
@@ -435,7 +521,20 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
               const displayValue = unit === "$" ? `$${value.toLocaleString()}` : `${value.toFixed(1)}${unit ?? ""}`
               const asset = entry.assetId != null ? assets.get(entry.assetId) : null
               return (
-                <div key={entry.id} className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                <div
+                  key={entry.id}
+                  className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
+                  onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
+                  onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                >
+                  <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-sm text-white/60">
                       {new Date(entry.timestamp).toLocaleDateString()}
@@ -468,7 +567,20 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
             {historyEntries.map((entry) => {
               const asset = entry.assetId != null ? assets.get(entry.assetId) : null
               return (
-                <div key={entry.id} className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                <div
+                  key={entry.id}
+                  className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
+                  onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
+                  onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                >
+                  <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                   <div className="text-sm text-white/90 mb-2">{entry.note || `Value: ${entry.value ?? "--"}`}</div>
                   {asset && (
                     <div className="mt-2 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
@@ -488,13 +600,19 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
           </div>
         )}
       </div>
+
+      <EditEntryDialog
+        entry={editingEntry}
+        open={editingEntry !== null}
+        onOpenChange={(open) => !open && setEditingEntry(null)}
+      />
     </div>
   )
 }
 
 function calculateStreak(entries: Entry[]): number {
   if (entries.length === 0) return 0
-  
+
   // Sort by date descending
   const sorted = entries
     .map((e) => ({
@@ -502,26 +620,26 @@ function calculateStreak(entries: Entry[]): number {
       timestamp: e.timestamp,
     }))
     .sort((a, b) => b.dateStr.localeCompare(a.dateStr))
-  
+
   // Get unique dates
   const uniqueDates = Array.from(new Set(sorted.map((e) => e.dateStr)))
-  
+
   // Check consecutive days from today
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  
+
   let streak = 0
   for (let i = 0; i < uniqueDates.length; i++) {
     const checkDate = new Date(today)
     checkDate.setDate(checkDate.getDate() - i)
     const checkDateStr = checkDate.toISOString().split("T")[0]
-    
+
     if (uniqueDates.includes(checkDateStr)) {
       streak++
     } else {
       break
     }
   }
-  
+
   return streak
 }

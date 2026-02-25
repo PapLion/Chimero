@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Header } from '../../apps/electron/src/renderer/src/components/header'
+import { Header } from '../../apps/electron/src/renderer/src/components/Header'
 
 vi.mock('../../apps/electron/src/renderer/src/lib/store', () => ({
   useAppStore: () => ({

@@ -13,7 +13,8 @@ declare global {
       deleteTracker: (id: number) => Promise<boolean>
       getEntries: (options?: { limit?: number; trackerId?: number }) => Promise<unknown[]>
       addEntry: (data: { trackerId: number; value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp: number; assetId?: number | null }) => Promise<unknown>
-      updateEntry: (id: number, updates: { value?: number | null; note?: string | null }) => Promise<unknown>
+      updateEntry: (id: number, updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null }) => Promise<unknown>
+      deleteEntry: (id: number) => Promise<boolean>
       getRecentTrackers: (limit?: number) => Promise<unknown[]>
       getFavoriteTrackers: () => Promise<unknown[]>
       toggleTrackerFavorite: (trackerId: number) => Promise<unknown>

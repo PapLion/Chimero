@@ -12,6 +12,15 @@
     | Dashboard widgets compatibles con schema Drizzle | ✅ |
     | Preload API con métodos tipados | ✅ |
 
+    ## ✅ Completado (Phase 2 - Epic 1: Quick Wins & QoL)
+    
+    | Item | Estado |
+    |------|--------|
+    | Global Enter to Submit in QuickEntry | ✅ |
+    | Contextual Quick Entry (Auto-select active tracker) | ✅ |
+    | Entry Management (Shift+Click Delete with IPC handler) | ✅ |
+    | Entry Management (Edit Flow / Modal & Shift+RightClick) | ✅ |
+
     ## 📋 Pendiente para Week 3 (Dashboard & Visualización)
 
     - [ ] Conectar TanStack Query a IPC (reemplazar mock en store por datos reales)

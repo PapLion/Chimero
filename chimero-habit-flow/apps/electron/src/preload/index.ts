@@ -9,8 +9,9 @@ const api = {
     ipcRenderer.invoke('get-entries', options),
   addEntry: (data: { trackerId: number; value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp: number; assetId?: number | null }) =>
     ipcRenderer.invoke('add-entry', data),
-  updateEntry: (id: number, updates: { value?: number | null; note?: string | null }) =>
+  updateEntry: (id: number, updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null }) =>
     ipcRenderer.invoke('update-entry', id, updates),
+  deleteEntry: (id: number) => ipcRenderer.invoke('delete-entry', id),
   getRecentTrackers: (limit?: number) => ipcRenderer.invoke('get-recent-trackers', limit ?? 10),
   getFavoriteTrackers: () => ipcRenderer.invoke('get-favorite-trackers'),
   toggleTrackerFavorite: (trackerId: number) => ipcRenderer.invoke('toggle-tracker-favorite', trackerId),
@@ -54,8 +55,8 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('electron', {
       ipcRenderer: {
         // Exponemos invoke de forma segura
-        invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
-        on: (channel: string, listener: (event: any, ...args: any[]) => void) => {
+        invoke: (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args),
+        on: (channel: string, listener: (event: unknown, ...args: unknown[]) => void) => {
           ipcRenderer.on(channel, listener)
           return () => ipcRenderer.removeListener(channel, listener)
         }
@@ -68,5 +69,5 @@ if (process.contextIsolated) {
 } else {
   // @ts-expect-error fallback when contextIsolation is disabled
   window.electron = { ipcRenderer: { invoke: ipcRenderer.invoke.bind(ipcRenderer), on: ipcRenderer.on.bind(ipcRenderer) } }
-  ;(window as Window & { api: typeof api }).api = api
+    ; (window as Window & { api: typeof api }).api = api
 }

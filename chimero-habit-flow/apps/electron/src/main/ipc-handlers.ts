@@ -146,7 +146,7 @@ export function registerIpcHandlers(): void {
           .where(eq(trackers.archived, false))
           .orderBy(asc(trackers.order));
       }
-      return rows.map((r) => mapTracker(r as unknown as Record<string, unknown>));
+      return rows.map((r) => mapTracker(r as Record<string, unknown>));
     } catch (e) {
       console.error('get-trackers error:', e);
       return [];
@@ -160,7 +160,7 @@ export function registerIpcHandlers(): void {
       if (!data.name || typeof data.name !== 'string' || !data.name.trim()) {
         throw new Error('Invalid tracker name');
       }
-      
+
       const uiType = (data.type as string) || 'numeric';
       const schemaType = uiType === 'counter' ? 'numeric' : uiType === 'rating' ? 'range' : uiType === 'list' ? 'text' : uiType;
       const [inserted] = await db()
@@ -176,7 +176,7 @@ export function registerIpcHandlers(): void {
           archived: false,
         })
         .returning();
-      return inserted ? mapTracker(inserted as unknown as Record<string, unknown>) : null;
+      return inserted ? mapTracker(inserted as Record<string, unknown>) : null;
     } catch (e) {
       console.error('create-tracker error:', e);
       return null;
@@ -201,13 +201,13 @@ export function registerIpcHandlers(): void {
       const base = db().select().from(entries).orderBy(desc(entries.timestamp)).limit(limit);
       const rows = options?.trackerId
         ? await db()
-            .select()
-            .from(entries)
-            .where(eq(entries.trackerId, options.trackerId))
-            .orderBy(desc(entries.timestamp))
-            .limit(limit)
+          .select()
+          .from(entries)
+          .where(eq(entries.trackerId, options.trackerId))
+          .orderBy(desc(entries.timestamp))
+          .limit(limit)
         : await base;
-      return rows.map((r) => mapEntry(r as unknown as Record<string, unknown>));
+      return rows.map((r) => mapEntry(r as Record<string, unknown>));
     } catch (e) {
       console.error('get-entries error:', e);
       return [];
@@ -231,26 +231,43 @@ export function registerIpcHandlers(): void {
           assetId: (data as EntryInsert).assetId ?? null,
         })
         .returning();
-      return inserted ? mapEntry(inserted as unknown as Record<string, unknown>) : null;
+      return inserted ? mapEntry(inserted as Record<string, unknown>) : null;
     } catch (e) {
       console.error('add-entry error:', e);
       return null;
     }
   });
 
-  // --- updateEntry --- (for toggling task completion, etc.)
-  ipcMain.handle('update-entry', async (_, id: number, updates: { value?: number | null; note?: string | null }) => {
+  // --- updateEntry ---
+  ipcMain.handle('update-entry', async (_, id: number, updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null }) => {
     try {
       const set: Record<string, unknown> = {};
       if (updates.value !== undefined) set.value = updates.value;
       if (updates.note !== undefined) set.note = updates.note;
+      if (updates.assetId !== undefined) set.assetId = updates.assetId;
+      if (updates.timestamp !== undefined) {
+        set.timestamp = updates.timestamp;
+        const d = new Date(updates.timestamp);
+        set.dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      }
       if (Object.keys(set).length === 0) return null;
       await db().update(entries).set(set).where(eq(entries.id, id));
       const [updated] = await db().select().from(entries).where(eq(entries.id, id));
-      return updated ? mapEntry(updated as unknown as Record<string, unknown>) : null;
+      return updated ? mapEntry(updated as Record<string, unknown>) : null;
     } catch (e) {
       console.error('update-entry error:', e);
       return null;
+    }
+  });
+
+  // --- deleteEntry ---
+  ipcMain.handle('delete-entry', async (_, id: number) => {
+    try {
+      await db().delete(entries).where(eq(entries.id, id));
+      return true;
+    } catch (e) {
+      console.error('delete-entry error:', e);
+      return false;
     }
   });
 
@@ -276,7 +293,7 @@ export function registerIpcHandlers(): void {
       return ids
         .map((id) => byId.get(id))
         .filter(Boolean)
-        .map((r) => mapTracker(r as unknown as Record<string, unknown>));
+        .map((r) => mapTracker(r as Record<string, unknown>));
     } catch (e) {
       console.error('get-recent-trackers error:', e);
       return [];
@@ -291,7 +308,7 @@ export function registerIpcHandlers(): void {
         .from(trackers)
         .where(and(eq(trackers.archived, false), eq(trackers.isFavorite, true)))
         .orderBy(trackers.order);
-      return rows.map((r) => mapTracker(r as unknown as Record<string, unknown>));
+      return rows.map((r) => mapTracker(r as Record<string, unknown>));
     } catch (e) {
       console.error('get-favorite-trackers error:', e);
       return [];
@@ -310,7 +327,7 @@ export function registerIpcHandlers(): void {
         .set({ isFavorite: !current })
         .where(eq(trackers.id, trackerId));
       const [updated] = await db().select().from(trackers).where(eq(trackers.id, trackerId));
-      return updated ? mapTracker(updated as unknown as Record<string, unknown>) : null;
+      return updated ? mapTracker(updated as Record<string, unknown>) : null;
     } catch (e) {
       console.error('toggle-tracker-favorite error:', e);
       return null;
@@ -341,7 +358,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('get-reminders', async () => {
     try {
       const rows = await db().select().from(reminders).orderBy(reminders.id);
-      return rows.map((r) => mapReminder(r as unknown as Record<string, unknown>));
+      return rows.map((r) => mapReminder(r as Record<string, unknown>));
     } catch (e) {
       console.error('get-reminders error:', e);
       return [];
@@ -364,10 +381,10 @@ export function registerIpcHandlers(): void {
       if (id != null && id > 0) {
         await db().update(reminders).set(payload).where(eq(reminders.id, id));
         const [updated] = await db().select().from(reminders).where(eq(reminders.id, id));
-        return updated ? mapReminder(updated as unknown as Record<string, unknown>) : null;
+        return updated ? mapReminder(updated as Record<string, unknown>) : null;
       }
       const [inserted] = await db().insert(reminders).values(payload).returning();
-      return inserted ? mapReminder(inserted as unknown as Record<string, unknown>) : null;
+      return inserted ? mapReminder(inserted as Record<string, unknown>) : null;
     } catch (e) {
       console.error('upsert-reminder error:', e);
       return null;
@@ -390,7 +407,7 @@ export function registerIpcHandlers(): void {
     try {
       await db().update(reminders).set({ enabled }).where(eq(reminders.id, id));
       const [updated] = await db().select().from(reminders).where(eq(reminders.id, id));
-      return updated ? mapReminder(updated as unknown as Record<string, unknown>) : null;
+      return updated ? mapReminder(updated as Record<string, unknown>) : null;
     } catch (e) {
       console.error('toggle-reminder error:', e);
       return null;
@@ -403,7 +420,7 @@ export function registerIpcHandlers(): void {
       const completedAt = new Date(); // Drizzle timestamp mode expects Date, not number
       await db().update(reminders).set({ completedAt }).where(eq(reminders.id, id));
       const [updated] = await db().select().from(reminders).where(eq(reminders.id, id));
-      return updated ? mapReminder(updated as unknown as Record<string, unknown>) : null;
+      return updated ? mapReminder(updated as Record<string, unknown>) : null;
     } catch (e) {
       console.error('complete-reminder error:', e);
       return null;
@@ -415,7 +432,7 @@ export function registerIpcHandlers(): void {
     try {
       await db().update(reminders).set({ completedAt: null }).where(eq(reminders.id, id));
       const [updated] = await db().select().from(reminders).where(eq(reminders.id, id));
-      return updated ? mapReminder(updated as unknown as Record<string, unknown>) : null;
+      return updated ? mapReminder(updated as Record<string, unknown>) : null;
     } catch (e) {
       console.error('uncomplete-reminder error:', e);
       return null;
@@ -468,7 +485,7 @@ export function registerIpcHandlers(): void {
         .where(eq(entries.trackerId, trackerId))
         .orderBy(desc(entries.timestamp))
         .limit(limit);
-      return rows.map((r) => mapEntry(r as unknown as Record<string, unknown>));
+      return rows.map((r) => mapEntry(r as Record<string, unknown>));
     } catch (e) {
       console.error('get-task-entries error:', e);
       return [];
@@ -492,7 +509,7 @@ export function registerIpcHandlers(): void {
       if (!sourcePath || typeof sourcePath !== 'string') {
         throw new Error('Invalid source path');
       }
-      
+
       if (!existsSync(sourcePath)) {
         throw new Error('Source file does not exist');
       }
@@ -511,7 +528,7 @@ export function registerIpcHandlers(): void {
         })
         .returning();
       if (!inserted) return null;
-      return mapAsset(inserted as unknown as Record<string, unknown>);
+      return mapAsset(inserted as Record<string, unknown>);
     } catch (e) {
       console.error('upload-asset error:', e);
       return null;
@@ -529,7 +546,7 @@ export function registerIpcHandlers(): void {
         .orderBy(desc(assets.createdAt))
         .limit(limit)
         .offset(offset);
-      return rows.map((r) => mapAsset(r as unknown as Record<string, unknown>));
+      return rows.map((r) => mapAsset(r as Record<string, unknown>));
     } catch (e) {
       console.error('get-assets error:', e);
       return [];
@@ -543,7 +560,7 @@ export function registerIpcHandlers(): void {
         await db().update(assets).set({ originalName: updates.originalName || null }).where(eq(assets.id, id));
       }
       const [updated] = await db().select().from(assets).where(eq(assets.id, id));
-      return updated ? mapAsset(updated as unknown as Record<string, unknown>) : null;
+      return updated ? mapAsset(updated as Record<string, unknown>) : null;
     } catch (e) {
       console.error('update-asset error:', e);
       return null;
@@ -670,7 +687,7 @@ export function registerIpcHandlers(): void {
       if (Object.keys(set).length === 0) return null;
       await db().update(trackers).set(set).where(eq(trackers.id, id));
       const [updated] = await db().select().from(trackers).where(eq(trackers.id, id));
-      return updated ? mapTracker(updated as unknown as Record<string, unknown>) : null;
+      return updated ? mapTracker(updated as Record<string, unknown>) : null;
     } catch (e) {
       console.error('update-tracker error:', e);
       return null;

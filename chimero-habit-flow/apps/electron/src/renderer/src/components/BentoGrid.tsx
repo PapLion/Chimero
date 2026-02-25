@@ -3,7 +3,7 @@
 import { useMemo, type ComponentProps } from "react"
 import { useAppStore } from "../lib/store"
 import { useTrackers, useEntries, useDashboardLayout, useSaveDashboardLayoutMutation, useAssets } from "../lib/queries"
-import { WidgetCard } from "./widget-card"
+import { WidgetCard } from "./WidgetCard"
 import { TrackerDetailView } from "./TrackerDetailView"
 import type { Widget } from "../lib/store"
 import {
@@ -71,7 +71,7 @@ export function BentoGrid() {
   const { data: savedLayout } = useDashboardLayout()
   const { data: assetsData = [] } = useAssets({ limit: 200 })
   const saveLayoutMutation = useSaveDashboardLayoutMutation()
-  
+
   // Map assets by ID for quick lookup (API returns unknown[]; we expect { id, thumbnailUrl?, assetUrl? })
   interface AssetRecord {
     id: number
@@ -81,9 +81,9 @@ export function BentoGrid() {
   }
   const assetsById = useMemo(() => {
     const map = new Map<number, AssetRecord>()
-    ;(assetsData as AssetRecord[]).forEach((asset) => {
-      if (asset?.id != null) map.set(asset.id, asset)
-    })
+      ; (assetsData as AssetRecord[]).forEach((asset) => {
+        if (asset?.id != null) map.set(asset.id, asset)
+      })
     return map
   }, [assetsData])
 

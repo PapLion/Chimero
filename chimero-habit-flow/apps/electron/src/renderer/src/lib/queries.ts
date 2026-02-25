@@ -278,8 +278,23 @@ export function useUncompleteReminderMutation() {
 export function useUpdateEntryMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, updates }: { id: number; updates: { value?: number | null; note?: string | null } }) =>
+    mutationFn: ({ id, updates }: { id: number; updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null } }) =>
       api.updateEntry(id, updates),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.taskEntriesRoot })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useDeleteEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.deleteEntry(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
       qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })

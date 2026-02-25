@@ -37,10 +37,12 @@ const iconMap: Record<string, LucideIcon> = {
   camera: Camera,
 }
 
-type QuickEntryMode = "activity" | "reminder"
+const MODE_ACTIVITY = "activity"
+const MODE_REMINDER = "reminder"
+type QuickEntryMode = typeof MODE_ACTIVITY | typeof MODE_REMINDER
 
 export function QuickEntry() {
-  const { commandBarOpen, setQuickEntryOpen } = useAppStore()
+  const { commandBarOpen, setQuickEntryOpen, activeTracker } = useAppStore()
   const upsertReminderMutation = useUpsertReminderMutation()
   const { data: trackers = [], isLoading: trackersLoading } = useTrackers()
   const { data: recentTrackers = [] } = useRecentTrackers(10)
@@ -53,8 +55,8 @@ export function QuickEntry() {
   const [note, setNote] = useState("")
   const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null)
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
-  const [mode, setMode] = useState<QuickEntryMode>("activity")
-  
+  const [mode, setMode] = useState<QuickEntryMode>(MODE_ACTIVITY)
+
   // Reminder state
   const [reminderTitle, setReminderTitle] = useState("")
   const [reminderDescription, setReminderDescription] = useState("")
@@ -108,7 +110,7 @@ export function QuickEntry() {
   const standardTrackers = othersForList.filter((t) => !t.isCustom)
   const customTrackers = othersForList.filter((t) => t.isCustom)
 
-  // Reset state when dialog closes
+  // Reset state when dialog closes or opens
   useEffect(() => {
     if (!commandBarOpen) {
       setSearch("")
@@ -117,19 +119,37 @@ export function QuickEntry() {
       setNote("")
       setSelectedAssetId(null)
       setAssetPickerOpen(false)
-      setMode("activity")
+      setMode(MODE_ACTIVITY)
       setReminderTitle("")
       setReminderDescription("")
       setReminderDate("")
       setReminderTime("")
       setLinkedTrackerId(undefined)
+    } else {
+      if (activeTracker) {
+        setSelectedTracker(activeTracker)
+        setLinkedTrackerId(activeTracker)
+      } else {
+        setSelectedTracker(null)
+        setLinkedTrackerId(undefined)
+      }
+      setSearch("")
+      setValue("")
+      setNote("")
+      setSelectedAssetId(null)
+      setAssetPickerOpen(false)
+      setMode(MODE_ACTIVITY)
+      setReminderTitle("")
+      setReminderDescription("")
+      setReminderDate("")
+      setReminderTime("")
     }
-  }, [commandBarOpen])
+  }, [commandBarOpen, activeTracker])
 
   // Close asset picker when clicking outside
   useEffect(() => {
     if (!assetPickerOpen) return
-    
+
     const handleClickOutside = (event: MouseEvent) => {
       if (assetPickerRef.current && !assetPickerRef.current.contains(event.target as Node)) {
         setAssetPickerOpen(false)
@@ -157,7 +177,7 @@ export function QuickEntry() {
 
   const handleSubmit = useCallback(() => {
     if (!selectedTracker) return
-    
+
     const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
     if (!selectedTrackerData) return
 
@@ -216,13 +236,13 @@ export function QuickEntry() {
   }, [reminderTitle, reminderDescription, reminderDate, reminderTime, linkedTrackerId, upsertReminderMutation, setQuickEntryOpen])
 
   const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
-  
+
   // Get human-centric entry config for the selected tracker
   const entryConfig = selectedTrackerData ? getEntryConfig(selectedTrackerData) : null
 
   const renderTrackerList = (trackerList: typeof trackers, title: string) => {
     if (trackerList.length === 0) return null
-    
+
     return (
       <div className="space-y-1">
         <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -239,7 +259,7 @@ export function QuickEntry() {
                 "hover:bg-accent"
               )}
             >
-              <div 
+              <div
                 className="p-2 rounded-lg"
                 style={{ backgroundColor: `${tracker.color ?? "#6b7280"}20` }}
               >
@@ -270,10 +290,10 @@ export function QuickEntry() {
         {/* Mode Switcher */}
         <div className="flex gap-1 p-2 mx-4 bg-[hsl(210_20%_15%)] rounded-lg">
           <button
-            onClick={() => setMode("activity")}
+            onClick={() => setMode(MODE_ACTIVITY)}
             className={cn(
               "flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-              mode === "activity"
+              mode === MODE_ACTIVITY
                 ? "bg-[hsl(266_73%_63%)] text-white"
                 : "text-[hsl(210_12%_47%)] hover:text-[hsl(210_25%_97%)]"
             )}
@@ -282,10 +302,10 @@ export function QuickEntry() {
             Log Activity
           </button>
           <button
-            onClick={() => setMode("reminder")}
+            onClick={() => setMode(MODE_REMINDER)}
             className={cn(
               "flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-              mode === "reminder"
+              mode === MODE_REMINDER
                 ? "bg-[hsl(266_73%_63%)] text-white"
                 : "text-[hsl(210_12%_47%)] hover:text-[hsl(210_25%_97%)]"
             )}
@@ -295,7 +315,7 @@ export function QuickEntry() {
           </button>
         </div>
 
-        {mode === "activity" ? (
+        {mode === MODE_ACTIVITY ? (
           /* Activity Mode */
           !selectedTracker ? (
             <>
@@ -346,8 +366,15 @@ export function QuickEntry() {
           ) : (
             <>
               {/* Entry Form */}
-              <div className="p-4">
+              <form
+                className="p-4"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  handleSubmit()
+                }}
+              >
                 <button
+                  type="button"
                   onClick={() => setSelectedTracker(null)}
                   className="text-sm text-[hsl(210_12%_47%)] hover:text-[hsl(210_25%_97%)] mb-4 flex items-center gap-1"
                 >
@@ -361,7 +388,7 @@ export function QuickEntry() {
                         const Icon = iconMap[selectedTrackerData.icon ?? ""] || CheckSquare
                         const color = selectedTrackerData.color ?? "#6b7280"
                         return (
-                          <div 
+                          <div
                             className="p-2 rounded-lg"
                             style={{ backgroundColor: `${color}20` }}
                           >
@@ -392,6 +419,7 @@ export function QuickEntry() {
                             const moodEmojis = ["🤬", "😠", "😞", "☹️", "😐", "🙂", "😊", "😄", "🤩", "😍"]
                             return (
                               <button
+                                type="button"
                                 key={rating}
                                 onClick={() => setValue(rating.toString())}
                                 className={cn(
@@ -427,6 +455,7 @@ export function QuickEntry() {
                       <div className="flex gap-2">
                         {[1, 2, 3, 4, 5].map((rating) => (
                           <button
+                            type="button"
                             key={rating}
                             onClick={() => setValue(rating.toString())}
                             className={cn(
@@ -456,12 +485,6 @@ export function QuickEntry() {
                         placeholder={entryConfig.mainPlaceholder}
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && (note.trim() || value)) {
-                            e.preventDefault()
-                            handleSubmit()
-                          }
-                        }}
                         className="text-lg h-12 bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
                         autoFocus
                       />
@@ -478,12 +501,6 @@ export function QuickEntry() {
                           placeholder={entryConfig.secondaryPlaceholder}
                           value={value}
                           onChange={(e) => setValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && (note.trim() || value)) {
-                              e.preventDefault()
-                              handleSubmit()
-                            }
-                          }}
                           className="bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
                         />
                       </div>
@@ -503,12 +520,6 @@ export function QuickEntry() {
                         placeholder={entryConfig.mainPlaceholder}
                         value={value}
                         onChange={(e) => setValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && value) {
-                            e.preventDefault()
-                            handleSubmit()
-                          }
-                        }}
                         className="text-lg h-12 bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
                         autoFocus
                       />
@@ -533,12 +544,6 @@ export function QuickEntry() {
                           placeholder={entryConfig.notePlaceholder}
                           value={note}
                           onChange={(e) => setNote(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && value) {
-                              e.preventDefault()
-                              handleSubmit()
-                            }
-                          }}
                           className="bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
                         />
                       </div>
@@ -556,12 +561,6 @@ export function QuickEntry() {
                           setNote(e.target.value)
                         } else {
                           setValue(e.target.value)
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && (note.trim() || value)) {
-                          e.preventDefault()
-                          handleSubmit()
                         }
                       }}
                       className="text-lg h-12 bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
@@ -622,6 +621,7 @@ export function QuickEntry() {
                         <div className="grid grid-cols-4 gap-2">
                           {assets.map((asset) => (
                             <button
+                              type="button"
                               key={asset.id}
                               onClick={() => {
                                 setSelectedAssetId(asset.id)
@@ -656,25 +656,31 @@ export function QuickEntry() {
                     Cancel
                   </Button>
                   <Button
+                    type="submit"
                     className="flex-1 bg-[hsl(266_73%_63%)] text-white hover:bg-[hsl(266_73%_58%)]"
-                    onClick={handleSubmit}
                     disabled={
                       selectedTrackerData?.type === "text" || selectedTrackerData?.type === "list"
                         ? !note.trim() && !value
                         : selectedTrackerData?.type === "binary" || selectedTrackerData?.type === "composite"
-                        ? !note.trim()
-                        : !value
+                          ? !note.trim()
+                          : !value
                     }
                   >
                     Save Entry
                   </Button>
                 </div>
-              </div>
+              </form>
             </>
           )
         ) : (
           /* Reminder Mode */
-          <div className="p-4 space-y-4">
+          <form
+            className="p-4 space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              handleReminderSubmit()
+            }}
+          >
             {/* Title */}
             <div>
               <label className="block text-sm font-medium text-[hsl(210_12%_47%)] mb-2">
@@ -754,15 +760,15 @@ export function QuickEntry() {
                 Cancel
               </Button>
               <Button
+                type="submit"
                 className="flex-1 bg-[hsl(266_73%_63%)] text-white hover:bg-[hsl(266_73%_58%)]"
-                onClick={handleReminderSubmit}
                 disabled={!reminderTitle || !reminderDate || !reminderTime}
               >
                 <Calendar className="w-4 h-4 mr-2" />
                 Set Reminder
               </Button>
             </div>
-          </div>
+          </form>
         )}
       </DialogContent>
     </Dialog>
