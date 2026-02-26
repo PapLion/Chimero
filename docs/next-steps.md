@@ -21,6 +21,13 @@
     | Entry Management (Shift+Click Delete with IPC handler) | ✅ |
     | Entry Management (Edit Flow / Modal & Shift+RightClick) | ✅ |
 
+    ## ✅ Completado (Phase 2 - Epic 2: Restore Archetypes & Contextual Counts)
+    
+    | Item | Estado |
+    |------|--------|
+    | Database Safe Seed (missing Default Trackers) | ✅ |
+    | Contextual Analytics (Weekly & Yearly Counts) for non-numerics | ✅ |
+
     ## ✅ Completado (Phase 2 - Epic 3: Analytics Dashboard)
     
     | Item | Estado |

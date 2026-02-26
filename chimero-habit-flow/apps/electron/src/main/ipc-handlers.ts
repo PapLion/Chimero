@@ -117,6 +117,10 @@ export function registerIpcHandlers(): void {
     { name: 'Social', type: 'numeric' as const, icon: 'users', color: '#3b82f6', order: 3, config: { unit: 'interactions' } },
     { name: 'Tasks', type: 'text' as const, icon: 'check-square', color: '#ef4444', order: 4, config: {} },
     { name: 'Savings', type: 'numeric' as const, icon: 'wallet', color: '#10b981', order: 5, config: { unit: '$', goal: 10000 } },
+    { name: 'Books', type: 'text' as const, icon: 'book', color: '#8b5cf6', order: 6, config: {} },
+    { name: 'Gaming', type: 'text' as const, icon: 'gamepad-2', color: '#10b981', order: 7, config: {} },
+    { name: 'Media/TV', type: 'text' as const, icon: 'tv', color: '#0ea5e9', order: 8, config: {} },
+    { name: 'Diet / Calories', type: 'numeric' as const, icon: 'salad', color: '#22c55e', order: 9, config: { unit: 'kcal' } },
   ];
 
   // --- getTrackers ---
@@ -127,25 +131,39 @@ export function registerIpcHandlers(): void {
         .from(trackers)
         .where(eq(trackers.archived, false))
         .orderBy(asc(trackers.order));
-      if (rows.length === 0) {
-        await db().insert(trackers).values(
-          defaultTrackers.map((t) => ({
-            name: t.name,
-            type: t.type,
-            icon: t.icon,
-            color: t.color,
-            order: t.order,
-            config: JSON.stringify(t.config),
-            isCustom: false,
-            archived: false,
-          }))
-        );
+
+      // Ensure all default trackers exist safely without duplicating
+      const existingTrackerNames = new Set(rows.map((row: Record<string, unknown>) => row.name as string));
+      const missingDefaults = defaultTrackers.filter(t => !existingTrackerNames.has(t.name));
+
+      if (missingDefaults.length > 0) {
+        // Find highest order to append safely
+        let maxOrder = -1;
+        if (rows.length > 0) {
+          maxOrder = Math.max(...rows.map((r: Record<string, unknown>) => (r.order as number) ?? -1));
+        }
+
+        const toInsert = missingDefaults.map((t, index) => ({
+          name: t.name,
+          type: t.type,
+          icon: t.icon,
+          color: t.color,
+          order: maxOrder !== -1 ? maxOrder + 1 + index : t.order,
+          config: JSON.stringify(t.config),
+          isCustom: false,
+          archived: false,
+        }));
+
+        await db().insert(trackers).values(toInsert);
+
+        // Re-fetch after safe insertion
         rows = await db()
           .select()
           .from(trackers)
           .where(eq(trackers.archived, false))
           .orderBy(asc(trackers.order));
       }
+
       return rows.map((r) => mapTracker(r as Record<string, unknown>));
     } catch (e) {
       console.error('get-trackers error:', e);

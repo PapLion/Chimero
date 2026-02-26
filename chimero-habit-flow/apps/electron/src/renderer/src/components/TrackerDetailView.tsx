@@ -133,9 +133,9 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     : 0
 
   // --- NEW ANALYTICS: Month Average, Change vs Last Month, and Days Since Last Entry ---
-  const { monthAverage, lastMonthAverage, changeVsLastMonth, daysSinceLastEntry } = useMemo(() => {
+  const { monthAverage, lastMonthAverage, changeVsLastMonth, daysSinceLastEntry, entriesThisWeek, entriesThisYear } = useMemo(() => {
     if (trackerEntries.length === 0) {
-      return { monthAverage: 0, lastMonthAverage: 0, changeVsLastMonth: 0, daysSinceLastEntry: null }
+      return { monthAverage: 0, lastMonthAverage: 0, changeVsLastMonth: 0, daysSinceLastEntry: null, entriesThisWeek: 0, entriesThisYear: 0 }
     }
 
     const referenceDate = new Date(selectedDate.getTime())
@@ -147,7 +147,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     const pastEntries = trackerEntries.filter((e) => e.timestamp <= refTime)
 
     if (pastEntries.length === 0) {
-      return { monthAverage: 0, lastMonthAverage: 0, changeVsLastMonth: 0, daysSinceLastEntry: null }
+      return { monthAverage: 0, lastMonthAverage: 0, changeVsLastMonth: 0, daysSinceLastEntry: null, entriesThisWeek: 0, entriesThisYear: 0 }
     }
 
     // 1. Days since last entry
@@ -177,11 +177,28 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
       percentChange = 100 // Infinite increase, cap at 100% for display
     }
 
+    // 4. Entries This Week & Year (Relative to selectedDate)
+    const dayOfWeek = referenceDate.getDay()
+    const diffToMonday = referenceDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)
+
+    const startOfWeek = new Date(referenceDate.getTime())
+    startOfWeek.setDate(diffToMonday)
+    startOfWeek.setHours(0, 0, 0, 0)
+    const startOfWeekTime = startOfWeek.getTime()
+
+    const startOfYear = new Date(referenceDate.getFullYear(), 0, 1)
+    const startOfYearTime = startOfYear.getTime()
+
+    const entriesThisWeek = pastEntries.filter((e) => e.timestamp >= startOfWeekTime).length
+    const entriesThisYear = pastEntries.filter((e) => e.timestamp >= startOfYearTime).length
+
     return {
       monthAverage: currentAvg,
       lastMonthAverage: prevAvg,
       changeVsLastMonth: percentChange,
-      daysSinceLastEntry: daysSince
+      daysSinceLastEntry: daysSince,
+      entriesThisWeek,
+      entriesThisYear
     }
   }, [trackerEntries, selectedDate])
 
@@ -383,23 +400,42 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
 
             {/* Deep Analytics Row */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div className="bg-white/[0.03] border border-[hsl(266_73%_63%_/_0.2)] rounded-xl p-4 relative overflow-hidden group">
-                <div className="absolute inset-0 bg-gradient-to-br from-[hsl(266_73%_63%_/_0.1)] to-transparent opacity-50" />
-                <div className="text-xs text-white/70 mb-1 relative z-10">30-Day Average</div>
-                <div className="flex items-end gap-2 relative z-10">
-                  <div className="text-3xl font-bold text-white">
-                    {monthAverage > 0 ? monthAverage.toFixed(1) : "--"}
-                  </div>
-                  {changeVsLastMonth !== 0 && (
-                    <div className={cn(
-                      "text-sm mb-1 font-medium flex items-center justify-center",
-                      changeVsLastMonth > 0 ? "text-emerald-400" : "text-rose-400"
-                    )} title={`Last month average: ${lastMonthAverage.toFixed(1)}`}>
-                      {changeVsLastMonth > 0 ? "+" : ""}{changeVsLastMonth.toFixed(0)}%
+              {!isNumericType ? (
+                <>
+                  <div className="bg-white/[0.03] border border-[hsl(266_73%_63%_/_0.2)] rounded-xl p-4 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-gradient-to-br from-[hsl(266_73%_63%_/_0.1)] to-transparent opacity-50" />
+                    <div className="text-xs text-white/70 mb-1 relative z-10">Entries This Week</div>
+                    <div className="text-3xl font-bold text-white relative z-10">
+                      {entriesThisWeek}
                     </div>
-                  )}
+                  </div>
+                  <div className="bg-white/[0.03] border border-[hsl(266_73%_63%_/_0.2)] rounded-xl p-4 relative overflow-hidden group hidden md:block">
+                    <div className="absolute inset-0 bg-gradient-to-br from-[hsl(266_73%_63%_/_0.1)] to-transparent opacity-50" />
+                    <div className="text-xs text-white/70 mb-1 relative z-10">Entries This Year</div>
+                    <div className="text-3xl font-bold text-white relative z-10">
+                      {entriesThisYear}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-white/[0.03] border border-[hsl(266_73%_63%_/_0.2)] rounded-xl p-4 relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-gradient-to-br from-[hsl(266_73%_63%_/_0.1)] to-transparent opacity-50" />
+                  <div className="text-xs text-white/70 mb-1 relative z-10">30-Day Average</div>
+                  <div className="flex items-end gap-2 relative z-10">
+                    <div className="text-3xl font-bold text-white">
+                      {monthAverage > 0 ? monthAverage.toFixed(1) : "--"}
+                    </div>
+                    {changeVsLastMonth !== 0 && (
+                      <div className={cn(
+                        "text-sm mb-1 font-medium flex items-center justify-center",
+                        changeVsLastMonth > 0 ? "text-emerald-400" : "text-rose-400"
+                      )} title={`Last month average: ${lastMonthAverage.toFixed(1)}`}>
+                        {changeVsLastMonth > 0 ? "+" : ""}{changeVsLastMonth.toFixed(0)}%
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
                 <div className="text-xs text-white/60 mb-1">Days Since Last Entry</div>
@@ -410,9 +446,11 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
               </div>
 
               {/* Optional Empty placeholder slot to preserve grid aesthetics */}
-              <div className="hidden md:flex bg-white/[0.01] border border-white/5 border-dashed rounded-xl p-4 items-center justify-center text-white/20 text-xs">
-                Insights Engine Active
-              </div>
+              {isNumericType && (
+                <div className="hidden md:flex bg-white/[0.01] border border-white/5 border-dashed rounded-xl p-4 items-center justify-center text-white/20 text-xs">
+                  Insights Engine Active
+                </div>
+              )}
             </div>
           </div>
         )}
