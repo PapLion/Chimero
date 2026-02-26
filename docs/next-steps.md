@@ -21,6 +21,15 @@
     | Entry Management (Shift+Click Delete with IPC handler) | ✅ |
     | Entry Management (Edit Flow / Modal & Shift+RightClick) | ✅ |
 
+    ## ✅ Completado (Phase 2 - Epic 3: Analytics Dashboard)
+    
+    | Item | Estado |
+    |------|--------|
+    | Tab Navigation Shell (Stats, Graphs, Entries) | ✅ |
+    | Deep Analytics (Averages, Trends, Time Elapsed) | ✅ |
+    | Time Filtered Charts (1M, 3M, 1Y) | ✅ |
+    | Year in Pixels (CSS Grid Heatmap) | ✅ |
+
     ## 📋 Pendiente para Week 3 (Dashboard & Visualización)
 
     - [ ] Conectar TanStack Query a IPC (reemplazar mock en store por datos reales)
