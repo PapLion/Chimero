@@ -11,6 +11,8 @@ import { join, resolve, isAbsolute } from 'path';
 import { existsSync, readdirSync, unlinkSync } from 'fs';
 import { initDb, getDb, getRawDb, closeDb } from '@packages/db/database';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { trackers } from '@packages/db/schema';
+import { eq } from 'drizzle-orm';
 
 /**
  * Resolves the path to the Drizzle migrations folder.
@@ -181,6 +183,34 @@ function ensureSchemaAndMaybeReset(
 }
 
 /**
+ * Seeds default trackers for Books, Gaming, Media, and Diet if they don't exist.
+ * Safe operation - never overwrites existing tracker records.
+ */
+function seedDefaultTrackers(): void {
+  const db = getDb();
+
+  const defaultTrackers = [
+    { name: "Books", type: "text" as const, icon: "book" },
+    { name: "Gaming", type: "text" as const, icon: "gamepad-2" },
+    { name: "Media", type: "text" as const, icon: "music" },
+    { name: "Diet", type: "numeric" as const, icon: "salad", config: { unit: "kcal" } },
+  ];
+
+  for (const tracker of defaultTrackers) {
+    const existing = db.select().from(trackers).where(eq(trackers.name, tracker.name)).get();
+    if (!existing) {
+      db.insert(trackers).values({
+        name: tracker.name,
+        type: tracker.type,
+        icon: tracker.icon,
+        config: tracker.config ? JSON.stringify(tracker.config) : undefined,
+      }).run();
+      console.log(`[DB] Seeded default tracker: ${tracker.name}`);
+    }
+  }
+}
+
+/**
  * Handles transition from old migrations (0000-0006) to consolidated migration.
  * If schema is complete but __drizzle_migrations__ has old entries (2+ rows),
  * clear them so migrate() will run the consolidated migration (uses IF NOT EXISTS).
@@ -258,4 +288,7 @@ export function setupDatabase(): void {
   }
 
   ensureSchemaAndMaybeReset(dbPath, migrationsFolder);
+
+  // Seed default trackers (Books, Gaming, Media, Diet) if they don't exist
+  seedDefaultTrackers();
 }

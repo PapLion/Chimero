@@ -7,9 +7,13 @@ import { filterEntriesByDate } from "../lib/utils"
 import type { Entry } from "../lib/store"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, type LucideIcon } from "lucide-react"
 import { EditEntryDialog } from "./modals/EditEntryDialog"
+import { ConfirmDeleteDialog } from "./modals/ConfirmDeleteDialog"
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
+  Cell,
   XAxis,
   YAxis,
   ResponsiveContainer,
@@ -81,14 +85,12 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
 
   const handleDeleteEntry = (e: React.MouseEvent, id: number) => {
     e.stopPropagation()
-    if (e.shiftKey) {
+    if (window.confirm("Delete this entry?")) {
       deleteEntryMutation.mutate(id)
-    } else {
-      if (window.confirm("Delete this entry?")) {
-        deleteEntryMutation.mutate(id)
-      }
     }
   }
+
+  const [deletingEntry, setDeletingEntry] = useState<Entry | null>(null)
 
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null)
 
@@ -100,6 +102,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
 
   const [activeTab, setActiveTab] = useState<"stats" | "graphs" | "entries">("entries")
   const [chartTimeFilter, setChartTimeFilter] = useState<"1M" | "3M" | "1Y">("1M")
+  const [chartType, setChartType] = useState<"area" | "bar">("area")
 
   // Use store selectedDate if available, fallback to prop
   const selectedDate = storeSelectedDate || propSelectedDate
@@ -404,14 +407,18 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                 <>
                   <div className="bg-white/[0.03] border border-[hsl(266_73%_63%_/_0.2)] rounded-xl p-4 relative overflow-hidden group">
                     <div className="absolute inset-0 bg-gradient-to-br from-[hsl(266_73%_63%_/_0.1)] to-transparent opacity-50" />
-                    <div className="text-xs text-white/70 mb-1 relative z-10">Entries This Week</div>
+                    <div className="text-xs text-white/70 mb-1 relative z-10">
+                      {isMediaType ? "Items This Week" : isDietType ? "Meals This Week" : isTaskType ? "Tasks This Week" : "Entries This Week"}
+                    </div>
                     <div className="text-3xl font-bold text-white relative z-10">
                       {entriesThisWeek}
                     </div>
                   </div>
                   <div className="bg-white/[0.03] border border-[hsl(266_73%_63%_/_0.2)] rounded-xl p-4 relative overflow-hidden group hidden md:block">
                     <div className="absolute inset-0 bg-gradient-to-br from-[hsl(266_73%_63%_/_0.1)] to-transparent opacity-50" />
-                    <div className="text-xs text-white/70 mb-1 relative z-10">Entries This Year</div>
+                    <div className="text-xs text-white/70 mb-1 relative z-10">
+                      {isMediaType ? "Items This Year" : isDietType ? "Meals This Year" : isTaskType ? "Tasks This Year" : "Entries This Year"}
+                    </div>
                     <div className="text-3xl font-bold text-white relative z-10">
                       {entriesThisYear}
                     </div>
@@ -438,7 +445,9 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
               )}
 
               <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
-                <div className="text-xs text-white/60 mb-1">Days Since Last Entry</div>
+                <div className="text-xs text-white/60 mb-1">
+                  {isMediaType ? "Days Since Last Item" : isDietType ? "Days Since Last Meal" : isTaskType ? "Days Since Last Task" : "Days Since Last Entry"}
+                </div>
                 <div className="text-3xl font-bold text-white">
                   {daysSinceLastEntry !== null ? daysSinceLastEntry : "--"}
                   <span className="text-sm font-normal text-white/40 ml-1">days</span>
@@ -477,35 +486,78 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                     </button>
                   ))}
                 </div>
+                <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-lg border border-white/5">
+                  <button
+                    onClick={() => setChartType("area")}
+                    className={cn(
+                      "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                      chartType === "area"
+                        ? "bg-[hsl(266_73%_63%)] text-white"
+                        : "text-white/40 hover:text-white/80 hover:bg-white/5"
+                    )}
+                  >
+                    Line
+                  </button>
+                  <button
+                    onClick={() => setChartType("bar")}
+                    className={cn(
+                      "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                      chartType === "bar"
+                        ? "bg-[hsl(266_73%_63%)] text-white"
+                        : "text-white/40 hover:text-white/80 hover:bg-white/5"
+                    )}
+                  >
+                    Bar
+                  </button>
+                </div>
               </div>
 
               {chartData.length > 1 ? (
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
-                      <defs>
-                        <linearGradient id={`gradient-detail-${tracker.id}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="hsl(266 73% 63%)" stopOpacity={0.3} />
-                          <stop offset="100%" stopColor="hsl(266 73% 63%)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis
-                        dataKey="date"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fontSize: 11, fill: "rgba(255,255,255,0.5)" }}
-                        interval="preserveStartEnd"
-                      />
-                      <YAxis hide domain={["auto", "auto"]} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Area
-                        type="monotone"
-                        dataKey="value"
-                        stroke="hsl(266 73% 63%)"
-                        strokeWidth={2}
-                        fill={`url(#gradient-detail-${tracker.id})`}
-                      />
-                    </AreaChart>
+                    {chartType === "area" ? (
+                      <AreaChart data={chartData}>
+                        <defs>
+                          <linearGradient id={`gradient-detail-${tracker.id}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="hsl(266 73% 63%)" stopOpacity={0.3} />
+                            <stop offset="100%" stopColor="hsl(266 73% 63%)" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <XAxis
+                          dataKey="date"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: "rgba(255,255,255,0.5)" }}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis hide domain={["auto", "auto"]} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Area
+                          type="monotone"
+                          dataKey="value"
+                          stroke="hsl(266 73% 63%)"
+                          strokeWidth={2}
+                          fill={`url(#gradient-detail-${tracker.id})`}
+                        />
+                      </AreaChart>
+                    ) : (
+                      <BarChart data={chartData}>
+                        <XAxis
+                          dataKey="date"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: "rgba(255,255,255,0.5)" }}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis hide domain={["auto", "auto"]} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                          {chartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill="hsl(266 73% 63%)" />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    )}
                   </ResponsiveContainer>
                 </div>
               ) : (
@@ -589,14 +641,14 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                     <div
                       key={entry.id}
                       className="group relative bg-white/[0.03] border border-white/5 rounded-xl overflow-hidden hover:bg-white/[0.05] transition-colors"
-                      onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
-                      onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
                     >
                       <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -641,14 +693,14 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                     <div
                       key={entry.id}
                       className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
-                      onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
-                      onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
                     >
                       <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -694,14 +746,14 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                     <div
                       key={entry.id}
                       className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
-                      onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
-                      onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
                     >
                       <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -741,14 +793,14 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                     <div
                       key={entry.id}
                       className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
-                      onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
-                      onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
                     >
                       <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -792,14 +844,14 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                     <div
                       key={entry.id}
                       className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
-                      onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
-                      onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
                     >
                       <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -840,14 +892,14 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                     <div
                       key={entry.id}
                       className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
-                      onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
-                      onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
                     >
                       <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -886,14 +938,14 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                     <div
                       key={entry.id}
                       className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
-                      onClick={(e) => { if (e.shiftKey) handleDeleteEntry(e, entry.id) }}
-                      onContextMenu={(e) => { if (e.shiftKey) handleEditEntry(e, entry) }}
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
                     >
                       <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => handleEditEntry(e, entry)} title="Edit entry (Shift+RightClick)">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => handleDeleteEntry(e, entry.id)} title="Delete entry (Shift+Click bypasses confirm)">
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -923,6 +975,17 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
         entry={editingEntry}
         open={editingEntry !== null}
         onOpenChange={(open) => !open && setEditingEntry(null)}
+      />
+
+      <ConfirmDeleteDialog
+        open={deletingEntry !== null}
+        onConfirm={() => {
+          if (deletingEntry) {
+            deleteEntryMutation.mutate(deletingEntry.id)
+          }
+          setDeletingEntry(null)
+        }}
+        onCancel={() => setDeletingEntry(null)}
       />
     </div>
   )

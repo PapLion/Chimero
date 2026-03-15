@@ -485,6 +485,7 @@ export function QuickEntry() {
                         placeholder={entryConfig.mainPlaceholder}
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); handleSubmit() } }}
                         className="text-lg h-12 bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
                         autoFocus
                       />
@@ -520,6 +521,7 @@ export function QuickEntry() {
                         placeholder={entryConfig.mainPlaceholder}
                         value={value}
                         onChange={(e) => setValue(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); handleSubmit() } }}
                         className="text-lg h-12 bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
                         autoFocus
                       />
