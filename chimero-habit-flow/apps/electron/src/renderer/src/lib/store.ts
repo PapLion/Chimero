@@ -3,7 +3,7 @@ import type { Tracker, Entry, TrackerConfig, Reminder } from "@packages/db"
 
 export type { Tracker, Entry, TrackerConfig, Reminder }
 export type TrackerType = Tracker["type"]
-export type PageType = "home" | "calendar" | "assets" | "custom-trackers" | "tracking" | "stats"
+export type PageType = "home" | "calendar" | "assets" | "custom-trackers" | "tracking" | "stats" | "contact"
 export type AssetCategory = "games" | "books" | "tv" | "apps" | "person" | "other"
 export type AssetType = "svg" | "png" | "jpg" | "gif" | "webp" | "other"
 
@@ -30,6 +30,7 @@ export interface Asset {
 interface AppState {
   activeTracker: number | null
   currentPage: PageType
+  selectedContactId: number | null  // For contact profile page - null means "create new", number means "edit existing"
   sidebarCollapsed: boolean
   commandBarOpen: boolean
   isQuickEntryOpen: boolean
@@ -37,6 +38,7 @@ interface AppState {
   selectedDate: Date
   setActiveTracker: (id: number | null) => void
   setCurrentPage: (page: PageType) => void
+  setSelectedContactId: (id: number | null) => void
   toggleSidebar: () => void
   toggleCommandBar: () => void
   setQuickEntryOpen: (open: boolean) => void
@@ -51,13 +53,15 @@ interface AppState {
 export const useAppStore = create<AppState>((set) => ({
   activeTracker: null,
   currentPage: "home",
+  selectedContactId: null,
   sidebarCollapsed: false,
   commandBarOpen: false,
   isQuickEntryOpen: false,
   isNotificationsOpen: false,
   selectedDate: new Date(),
   setActiveTracker: (id) => set({ activeTracker: id }),
-  setCurrentPage: (page) => set({ currentPage: page }),
+  setCurrentPage: (page) => set({ currentPage: page, selectedContactId: page === "contact" ? null : null }),
+  setSelectedContactId: (id) => set({ selectedContactId: id }),
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   toggleCommandBar: () => set((state) => ({ commandBarOpen: !state.commandBarOpen })),
   setQuickEntryOpen: (open) => set({ isQuickEntryOpen: open, commandBarOpen: open }),

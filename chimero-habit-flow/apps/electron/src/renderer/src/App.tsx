@@ -11,6 +11,8 @@ import { AssetsPage } from "./pages/AssetsPage"
 import { CustomTrackersPage } from "./pages/CustomTrackersPage"
 // NEW IMPORT
 import StatsPage from "./pages/StatsPage"
+import { ContactProfilePage } from "./pages/ContactProfilePage"
+import { ExerciseDownloadToast } from "./components/ExerciseDownloadToast"
 import { useAppStore } from "./lib/store"
 
 export default function ChimeroApp() {
@@ -27,6 +29,8 @@ export default function ChimeroApp() {
       // NEW CASE
       case "stats":
         return <StatsPage />
+      case "contact":
+        return <ContactProfilePage />
       case "home":
       default:
         return <BentoGrid />
@@ -66,6 +70,9 @@ export default function ChimeroApp() {
         <kbd className="px-1.5 py-0.5 bg-[hsl(210_20%_15%)] rounded text-[10px] font-mono text-[hsl(210_25%_97%)]">Alt+Q</kbd>
         <span>Quick Entry</span>
       </div>
+
+      {/* Exercise Download Toast */}
+      <ExerciseDownloadToast />
     </div>
   )
 }

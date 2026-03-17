@@ -139,3 +139,51 @@ export interface CorrelationCalculationOptions {
   minSampleSize?: number;
   confidenceThreshold?: number;
 }
+
+// === PERSONAL CRM TYPES ===
+
+export interface Contact {
+  id: number
+  name: string
+  avatarAssetId?: number | null
+  birthday?: string | null // ISO date "YYYY-MM-DD"
+  dateMet?: string | null // ISO date "YYYY-MM-DD"
+  dateLastTalked?: string | null // ISO date "YYYY-MM-DD"
+  traits?: string[] | null // JSON array parsed
+  notes?: string | null
+  createdAt: number | null
+}
+
+export interface ContactInsert {
+  name: string
+  avatarAssetId?: number | null
+  birthday?: string | null
+  dateMet?: string | null
+  notes?: string | null
+}
+
+export interface ContactUpdate {
+  name?: string
+  avatarAssetId?: number | null
+  birthday?: string | null
+  dateMet?: string | null
+  dateLastTalked?: string | null
+  traits?: string[] | null
+  notes?: string | null
+}
+
+export interface ContactInteraction {
+  id: number
+  contactId: number
+  entryId?: number | null
+  mood: "positive" | "negative" | "neutral"
+  timestamp: number
+  notes?: string | null
+}
+
+export interface ContactInteractionInsert {
+  contactId: number
+  entryId?: number | null
+  mood: "positive" | "negative" | "neutral"
+  notes?: string | null
+}

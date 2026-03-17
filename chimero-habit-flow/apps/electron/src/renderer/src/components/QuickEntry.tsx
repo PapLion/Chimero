@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useAppStore } from "../lib/store"
-import { useTrackers, useRecentTrackers, useFavoriteTrackers, useAddEntryMutation, useUpsertReminderMutation, useAssets } from "../lib/queries"
+import { useTrackers, useRecentTrackers, useFavoriteTrackers, useAddEntryMutation, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation } from "../lib/queries"
 import { cn } from "../lib/utils"
 import { getEntryConfig } from "../lib/entry-config"
 import type { Tracker } from "../lib/store"
+import { ContactBubblesGrid, type ContactMoodSelection } from "./ContactBubblesGrid"
+import { ExerciseSearch, type SelectedExercise } from "./ExerciseSearch"
 import {
   Dialog,
   DialogContent,
@@ -48,6 +50,7 @@ export function QuickEntry() {
   const { data: recentTrackers = [] } = useRecentTrackers(10)
   const { data: favoriteTrackers = [] } = useFavoriteTrackers()
   const addEntryMutation = useAddEntryMutation()
+  const createContactInteractionMutation = useCreateContactInteractionMutation()
 
   const [search, setSearch] = useState("")
   const [selectedTracker, setSelectedTracker] = useState<number | null>(null)
@@ -56,6 +59,12 @@ export function QuickEntry() {
   const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null)
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
   const [mode, setMode] = useState<QuickEntryMode>(MODE_ACTIVITY)
+
+  // Selected contacts for Social trackers
+  const [selectedContacts, setSelectedContacts] = useState<ContactMoodSelection[]>([])
+
+  // Selected exercises for Exercise trackers
+  const [selectedExercises, setSelectedExercises] = useState<SelectedExercise[]>([])
 
   // Reminder state
   const [reminderTitle, setReminderTitle] = useState("")
@@ -125,6 +134,8 @@ export function QuickEntry() {
       setReminderDate("")
       setReminderTime("")
       setLinkedTrackerId(undefined)
+      setSelectedContacts([])
+      setSelectedExercises([])
     } else {
       if (activeTracker) {
         setSelectedTracker(activeTracker)
@@ -143,6 +154,8 @@ export function QuickEntry() {
       setReminderDescription("")
       setReminderDate("")
       setReminderTime("")
+      setSelectedContacts([])
+      setSelectedExercises([])
     }
   }, [commandBarOpen, activeTracker])
 
@@ -181,6 +194,73 @@ export function QuickEntry() {
     const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
     if (!selectedTrackerData) return
 
+    // Check if this is a Social tracker (by icon "users" or name containing "social")
+    const isSocialTracker = 
+      selectedTrackerData.icon === "users" || 
+      selectedTrackerData.name.toLowerCase().includes("social") ||
+      selectedTrackerData.name.toLowerCase().includes("connection")
+
+    // Check if this is an Exercise tracker
+    const isExerciseTracker =
+      selectedTrackerData.icon === "dumbbell" ||
+      selectedTrackerData.name.toLowerCase().includes("exercise") ||
+      selectedTrackerData.name.toLowerCase().includes("workout") ||
+      selectedTrackerData.name.toLowerCase().includes("gym") ||
+      selectedTrackerData.name.toLowerCase().includes("fitness")
+
+    // Exercise tracker: save selected exercises to metadata
+    if (isExerciseTracker && selectedExercises.length > 0) {
+      const timestamp = Date.now()
+      addEntryMutation.mutate(
+        {
+          trackerId: selectedTracker,
+          value: selectedExercises.length, // number of exercises as value
+          note: note.trim() || null,
+          assetId: selectedAssetId,
+          metadata: { exercises: selectedExercises },
+          timestamp,
+        },
+        { onSuccess: () => setQuickEntryOpen(false) }
+      )
+      return
+    }
+
+    // For Social trackers, handle contact interactions
+    if (isSocialTracker && selectedContacts.length > 0) {
+      // Create contact interactions for each selected contact
+      const timestamp = Date.now()
+      
+      // Create the entry first (optional - for the general note)
+      const entryNote = note.trim() || null
+      const entryValue = value ? parseFloat(value) : 1
+
+      addEntryMutation.mutate(
+        {
+          trackerId: selectedTracker,
+          value: entryValue,
+          note: entryNote,
+          assetId: selectedAssetId,
+          metadata: {},
+          timestamp,
+        },
+        {
+          onSuccess: () => {
+            // After entry is created, create contact interactions
+            selectedContacts.forEach((contact) => {
+              createContactInteractionMutation.mutate({
+                contactId: contact.contactId,
+                mood: contact.mood,
+                entryId: null, // Will be linked after entry is created if needed
+                notes: entryNote,
+              })
+            })
+            setQuickEntryOpen(false)
+          },
+        }
+      )
+      return
+    }
+
     // Determine value and note based on tracker type
     let entryValue: number | null = null
     let entryNote: string | null = null
@@ -216,7 +296,7 @@ export function QuickEntry() {
       },
       { onSuccess: () => setQuickEntryOpen(false) }
     )
-  }, [selectedTracker, value, note, selectedAssetId, trackers, addEntryMutation, setQuickEntryOpen])
+  }, [selectedTracker, value, note, selectedAssetId, trackers, addEntryMutation, setQuickEntryOpen, selectedContacts, selectedExercises, createContactInteractionMutation])
 
   const handleReminderSubmit = useCallback(() => {
     if (!reminderTitle || !reminderDate || !reminderTime) return
@@ -240,6 +320,22 @@ export function QuickEntry() {
   // Get human-centric entry config for the selected tracker
   const entryConfig = selectedTrackerData ? getEntryConfig(selectedTrackerData) : null
 
+  // Check if this is a Social tracker (by icon "users" or name containing "social"/"connection")
+  const isSocialTracker = selectedTrackerData
+    ? selectedTrackerData.icon === "users" ||
+      selectedTrackerData.name.toLowerCase().includes("social") ||
+      selectedTrackerData.name.toLowerCase().includes("connection")
+    : false
+
+  // Check if this is an Exercise tracker (by icon "dumbbell" or name containing "exercise"/"workout"/"gym")
+  const isExerciseTracker = selectedTrackerData
+    ? selectedTrackerData.icon === "dumbbell" ||
+      selectedTrackerData.name.toLowerCase().includes("exercise") ||
+      selectedTrackerData.name.toLowerCase().includes("workout") ||
+      selectedTrackerData.name.toLowerCase().includes("gym") ||
+      selectedTrackerData.name.toLowerCase().includes("fitness")
+    : false
+
   const renderTrackerList = (trackerList: typeof trackers, title: string) => {
     if (trackerList.length === 0) return null
 
@@ -248,34 +344,36 @@ export function QuickEntry() {
         <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           {title}
         </div>
-        {trackerList.map((tracker) => {
-          const Icon = iconMap[tracker.icon ?? ""] || CheckSquare
-          return (
-            <button
-              key={tracker.id}
-              onClick={() => setSelectedTracker(tracker.id)}
-              className={cn(
-                "flex items-center gap-3 w-full px-3 py-2.5 rounded-lg transition-all text-left",
-                "hover:bg-accent"
-              )}
-            >
-              <div
-                className="p-2 rounded-lg"
-                style={{ backgroundColor: `${tracker.color ?? "#6b7280"}20` }}
+        <div className="grid grid-cols-3 gap-1">
+          {trackerList.map((tracker) => {
+            const Icon = iconMap[tracker.icon ?? ""] || CheckSquare
+            return (
+              <button
+                key={tracker.id}
+                onClick={() => setSelectedTracker(tracker.id)}
+                className={cn(
+                  "flex flex-col items-center gap-2 px-2 py-3 rounded-lg transition-all text-center",
+                  "hover:bg-accent"
+                )}
               >
-                <Icon className="w-4 h-4" style={{ color: tracker.color ?? "#6b7280" }} />
-              </div>
-              <div className="flex-1">
-                <div className="text-sm font-medium text-foreground">
-                  {tracker.name}
+                <div
+                  className="p-2 rounded-lg"
+                  style={{ backgroundColor: `${tracker.color ?? "#6b7280"}20` }}
+                >
+                  <Icon className="w-5 h-5" style={{ color: tracker.color ?? "#6b7280" }} />
                 </div>
-                <div className="text-xs text-muted-foreground capitalize">
-                  {tracker.type}
+                <div>
+                  <div className="text-xs font-medium text-foreground leading-tight">
+                    {tracker.name}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground capitalize">
+                    {tracker.type}
+                  </div>
                 </div>
-              </div>
-            </button>
-          )
-        })}
+              </button>
+            )
+          })}
+        </div>
       </div>
     )
   }
@@ -408,8 +506,24 @@ export function QuickEntry() {
                   )}
                 </div>
 
-                {/* Dynamic Input Fields Based on Entry Config */}
-                {entryConfig && entryConfig.mainType === "rating" ? (
+                {/* Social Tracker: ContactBubblesGrid */}
+                {isSocialTracker ? (
+                  <div className="mb-4">
+                    <ContactBubblesGrid
+                      onSelectionChange={(selected) => setSelectedContacts(selected)}
+                    />
+                  </div>
+                ) : isExerciseTracker ? (
+                  <div className="mb-4">
+                    <ExerciseSearch
+                      onExerciseSelect={(exercise) => setSelectedExercises((prev) => [...prev, exercise])}
+                      selectedExercises={selectedExercises}
+                    />
+                  </div>
+                ) : (
+                  <>
+                  {/* Dynamic Input Fields Based on Entry Config */}
+                  {entryConfig && entryConfig.mainType === "rating" ? (
                   <div className="mb-4">
                     {/* 1-10 Scale for Mood */}
                     {selectedTrackerData?.icon === "smile" ? (
@@ -570,6 +684,8 @@ export function QuickEntry() {
                     />
                   </div>
                 )}
+                </>
+                )}
 
                 {/* Asset Attachment */}
                 <div className="mb-4 relative">
@@ -661,11 +777,15 @@ export function QuickEntry() {
                     type="submit"
                     className="flex-1 bg-[hsl(266_73%_63%)] text-white hover:bg-[hsl(266_73%_58%)]"
                     disabled={
-                      selectedTrackerData?.type === "text" || selectedTrackerData?.type === "list"
-                        ? !note.trim() && !value
-                        : selectedTrackerData?.type === "binary" || selectedTrackerData?.type === "composite"
-                          ? !note.trim()
-                          : !value
+                      isExerciseTracker
+                        ? selectedExercises.length === 0 // Exercise trackers need at least one exercise selected
+                        : isSocialTracker
+                          ? selectedContacts.length === 0 // Social trackers need at least one contact selected
+                          : selectedTrackerData?.type === "text" || selectedTrackerData?.type === "list"
+                            ? !note.trim() && !value
+                            : selectedTrackerData?.type === "binary" || selectedTrackerData?.type === "composite"
+                              ? !note.trim()
+                              : !value
                     }
                   >
                     Save Entry

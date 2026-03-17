@@ -111,3 +111,26 @@ export const entriesToTags = sqliteTable("entries_to_tags", {
 }, (t) => ({
   pk: primaryKey({ columns: [t.entryId, t.tagId] }),
 }));
+
+// --- 7. CONTACTS (Personal CRM) ---
+export const contacts = sqliteTable("contacts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  avatarAssetId: integer("avatar_asset_id").references(() => assets.id, { onDelete: "set null" }),
+  birthday: text("birthday"), // ISO date string "YYYY-MM-DD"
+  dateMet: text("date_met"), // ISO date string "YYYY-MM-DD"
+  dateLastTalked: text("date_last_talked"), // ISO date string "YYYY-MM-DD"
+  traits: text("traits"), // JSON string array, ej: '["honest","funny","reliable"]'
+  notes: text("notes"),
+  createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
+});
+
+// --- 8. CONTACT INTERACTIONS (Registro de interacciones con contactos) ---
+export const contactInteractions = sqliteTable("contact_interactions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  contactId: integer("contact_id").references(() => contacts.id, { onDelete: "cascade" }).notNull(),
+  entryId: integer("entry_id").references(() => entries.id, { onDelete: "set null" }), // FK a entries (opcional)
+  mood: text("mood", { enum: ["positive", "negative", "neutral"] }).notNull(),
+  timestamp: integer("timestamp").notNull(),
+  notes: text("notes"),
+});

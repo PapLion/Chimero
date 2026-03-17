@@ -5,11 +5,12 @@
 import { ipcMain, app, dialog } from 'electron';
 import { copyFileSync, existsSync } from 'fs';
 import { getDb } from '@packages/db/database';
-import { trackers, entries, settings, assets, reminders } from '@packages/db';
-import type { Tracker, Entry, TrackerInsert, EntryInsert, Asset, Reminder, ReminderInsert } from '@packages/db';
+import { trackers, entries, settings, assets, reminders, contacts, contactInteractions } from '@packages/db';
+import type { Tracker, Entry, TrackerInsert, EntryInsert, Asset, Reminder, ReminderInsert, Contact, ContactInteraction, ContactInsert, ContactUpdate, ContactInteractionInsert } from '@packages/db';
 import { eq, desc, and, sql, asc } from 'drizzle-orm';
 import { saveFile, deleteFile, getAssetAbsolutePath } from './services/asset-manager';
 import { getDashboardStats, getCalendarMonth, calculateImpact } from './services/stats-service';
+import { searchExercises, getAllExercises, getExerciseDbStatus } from './services/exercise-db-service';
 
 function db() {
   return getDb();
@@ -106,6 +107,38 @@ function mapAsset(row: Record<string, unknown>): AssetWithUrls {
     createdAt: (row.createdAt ?? row.created_at) as number | null,
     assetUrl,
     thumbnailUrl,
+  };
+}
+
+function mapContact(row: Record<string, unknown>): Contact {
+  const traitsRaw = row.traits;
+  let traits: string[] | null = null;
+  if (traitsRaw && typeof traitsRaw === 'string') {
+    try { traits = JSON.parse(traitsRaw); } catch { /* ignore */ }
+  } else if (Array.isArray(traitsRaw)) {
+    traits = traitsRaw as string[];
+  }
+  return {
+    id: row.id as number,
+    name: (row.name as string) ?? '',
+    avatarAssetId: (row.avatarAssetId ?? row.avatar_asset_id) as number | null,
+    birthday: (row.birthday as string) ?? null,
+    dateMet: (row.dateMet ?? row.date_met) as string | null,
+    dateLastTalked: (row.dateLastTalked ?? row.date_last_talked) as string | null,
+    traits,
+    notes: (row.notes as string) ?? null,
+    createdAt: (row.createdAt ?? row.created_at) as number | null,
+  };
+}
+
+function mapContactInteraction(row: Record<string, unknown>): ContactInteraction {
+  return {
+    id: row.id as number,
+    contactId: (row.contactId ?? row.contact_id) as number,
+    entryId: (row.entryId ?? row.entry_id) as number | null,
+    mood: (row.mood as "positive" | "negative" | "neutral") ?? 'neutral',
+    timestamp: row.timestamp as number,
+    notes: (row.notes as string) ?? null,
   };
 }
 
@@ -729,6 +762,167 @@ export function registerIpcHandlers(): void {
         triggeredDays: 0,
         baselineDays: 0
       };
+    }
+  });
+
+  // --- get-contacts --- (all contacts ordered by name)
+  ipcMain.handle('get-contacts', async () => {
+    try {
+      const rows = await db()
+        .select()
+        .from(contacts)
+        .orderBy(asc(contacts.name));
+      return rows.map((r) => mapContact(r as Record<string, unknown>));
+    } catch (e) {
+      console.error('get-contacts error:', e);
+      return [];
+    }
+  });
+
+  // --- get-contact --- (single contact by id)
+  ipcMain.handle('get-contact', async (_, id: number) => {
+    try {
+      const rows = await db().select().from(contacts).where(eq(contacts.id, id));
+      return rows[0] ? mapContact(rows[0] as Record<string, unknown>) : null;
+    } catch (e) {
+      console.error('get-contact error:', e);
+      return null;
+    }
+  });
+
+  // --- create-contact ---
+  ipcMain.handle('create-contact', async (_, data: ContactInsert) => {
+    try {
+      if (!data.name || typeof data.name !== 'string' || !data.name.trim()) {
+        throw new Error('Invalid contact name');
+      }
+      const [inserted] = await db()
+        .insert(contacts)
+        .values({
+          name: data.name,
+          avatarAssetId: data.avatarAssetId ?? null,
+          birthday: data.birthday ?? null,
+          dateMet: data.dateMet ?? null,
+          notes: data.notes ?? null,
+        })
+        .returning();
+      return inserted ? mapContact(inserted as Record<string, unknown>) : null;
+    } catch (e) {
+      console.error('create-contact error:', e);
+      return null;
+    }
+  });
+
+  // --- update-contact ---
+  ipcMain.handle('update-contact', async (_, id: number, updates: ContactUpdate) => {
+    try {
+      const set: Record<string, unknown> = {};
+      if (updates.name !== undefined) set.name = updates.name;
+      if (updates.avatarAssetId !== undefined) set.avatarAssetId = updates.avatarAssetId;
+      if (updates.birthday !== undefined) set.birthday = updates.birthday;
+      if (updates.dateMet !== undefined) set.dateMet = updates.dateMet;
+      if (updates.dateLastTalked !== undefined) set.dateLastTalked = updates.dateLastTalked;
+      if (updates.traits !== undefined) set.traits = updates.traits ? JSON.stringify(updates.traits) : null;
+      if (updates.notes !== undefined) set.notes = updates.notes;
+      if (Object.keys(set).length === 0) return null;
+      await db().update(contacts).set(set).where(eq(contacts.id, id));
+      const [updated] = await db().select().from(contacts).where(eq(contacts.id, id));
+      return updated ? mapContact(updated as Record<string, unknown>) : null;
+    } catch (e) {
+      console.error('update-contact error:', e);
+      return null;
+    }
+  });
+
+  // --- delete-contact --- (deletes contact and its interactions)
+  ipcMain.handle('delete-contact', async (_, id: number) => {
+    try {
+      // contactInteractions will be cascade deleted due to FK constraint
+      await db().delete(contacts).where(eq(contacts.id, id));
+      return { success: true };
+    } catch (e) {
+      console.error('delete-contact error:', e);
+      return { success: false };
+    }
+  });
+
+  // --- create-contact-interaction ---
+  ipcMain.handle('create-contact-interaction', async (_, data: ContactInteractionInsert) => {
+    try {
+      if (!data.contactId || !data.mood) {
+        throw new Error('Invalid interaction data');
+      }
+      const timestamp = Date.now();
+      const [inserted] = await db()
+        .insert(contactInteractions)
+        .values({
+          contactId: data.contactId,
+          entryId: data.entryId ?? null,
+          mood: data.mood,
+          timestamp,
+          notes: data.notes ?? null,
+        })
+        .returning();
+
+      // Update dateLastTalked on the contact
+      const now = new Date();
+      const dateLastTalked = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      await db().update(contacts).set({ dateLastTalked }).where(eq(contacts.id, data.contactId));
+
+      return inserted ? mapContactInteraction(inserted as Record<string, unknown>) : null;
+    } catch (e) {
+      console.error('create-contact-interaction error:', e);
+      return null;
+    }
+  });
+
+  // --- get-contact-interactions --- (all interactions for a contact, ordered by timestamp DESC)
+  ipcMain.handle('get-contact-interactions', async (_, contactId: number) => {
+    try {
+      const rows = await db()
+        .select()
+        .from(contactInteractions)
+        .where(eq(contactInteractions.contactId, contactId))
+        .orderBy(desc(contactInteractions.timestamp));
+      return rows.map((r) => mapContactInteraction(r as Record<string, unknown>));
+    } catch (e) {
+      console.error('get-contact-interactions error:', e);
+      return [];
+    }
+  });
+
+  // --- search-exercises --- (search exercises by query)
+  ipcMain.handle('search-exercises', async (_, options: { query: string; limit?: number }) => {
+    try {
+      const { query, limit } = options;
+      const effectiveQuery = query?.trim() || '';
+      if (!effectiveQuery) {
+        return getAllExercises(limit ?? 20);
+      }
+      return searchExercises(effectiveQuery, limit ?? 20);
+    } catch (e) {
+      console.error('search-exercises error:', e);
+      return [];
+    }
+  });
+
+  // --- get-all-exercises --- (get all exercises without search)
+  ipcMain.handle('get-all-exercises', async (_, options?: { limit?: number }) => {
+    try {
+      return getAllExercises(options?.limit ?? 50);
+    } catch (e) {
+      console.error('get-all-exercises error:', e);
+      return [];
+    }
+  });
+
+  // --- get-exercise-db-status --- (get DB status: idle/loading/ready/error)
+  ipcMain.handle('get-exercise-db-status', async () => {
+    try {
+      return getExerciseDbStatus();
+    } catch (e) {
+      console.error('get-exercise-db-status error:', e);
+      return { status: 'error', count: 0, error: 'Unknown error' };
     }
   });
 }

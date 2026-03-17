@@ -42,6 +42,18 @@ declare global {
       completeReminder: (id: number) => Promise<unknown>
       uncompleteReminder: (id: number) => Promise<unknown>
       calculateImpact: (sourceTrackerId: number, targetTrackerId: number, offsetDays: number) => Promise<EnhancedCorrelationResult | Partial<EnhancedCorrelationResult>>
+      // Contacts (Personal CRM)
+      getContacts: () => Promise<unknown[]>
+      getContact: (id: number) => Promise<unknown>
+      createContact: (data: { name: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; notes?: string | null }) => Promise<unknown>
+      updateContact: (id: number, updates: { name?: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; dateLastTalked?: string | null; traits?: string[] | null; notes?: string | null }) => Promise<unknown>
+      deleteContact: (id: number) => Promise<{ success: boolean }>
+      createContactInteraction: (data: { contactId: number; entryId?: number | null; mood: "positive" | "negative" | "neutral"; notes?: string | null }) => Promise<unknown>
+      getContactInteractions: (contactId: number) => Promise<unknown[]>
+      // Exercise DB
+      searchExercises: (query: string, limit?: number) => Promise<unknown[]>
+      getAllExercises: (limit?: number) => Promise<unknown[]>
+      getExerciseDbStatus: () => Promise<{ status: 'idle' | 'loading' | 'ready' | 'error'; count: number; error: string | null; progress: number }>
     }
   }
 }

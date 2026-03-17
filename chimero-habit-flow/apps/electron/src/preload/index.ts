@@ -47,6 +47,21 @@ const api = {
   uncompleteReminder: (id: number) => ipcRenderer.invoke('uncomplete-reminder', id),
   calculateImpact: (sourceTrackerId: number, targetTrackerId: number, offsetDays: number) =>
     ipcRenderer.invoke('calculate-impact', sourceTrackerId, targetTrackerId, offsetDays),
+  // Contacts (Personal CRM)
+  getContacts: () => ipcRenderer.invoke('get-contacts'),
+  getContact: (id: number) => ipcRenderer.invoke('get-contact', id),
+  createContact: (data: { name: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; notes?: string | null }) =>
+    ipcRenderer.invoke('create-contact', data),
+  updateContact: (id: number, updates: { name?: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; dateLastTalked?: string | null; traits?: string[] | null; notes?: string | null }) =>
+    ipcRenderer.invoke('update-contact', id, updates),
+  deleteContact: (id: number) => ipcRenderer.invoke('delete-contact', id),
+  createContactInteraction: (data: { contactId: number; entryId?: number | null; mood: "positive" | "negative" | "neutral"; notes?: string | null }) =>
+    ipcRenderer.invoke('create-contact-interaction', data),
+  getContactInteractions: (contactId: number) => ipcRenderer.invoke('get-contact-interactions', contactId),
+  // Exercise DB
+  searchExercises: (query: string, limit?: number) => ipcRenderer.invoke('search-exercises', { query, limit }),
+  getAllExercises: (limit?: number) => ipcRenderer.invoke('get-all-exercises', { limit }),
+  getExerciseDbStatus: () => ipcRenderer.invoke('get-exercise-db-status'),
 }
 
 // Exponer la API al mundo principal (Window object)

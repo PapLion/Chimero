@@ -5,6 +5,7 @@ import { existsSync } from 'fs'
 import { setupDatabase } from './database'
 import { registerIpcHandlers } from './ipc-handlers'
 import { startReminderLoop, setMainWindowRef as setReminderMainWindow } from './services/reminder-service'
+import { initExerciseDb } from './services/exercise-db-service'
 
 // Allow chimero-asset:// to load files from userData (must be before app.ready)
 protocol.registerSchemesAsPrivileged([
@@ -85,6 +86,10 @@ app.whenReady().then(() => {
 
   try {
     setupDatabase()
+    // Initialize Exercise DB service (non-blocking, graceful degradation on failure)
+    initExerciseDb().catch((err) => {
+      console.error('[Main] Failed to initialize Exercise DB:', err)
+    })
   } catch (err) {
     console.error('Failed to initialize database:', err)
     splash.destroy()

@@ -23,6 +23,10 @@ export const queryKeys = {
   assetsRoot: ['assets'] as const,
   reminders: ['reminders'] as const,
   dashboardLayout: ['dashboard-layout'] as const,
+  // Contacts
+  contacts: ['contacts'] as const,
+  contact: (id: number) => ['contact', id] as const,
+  contactInteractions: (contactId: number) => ['contact-interactions', contactId] as const,
 }
 
 export function useTrackers() {
@@ -303,5 +307,109 @@ export function useDeleteEntryMutation() {
       qc.invalidateQueries({ queryKey: queryKeys.taskEntriesRoot })
       qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
     },
+  })
+}
+
+// === CONTACTS (Personal CRM) ===
+
+export function useContacts() {
+  return useQuery({
+    queryKey: queryKeys.contacts,
+    queryFn: () => api.getContacts(),
+    staleTime: 30_000,
+  })
+}
+
+export function useContact(id: number) {
+  return useQuery({
+    queryKey: queryKeys.contact(id),
+    queryFn: () => api.getContact(id),
+    enabled: !!id,
+    staleTime: 30_000,
+  })
+}
+
+export function useContactInteractions(contactId: number) {
+  return useQuery({
+    queryKey: queryKeys.contactInteractions(contactId),
+    queryFn: () => api.getContactInteractions(contactId),
+    enabled: !!contactId,
+    staleTime: 15_000,
+  })
+}
+
+export function useCreateContactMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { name: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; notes?: string | null }) =>
+      api.createContact(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.contacts })
+    },
+  })
+}
+
+export function useUpdateContactMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, updates }: { id: number; updates: { name?: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; dateLastTalked?: string | null; traits?: string[] | null; notes?: string | null } }) =>
+      api.updateContact(id, updates),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.contacts })
+    },
+  })
+}
+
+export function useDeleteContactMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.deleteContact(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.contacts })
+    },
+  })
+}
+
+export function useCreateContactInteractionMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { contactId: number; entryId?: number | null; mood: "positive" | "negative" | "neutral"; notes?: string | null }) =>
+      api.createContactInteraction(data),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.contactInteractions(variables.contactId) })
+      qc.invalidateQueries({ queryKey: queryKeys.contacts })
+    },
+  })
+}
+
+// === EXERCISE DB ===
+
+export function useSearchExercises(query: string, limit?: number) {
+  return useQuery({
+    queryKey: ['exercises', 'search', query, limit],
+    queryFn: () => api.searchExercises(query, limit),
+    enabled: query.trim().length > 0,
+    staleTime: Infinity, // Los ejercicios no cambian
+  })
+}
+
+export function useAllExercises(limit?: number) {
+  return useQuery({
+    queryKey: ['exercises', 'all', limit],
+    queryFn: () => api.getAllExercises(limit),
+    staleTime: Infinity,
+  })
+}
+
+export function useExerciseDbStatus() {
+  return useQuery({
+    queryKey: ['exercises', 'status'],
+    queryFn: () => api.getExerciseDbStatus(),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      // Poll every 1.5s while loading or idle, stop when ready or error
+      return status === 'ready' || status === 'error' ? false : 1500
+    },
+    staleTime: 0, // Always refetch — status changes over time
   })
 }
