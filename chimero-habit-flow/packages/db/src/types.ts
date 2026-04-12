@@ -19,6 +19,8 @@ export interface TrackerConfig {
   step?: number
   options?: string[]
   isCustom?: boolean
+  /** Stable semantic identifier for tracker-specific UI/logic (e.g. "weight"). Preferred over name matching. */
+  semanticType?: string
 }
 
 export interface Tracker {

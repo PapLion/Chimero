@@ -235,7 +235,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     return dates.map((dateStr) => {
       const dayEntries = datesMap[dateStr]
       const trackerNameLower = tracker.name.toLowerCase()
-      const isWeightTracker = trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
+      const isWeightTracker = tracker.config.semanticType === 'weight' || trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
       const isRatingType = tracker.type === "rating"
 
       let aggregatedValue: number
@@ -309,7 +309,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     trackerNameLower.includes("movie") || trackerNameLower.includes("game") ||
     trackerNameLower.includes("media") ||
     tracker.icon === "book" || tracker.icon === "gamepad-2" || tracker.icon === "music"
-  const isWeightType = trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
+  const isWeightType = tracker.config.semanticType === 'weight' || trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
   const isTaskType = tracker.type === "list" || tracker.type === "binary" || trackerNameLower.includes("task")
   const isDietType = trackerNameLower.includes("diet") || trackerNameLower.includes("calorie") || trackerNameLower.includes("food") || trackerNameLower.includes("meal") || tracker.icon === "salad"
   const isSavingsType = trackerNameLower.includes("saving") || trackerNameLower.includes("finance") || trackerNameLower.includes("money") || trackerNameLower.includes("budget") || tracker.icon === "wallet"

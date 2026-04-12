@@ -123,7 +123,7 @@ function getDateValue(entries: Entry[], tracker: Tracker, selectedDate: Date): n
 
   // Determine aggregation strategy
   const trackerNameLower = tracker.name.toLowerCase()
-  const isWeightTracker = trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
+  const isWeightTracker = tracker.config.semanticType === 'weight' || trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
   const isRatingType = tracker.type === "rating"
 
   // Use LAST strategy for weight or rating types
@@ -286,7 +286,7 @@ function CounterWidget({
     return dates.map((dateStr) => {
       const dayEntries = last7Days[dateStr]
       const trackerNameLower = tracker.name.toLowerCase()
-      const isWeightTracker = trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
+      const isWeightTracker = tracker.config.semanticType === 'weight' || trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
       const isRatingType = tracker.type === "rating"
       
       let aggregatedValue: number
@@ -999,7 +999,7 @@ export function WidgetCard({ widget, tracker, entries, assets, selectedDate }: W
     }
 
     // Weight Widget: weight tracker
-    if (trackerNameLower.includes("weight") || trackerNameLower.includes("peso")) {
+    if (tracker.config.semanticType === 'weight' || trackerNameLower.includes("weight") || trackerNameLower.includes("peso")) {
       return <WeightWidget entries={entries} tracker={tracker} assets={assets} selectedDate={selectedDate} />
     }
 

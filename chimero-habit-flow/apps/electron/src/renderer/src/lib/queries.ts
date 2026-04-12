@@ -282,7 +282,7 @@ export function useUncompleteReminderMutation() {
 export function useUpdateEntryMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, updates }: { id: number; updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null } }) =>
+    mutationFn: ({ id, updates }: { id: number; updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null; metadata?: Record<string, unknown> } }) =>
       api.updateEntry(id, updates),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
