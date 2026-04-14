@@ -40,7 +40,7 @@ export function formatWeight(
 
   if (!showBoth) return primaryStr
 
-  const secondary = displayUnit === "lbs" ? toKg(value, "lbs") : toLbs(value, "kg")
+  const secondary = displayUnit === "lbs" ? toKg(value, "lbs") : toLbs(value, "lbs")
   const secondaryUnit = displayUnit === "lbs" ? "kg" : "lbs"
   return `${primaryStr} (${secondary.toFixed(1)} ${secondaryUnit})`
 }

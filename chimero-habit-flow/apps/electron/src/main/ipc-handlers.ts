@@ -277,7 +277,7 @@ export function registerIpcHandlers(): void {
       if (trackerRow) {
         const tConfig = (trackerRow.config as Record<string, unknown>) || {};
         if (tConfig.semanticType === 'weight') {
-          const storedUnit = (tConfig.unit as string) === 'kg' ? 'kg' : 'lbs';
+          const storedUnit: "lbs" | "kg" = (tConfig.unit as string) === 'kg' ? 'kg' : 'lbs';
           metadata = { ...metadata, storedUnit };
         }
       }
