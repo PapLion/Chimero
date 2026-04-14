@@ -48,6 +48,12 @@ export interface Entry {
   assetId?: number | null
 }
 
+export interface WeightEntryMetadata {
+  waist?: number
+  waistUnit?: "in" | "cm"
+  storedUnit?: "lbs" | "kg"
+}
+
 export interface EntryInsert {
   trackerId: number
   value?: number | null

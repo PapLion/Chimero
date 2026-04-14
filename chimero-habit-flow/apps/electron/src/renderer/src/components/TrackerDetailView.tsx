@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react"
 import { useAppStore } from "../lib/store"
 import { useTrackers, useEntries, useDeleteEntryMutation } from "../lib/queries"
 import { filterEntriesByDate } from "../lib/utils"
+import { formatWeight } from "../lib/weightUtils"
 import type { Entry } from "../lib/store"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, type LucideIcon } from "lucide-react"
 import { EditEntryDialog } from "./modals/EditEntryDialog"
@@ -886,7 +887,10 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                   const isHigh = averageValue > 0 && value > averageValue * 1.5
                   const isLow = averageValue > 0 && value < averageValue * 0.5
                   const unit = (tracker.config as Record<string, unknown>)?.unit as string | undefined
-                  const displayValue = unit === "$" ? `$${value.toLocaleString()}` : `${value.toFixed(1)}${unit ?? ""}`
+                  const displayUnit = (unit === "lbs" || unit === "kg") ? unit : "lbs"
+                  const displayValue = isWeightType
+                    ? formatWeight(value, displayUnit)
+                    : unit === "$" ? `$${value.toLocaleString()}` : `${value.toFixed(1)}${unit ?? ""}`
                   const asset = entry.assetId != null ? assets.get(entry.assetId) : null
                   return (
                     <div

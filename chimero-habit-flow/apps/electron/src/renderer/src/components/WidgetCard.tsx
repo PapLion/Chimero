@@ -1,6 +1,7 @@
 "use client"
 
 import { cn } from "../lib/utils"
+import { formatWeight } from "../lib/weightUtils"
 import { type Widget, type Tracker, type Entry } from "../lib/store"
 import { useMoodDailyAggregates, useUpdateEntryMutation } from "../lib/queries"
 import { useSortable } from "@dnd-kit/sortable"
@@ -505,7 +506,7 @@ function WeightWidget({
     }).filter((d) => d.value !== null)
   })()
 
-  const unit = (tracker.config as Record<string, unknown>)?.unit as string | undefined || "kg"
+  const displayUnit = ((tracker.config as Record<string, unknown>)?.unit as "lbs" | "kg" | undefined) ?? "lbs"
   const currentWeight = dateEntry?.value ?? null
 
   return (
@@ -532,7 +533,7 @@ function WeightWidget({
 
         <div className="flex-1 flex flex-col">
           <div className="text-5xl font-bold text-white tracking-tight mb-4">
-            {currentWeight !== null ? `${currentWeight.toFixed(1)}${unit}` : "--"}
+          {currentWeight !== null ? formatWeight(currentWeight, displayUnit) : "--"}
           </div>
 
           {chartData.length > 1 && (

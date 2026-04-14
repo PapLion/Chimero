@@ -144,7 +144,7 @@ function mapContactInteraction(row: Record<string, unknown>): ContactInteraction
 
 export function registerIpcHandlers(): void {
   const defaultTrackers = [
-    { name: 'Weight', type: 'numeric' as const, icon: 'scale', color: '#a855f7', order: 0, config: { unit: 'kg', goal: 70, semanticType: 'weight' } },
+    { name: 'Weight', type: 'numeric' as const, icon: 'scale', color: '#a855f7', order: 0, config: { unit: 'lbs', goal: 70, semanticType: 'weight' } },
     { name: 'Mood', type: 'range' as const, icon: 'smile', color: '#f59e0b', order: 1, config: { max: 5 } },
     { name: 'Exercise', type: 'numeric' as const, icon: 'dumbbell', color: '#22c55e', order: 2, config: { unit: 'min', goal: 30 } },
     { name: 'Social', type: 'numeric' as const, icon: 'users', color: '#3b82f6', order: 3, config: { unit: 'interactions' } },
@@ -270,13 +270,25 @@ export function registerIpcHandlers(): void {
     try {
       const d = new Date(data.timestamp);
       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; // YYYY-MM-DD local
+
+      // For weight trackers, persist the current storage unit in metadata for migration safety.
+      let metadata = data.metadata ?? {};
+      const [trackerRow] = await db().select().from(trackers).where(eq(trackers.id, data.trackerId));
+      if (trackerRow) {
+        const tConfig = (trackerRow.config as Record<string, unknown>) || {};
+        if (tConfig.semanticType === 'weight') {
+          const storedUnit = (tConfig.unit as string) === 'kg' ? 'kg' : 'lbs';
+          metadata = { ...metadata, storedUnit };
+        }
+      }
+
       const [inserted] = await db()
         .insert(entries)
         .values({
           trackerId: data.trackerId,
           value: data.value ?? null,
           note: data.note ?? null,
-          metadata: JSON.stringify(data.metadata ?? {}),
+          metadata: JSON.stringify(metadata),
           timestamp: data.timestamp,
           dateStr,
           assetId: (data as EntryInsert).assetId ?? null,
@@ -724,6 +736,21 @@ export function registerIpcHandlers(): void {
     }
   ) => {
     try {
+      // Validate config.unit for weight trackers — only "lbs" or "kg" are accepted.
+      if (updates.config?.unit !== undefined) {
+        const [existing] = await db().select().from(trackers).where(eq(trackers.id, id));
+        if (existing) {
+          const existingConfig = (existing.config as Record<string, unknown>) || {};
+          const isWeightTracker = existingConfig.semanticType === 'weight';
+          if (isWeightTracker) {
+            const unit = updates.config.unit;
+            if (unit !== 'lbs' && unit !== 'kg') {
+              throw new Error(`Invalid unit "${unit}" for weight tracker. Accepted values: "lbs" | "kg".`);
+            }
+          }
+        }
+      }
+
       const set: Record<string, unknown> = {};
       if (updates.order !== undefined) set.order = updates.order;
       if (updates.isFavorite !== undefined) set.isFavorite = updates.isFavorite;
