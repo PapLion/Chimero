@@ -1,0 +1,1790 @@
+"use client"
+
+import React, { useEffect, useMemo, useRef, useState } from "react"
+import { useAppStore } from "../../../lib/store"
+import { useTrackers, useEntries, useDeleteEntryMutation, useWeightProgress, useDashboardLayout, useSaveDashboardLayoutMutation, useTrackerChartData, useMoodStats, useSleepEntries, useMeditationEntries, useHealthEntries, useDietEntries, useGamingEntries, useBookEntries, useMoodEntries, useExerciseEntries, useSleepStats, useMeditationStats, useHealthStats } from "../../../lib/queries"
+import { filterEntriesByDate, dateStrToDate, dateToDateStr, cn, resolveChimeroAssetUrl } from "../../../lib/utils"
+import { formatWeight } from "../../../lib/weightUtils"
+import type { Entry, Tracker } from "../../../lib/store"
+import type { DashboardLayoutData, DashboardLayoutWidget, TrackerChartGranularity, TrackerChartPoint } from "../../../lib/api"
+import { computeCurrentStreak } from "@packages/db/streak-utils"
+import { Star, TrendingUp, TrendingDown, ImageIcon, Trash2, Pencil, ArrowRight, Loader2, Target, CheckSquare, ArrowUp, ArrowDown } from "lucide-react"
+import { EditEntryDialog } from "../../entry/components/EditEntryDialog"
+import { ConfirmDeleteDialog } from "../../../shared/components/ConfirmDeleteDialog"
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  Cell,
+  XAxis,
+  YAxis,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts"
+import { useCorrelationCalculation } from "../../../hooks/useCorrelationCalculation"
+import { CorrelationResultCard } from "../../dashboard/components/CorrelationResultCard"
+import type { EnhancedCorrelationResult } from "../../../types/correlation"
+import { ICON_MAP, getTrackerSemanticType } from "../../../shared/config/tracker-config"
+import { type ChimeroAsset } from "../../../shared/config/asset-config"
+import { SleepEntryCard } from "../../entry/components/SleepEntryCard"
+import { MeditationEntryCard } from "../../entry/components/MeditationEntryCard"
+import { HealthEntryCard } from "../../entry/components/HealthEntryCard"
+import { DietEntryCard } from "../../entry/components/DietEntryCard"
+import { GamingEntryCard } from "../../entry/components/GamingEntryCard"
+import { BookEntryCard } from "../../entry/components/BookEntryCard"
+import { MoodEntryCard } from "../../entry/components/MoodEntryCard"
+import { ExerciseEntryCard } from "../../entry/components/ExerciseEntryCard"
+import { WeightEntryCard } from "../../entry/components/WeightEntryCard"
+import { SocialEntryCard } from "../../entry/components/SocialEntryCard"
+
+const WEIGHT_CHART_RANGES = [
+  { value: "3d", daysBack: 3 },
+  { value: "7d", daysBack: 7 },
+  { value: "14d", daysBack: 14 },
+  { value: "30d", daysBack: 30 },
+  { value: "60d", daysBack: 60 },
+  { value: "90d", daysBack: 90 },
+  { value: "180d", daysBack: 180 },
+  { value: "270d", daysBack: 270 },
+  { value: "1Y", daysBack: 365 },
+  { value: "2Y", daysBack: 730 },
+  { value: "3Y", daysBack: 1095 },
+] as const
+
+type WeightChartRange = typeof WEIGHT_CHART_RANGES[number]["value"]
+
+function getWeightChartDaysBack(range: WeightChartRange): number {
+  return WEIGHT_CHART_RANGES.find((option) => option.value === range)?.daysBack ?? 30
+}
+
+function getDefaultWeightChartGranularity(daysBack: number): TrackerChartGranularity {
+  return daysBack > 90 ? "weekly" : "daily"
+}
+
+function formatWeightChartLabel(dateStr: string, granularity: TrackerChartGranularity): string {
+  if (granularity === "daily") {
+    const date = new Date(`${dateStr}T00:00:00`)
+    return date.toLocaleDateString("en", { month: "short", day: "numeric" })
+  }
+
+  if (granularity === "weekly") {
+    const [year, week] = dateStr.split("-")
+    return `${year} W${week}`
+  }
+
+  const date = new Date(`${dateStr}-01T00:00:00`)
+  return date.toLocaleDateString("en", { month: "short", year: "numeric" })
+}
+
+function normalizeDashboardLayout(
+  layout: DashboardLayoutData | DashboardLayoutWidget[] | null | undefined
+): DashboardLayoutData | null {
+  if (!layout) return null
+  return Array.isArray(layout) ? { widgets: layout } : layout
+}
+
+function findTrackerByRole(trackers: Tracker[], role: "weight" | "exercise" | "diet"): Tracker | undefined {
+  return trackers.find((tracker) => {
+    const name = tracker.name.toLowerCase()
+    const semanticType = tracker.config.semanticType
+
+    if (role === "weight") {
+      return semanticType === "weight" || name.includes("weight") || name.includes("peso")
+    }
+
+    if (role === "exercise") {
+      return semanticType === "exercise" || name.includes("exercise") || name.includes("workout") || tracker.icon === "dumbbell"
+    }
+
+    return semanticType === "diet" || name.includes("diet") || name.includes("calorie") || name.includes("food") || name.includes("meal") || name.includes("nutrition") || tracker.icon === "salad"
+  })
+}
+
+interface TrackerDetailViewProps {
+  trackerId: number
+  selectedDate: Date
+  assets: Map<number, ChimeroAsset>
+}
+
+// Recharts Tooltip content props
+interface TooltipContentProps {
+  active?: boolean
+  payload?: Array<{ value: number }>
+  label?: string
+}
+const CustomTooltip = ({ active, payload, label }: TooltipContentProps) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-[hsl(210_20%_15%)] border border-[hsl(210_18%_22%)] rounded-lg p-2 shadow-lg">
+        <p className="text-xs text-white/60 mb-1">{label}</p>
+        <p className="text-sm font-medium text-white">
+          {typeof payload[0].value === 'number'
+            ? payload[0].value.toFixed(1)
+            : payload[0].value}
+        </p>
+      </div>
+    )
+  }
+  return null
+}
+
+export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, assets }: TrackerDetailViewProps) {
+  const { selectedDate: storeSelectedDate } = useAppStore()
+  const { data: trackers = [] } = useTrackers()
+  const { data: allEntries = [] } = useEntries({ limit: 1000 })
+  const { data: weightProgress } = useWeightProgress(trackerId)
+  const { data: moodStats } = useMoodStats(trackerId)
+  const { data: sleepStats } = useSleepStats(trackerId)
+  const { data: meditationStats } = useMeditationStats(trackerId)
+  const { data: healthStats } = useHealthStats(trackerId)
+  const { data: dashboardLayout } = useDashboardLayout()
+  const saveDashboardLayoutMutation = useSaveDashboardLayoutMutation()
+  const deleteEntryMutation = useDeleteEntryMutation()
+
+  // Specialized entry queries for tracker detail view
+  const { data: sleepEntries = [] } = useSleepEntries(trackerId, { limit: 100 })
+  const { data: meditationEntries = [] } = useMeditationEntries(trackerId, { limit: 100 })
+  const { data: healthEntries = [] } = useHealthEntries(trackerId, { limit: 100 })
+  const { data: dietEntries = [] } = useDietEntries(trackerId, { limit: 100 })
+  const { data: gamingEntries = [] } = useGamingEntries(trackerId, { limit: 100 })
+  const { data: bookEntries = [] } = useBookEntries(trackerId, { limit: 100 })
+  const { data: moodEntries = [] } = useMoodEntries(trackerId, { limit: 100 })
+  const { data: exerciseEntries = [] } = useExerciseEntries({ trackerId, limit: 100 })
+
+  const [deletingEntry, setDeletingEntry] = useState<Entry | null>(null)
+
+  const [editingEntry, setEditingEntry] = useState<Entry | null>(null)
+
+  const handleEditEntry = (e: React.MouseEvent, entry: Entry) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setEditingEntry(entry)
+  }
+
+  const [activeTab, setActiveTab] = useState<"stats" | "graphs" | "entries" | "insights">("entries")
+  const [chartTimeFilter, setChartTimeFilter] = useState<"1M" | "3M" | "1Y">("1M")
+  const [chartType, setChartType] = useState<"area" | "bar">("area")
+  const [weightChartRange, setWeightChartRange] = useState<WeightChartRange>("30d")
+  const [weightChartGranularity, setWeightChartGranularity] = useState<TrackerChartGranularity>("daily")
+  const [weightGranularityLocked, setWeightGranularityLocked] = useState(false)
+  const [rollingAverageEnabled, setRollingAverageEnabled] = useState(false)
+  const lastWeightChartTrackerIdRef = useRef<number | null>(null)
+  const [insightsResults, setInsightsResults] = useState<{
+    exercise: EnhancedCorrelationResult
+    diet: EnhancedCorrelationResult
+  } | null>(null)
+  const [insightsLoading, setInsightsLoading] = useState(false)
+  const [insightsError, setInsightsError] = useState<string | null>(null)
+  const [customSourceTrackerId, setCustomSourceTrackerId] = useState<number | "">("")
+  const [customTargetTrackerId, setCustomTargetTrackerId] = useState<number | "">("")
+  const [customOffsetDays, setCustomOffsetDays] = useState(0)
+  const {
+    result: customInsightResult,
+    isCalculating: isCustomInsightCalculating,
+    error: customInsightError,
+    calculateCorrelation: calculateCustomCorrelation,
+    reset: resetCustomCorrelation,
+  } = useCorrelationCalculation()
+
+  // Use store selectedDate if available, fallback to prop
+  const selectedDate = storeSelectedDate || propSelectedDate
+  const isToday = selectedDate.toDateString() === new Date().toDateString()
+
+  const tracker = trackers.find((t) => t.id === trackerId)
+  const normalizedDashboardLayout = useMemo(() => normalizeDashboardLayout(dashboardLayout), [dashboardLayout])
+  const savedWeightChartGranularity = normalizedDashboardLayout?.weightChartGranularity
+
+  useEffect(() => {
+    if (lastWeightChartTrackerIdRef.current === trackerId) {
+      return
+    }
+    lastWeightChartTrackerIdRef.current = trackerId
+    setWeightChartRange("30d")
+    if (savedWeightChartGranularity) {
+      setWeightChartGranularity(savedWeightChartGranularity)
+      setWeightGranularityLocked(true)
+      return
+    }
+    setWeightChartGranularity("daily")
+    setWeightGranularityLocked(false)
+  }, [trackerId, savedWeightChartGranularity])
+
+  useEffect(() => {
+    if (!weightGranularityLocked && savedWeightChartGranularity) {
+      setWeightChartGranularity(savedWeightChartGranularity)
+      setWeightGranularityLocked(true)
+    }
+  }, [savedWeightChartGranularity, weightGranularityLocked])
+
+  // Filter entries for this tracker (hooks must run unconditionally)
+  const trackerEntries = useMemo(() => {
+    return allEntries.filter((e) => e.trackerId === trackerId)
+  }, [allEntries, trackerId])
+
+  // Filter entries for selected date (for stats and history feed)
+  const selectedDateEntries = useMemo(() => {
+    return filterEntriesByDate(trackerEntries, selectedDate)
+  }, [trackerEntries, selectedDate])
+
+  // History feed: Show all entries if today, otherwise filter by selected date
+  const historyEntries = useMemo(() => {
+    if (isToday) {
+      return trackerEntries.slice().reverse() // Show recent history when viewing today
+    }
+    return selectedDateEntries.slice().reverse() // Show only selected date when viewing past/future
+  }, [trackerEntries, selectedDateEntries, isToday])
+
+  // Calculate stats - use selectedDateEntries for "today's" stats when viewing a specific date
+  const totalCount = isToday ? trackerEntries.length : selectedDateEntries.length
+  const currentStreak = computeCurrentStreak(trackerEntries.map((entry) => entry.dateStr ?? dateToDateStr(new Date(entry.timestamp))))
+  const averageValue = selectedDateEntries.length > 0
+    ? selectedDateEntries.reduce((sum, e) => sum + (e.value ?? 0), 0) / selectedDateEntries.length
+    : 0
+
+  // --- NEW ANALYTICS: Month Average, Change vs Last Month, and Days Since Last Entry ---
+  const { monthAverage, lastMonthAverage, changeVsLastMonth, daysSinceLastEntry, entriesThisWeek, entriesThisYear } = useMemo(() => {
+    if (trackerEntries.length === 0) {
+      return { monthAverage: 0, lastMonthAverage: 0, changeVsLastMonth: 0, daysSinceLastEntry: null, entriesThisWeek: 0, entriesThisYear: 0 }
+    }
+
+    const referenceDate = new Date(selectedDate.getTime())
+    referenceDate.setHours(23, 59, 59, 999)
+    const refTime = referenceDate.getTime()
+    const msPerDay = 1000 * 60 * 60 * 24
+
+    // Filter out future entries relative to the selected date
+    const pastEntries = trackerEntries.filter((e) => e.timestamp <= refTime)
+
+    if (pastEntries.length === 0) {
+      return { monthAverage: 0, lastMonthAverage: 0, changeVsLastMonth: 0, daysSinceLastEntry: null, entriesThisWeek: 0, entriesThisYear: 0 }
+    }
+
+    // 1. Days since last entry
+    // Entries are sorted descending by default in our queries (or should be). Let's sort to be safe:
+    const sortedDesc = [...pastEntries].sort((a, b) => b.timestamp - a.timestamp)
+    const lastEntry = sortedDesc[0]
+    const daysSince = Math.floor((refTime - lastEntry.timestamp) / msPerDay)
+
+    // 2. Month Averages (Last 30 days vs 31-60 days ago)
+    const thirtyDaysAgo = refTime - (30 * msPerDay)
+    const sixtyDaysAgo = refTime - (60 * msPerDay)
+
+    const thisMonthEntries = pastEntries.filter((e) => e.timestamp >= thirtyDaysAgo)
+    const lastMonthEntries = pastEntries.filter((e) => e.timestamp >= sixtyDaysAgo && e.timestamp < thirtyDaysAgo)
+
+    const calcAvg = (entries: typeof trackerEntries) =>
+      entries.length > 0 ? entries.reduce((sum, e) => sum + (e.value ?? 0), 0) / entries.length : 0
+
+    const currentAvg = calcAvg(thisMonthEntries)
+    const prevAvg = calcAvg(lastMonthEntries)
+
+    // 3. Percentage Change
+    let percentChange = 0
+    if (prevAvg > 0) {
+      percentChange = ((currentAvg - prevAvg) / prevAvg) * 100
+    } else if (currentAvg > 0) {
+      percentChange = 100 // Infinite increase, cap at 100% for display
+    }
+
+    // 4. Entries This Week & Year (Relative to selectedDate)
+    const dayOfWeek = referenceDate.getDay()
+    const diffToMonday = referenceDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)
+
+    const startOfWeek = new Date(referenceDate.getTime())
+    startOfWeek.setDate(diffToMonday)
+    startOfWeek.setHours(0, 0, 0, 0)
+    const startOfWeekTime = startOfWeek.getTime()
+
+    const startOfYear = new Date(referenceDate.getFullYear(), 0, 1)
+    const startOfYearTime = startOfYear.getTime()
+
+    const entriesThisWeek = pastEntries.filter((e) => e.timestamp >= startOfWeekTime).length
+    const entriesThisYear = pastEntries.filter((e) => e.timestamp >= startOfYearTime).length
+
+    return {
+      monthAverage: currentAvg,
+      lastMonthAverage: prevAvg,
+      changeVsLastMonth: percentChange,
+      daysSinceLastEntry: daysSince,
+      entriesThisWeek,
+      entriesThisYear
+    }
+  }, [trackerEntries, selectedDate])
+
+  // Chart data: Filtered by 1M, 3M, 1Y bounds
+  const chartData = useMemo(() => {
+    if (!tracker) return []
+    const datesMap: Record<string, Entry[]> = {}
+
+    const referenceDate = new Date(selectedDate.getTime())
+    referenceDate.setHours(23, 59, 59, 999)
+    const refTime = referenceDate.getTime()
+
+    // Determine days back relative to selectedDate
+    const daysBack = chartTimeFilter === "1M" ? 30 : chartTimeFilter === "3M" ? 90 : 365
+    const cutoffDate = new Date(referenceDate.getTime())
+    cutoffDate.setDate(cutoffDate.getDate() - daysBack)
+    const cutoffTime = cutoffDate.getTime()
+
+    // Filter relevant entries
+    const relevantEntries = trackerEntries.filter(e => e.timestamp >= cutoffTime && e.timestamp <= refTime)
+
+    relevantEntries.forEach((entry) => {
+      const entryDateStr = entry.dateStr || dateToDateStr(new Date(entry.timestamp))
+      if (!datesMap[entryDateStr]) {
+        datesMap[entryDateStr] = []
+      }
+      datesMap[entryDateStr].push(entry)
+    })
+
+    const dates = Object.keys(datesMap).sort()
+    return dates.map((dateStr) => {
+      const dayEntries = datesMap[dateStr]
+      const trackerNameLower = tracker.name.toLowerCase()
+      const isWeightTracker = tracker.config.semanticType === 'weight' || trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
+      const isRatingType = tracker.type === "rating"
+
+      let aggregatedValue: number
+      if (isWeightTracker || isRatingType) {
+        aggregatedValue = dayEntries[dayEntries.length - 1]?.value ?? 0
+      } else {
+        aggregatedValue = dayEntries.reduce((acc, e) => acc + (e.value ?? 0), 0)
+      }
+
+      const date = dateStrToDate(dateStr)
+      return {
+        value: aggregatedValue,
+        // Shorten label if it's 1Y to avoid cramming
+        date: chartTimeFilter === "1Y"
+          ? date.toLocaleDateString("en", { month: "short" })
+          : date.toLocaleDateString("en", { month: "short", day: "numeric" }),
+        fullDate: dateStr,
+      }
+    })
+  }, [trackerEntries, tracker, chartTimeFilter, selectedDate])
+
+  // Heatmap data: "Year in Pixels"
+  const heatmapData = useMemo(() => {
+    const referenceDate = new Date(selectedDate.getTime())
+    referenceDate.setHours(0, 0, 0, 0)
+
+    // We want 364 days total (52 weeks exactly) ending today
+    const numDays = 364
+    const startDate = new Date(referenceDate.getTime())
+    startDate.setDate(referenceDate.getDate() - numDays + 1)
+
+    // Create an array mapping all dates
+    const daysArray = Array.from({ length: numDays }).map((_, i) => {
+      const d = new Date(startDate.getTime())
+      d.setDate(startDate.getDate() + i)
+      return dateToDateStr(d)
+    })
+
+    // Map intensity per date
+    const intensityMap: Record<string, number> = {}
+    let maxIntensity = 0
+
+    const refTimeEnd = new Date(selectedDate.getTime())
+    refTimeEnd.setHours(23, 59, 59, 999)
+
+    const pastEntries = trackerEntries.filter((e) => e.timestamp <= refTimeEnd.getTime())
+
+    pastEntries.forEach(entry => {
+      const dateStr = entry.dateStr || dateToDateStr(new Date(entry.timestamp))
+      if (!intensityMap[dateStr]) intensityMap[dateStr] = 0
+
+      // Binary/Task trackers add 1, others add their scalar value
+      const val = entry.value ?? 1
+      intensityMap[dateStr] += val
+
+      if (intensityMap[dateStr] > maxIntensity) {
+        maxIntensity = intensityMap[dateStr]
+      }
+    })
+
+    return { daysArray, intensityMap, maxIntensity }
+  }, [trackerEntries, selectedDate])
+
+  const Icon = tracker ? ICON_MAP[tracker.icon ?? ""] || CheckSquare : CheckSquare
+
+  // Render based on tracker type
+  const trackerNameLower = tracker?.name.toLowerCase() ?? ""
+  const isMediaType = tracker
+    ? trackerNameLower.includes("book") || trackerNameLower.includes("tv") ||
+      trackerNameLower.includes("movie") || trackerNameLower.includes("game") ||
+      trackerNameLower.includes("media") ||
+      tracker.icon === "book" || tracker.icon === "gamepad-2" || tracker.icon === "music"
+    : false
+  const isWeightType = tracker
+    ? tracker.config.semanticType === 'weight' || trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
+    : false
+  const isTaskType = tracker ? (tracker.type === "list" || tracker.type === "binary" || trackerNameLower.includes("task")) : false
+  const isDietType = tracker
+    ? trackerNameLower.includes("diet") || trackerNameLower.includes("calorie") || trackerNameLower.includes("food") || trackerNameLower.includes("meal") || tracker.icon === "salad"
+    : false
+  const isSavingsType = tracker
+    ? trackerNameLower.includes("saving") || trackerNameLower.includes("finance") || trackerNameLower.includes("money") || trackerNameLower.includes("budget") || tracker.icon === "wallet"
+    : false
+  const isNumericType = tracker ? (tracker.type === "numeric" || tracker.type === "range" || tracker.type === "counter") : false
+  const isMoodType = tracker
+    ? tracker.config.semanticType === "mood" || tracker.icon === "smile" || trackerNameLower.includes("mood")
+    : false
+
+  // Centralized semantic type detection
+  const semanticType = tracker ? getTrackerSemanticType(tracker) : "generic"
+  const isSleepType = semanticType === "sleep"
+  const isMeditationType = semanticType === "meditation"
+  const isHealthType = semanticType === "health"
+  const isGamingType = semanticType === "gaming"
+  const isBookType = semanticType === "book"
+  const isExerciseType = semanticType === "exercise"
+  const isSocialType = semanticType === "social"
+
+  const weightDisplayUnit = ((tracker?.config as Record<string, unknown>)?.unit as "lbs" | "kg" | undefined) ?? "lbs"
+  const lbsToGoal = weightProgress?.currentWeight != null && weightProgress.goalWeight != null
+    ? Math.max(0, Math.abs(weightProgress.currentWeight - weightProgress.goalWeight))
+    : null
+  const progressDirection = weightProgress?.direction ?? "neutral"
+  const directionTone =
+    progressDirection === "loss"
+      ? "from-emerald-500/10 via-emerald-500/5 to-transparent"
+      : progressDirection === "gain"
+        ? "from-rose-500/10 via-rose-500/5 to-transparent"
+        : "from-transparent via-transparent to-transparent"
+  const goalCardClasses =
+    progressDirection === "loss"
+      ? "border-emerald-500/30 bg-emerald-500/10"
+      : progressDirection === "gain"
+        ? "border-rose-500/30 bg-rose-500/10"
+        : "border-white/5 bg-white/[0.03]"
+  const lossCardClasses =
+    progressDirection === "loss"
+      ? "border-emerald-500/30 bg-emerald-500/10"
+      : progressDirection === "gain"
+        ? "border-rose-500/30 bg-rose-500/10"
+        : "border-white/5 bg-white/[0.03]"
+  const progressTextClasses =
+    progressDirection === "loss"
+      ? "text-emerald-300"
+      : progressDirection === "gain"
+        ? "text-rose-300"
+        : "text-[hsl(266_73%_63%)]"
+  const streakTextClasses =
+    progressDirection === "loss"
+      ? "text-emerald-300"
+      : progressDirection === "gain"
+        ? "text-rose-300"
+        : "text-white"
+
+  const weightTracker = useMemo(() => findTrackerByRole(trackers, "weight"), [trackers])
+  const exerciseTracker = useMemo(() => findTrackerByRole(trackers, "exercise"), [trackers])
+  const dietTracker = useMemo(() => findTrackerByRole(trackers, "diet"), [trackers])
+  const insightsTargetTracker = isWeightType ? tracker : weightTracker
+  const insightsNeedsMoreData = trackerEntries.length < 30
+  const insightsDaysRemaining = Math.max(0, 30 - trackerEntries.length)
+
+  useEffect(() => {
+    if (customSourceTrackerId === "" && exerciseTracker) {
+      setCustomSourceTrackerId(exerciseTracker.id)
+    }
+    if (customTargetTrackerId === "" && insightsTargetTracker) {
+      setCustomTargetTrackerId(insightsTargetTracker.id)
+    }
+  }, [customSourceTrackerId, customTargetTrackerId, exerciseTracker, insightsTargetTracker])
+
+  useEffect(() => {
+    resetCustomCorrelation()
+  }, [customSourceTrackerId, customTargetTrackerId, customOffsetDays, resetCustomCorrelation])
+
+  useEffect(() => {
+    if (activeTab !== "insights" || !isWeightType || !insightsTargetTracker) {
+      setInsightsResults(null)
+      setInsightsError(null)
+      setInsightsLoading(false)
+      return
+    }
+
+    if (insightsNeedsMoreData) {
+      setInsightsResults(null)
+      setInsightsError(null)
+      setInsightsLoading(false)
+      return
+    }
+
+    if (!exerciseTracker || !dietTracker) {
+      setInsightsResults(null)
+      setInsightsError("Could not find the Exercise or Diet tracker.")
+      setInsightsLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setInsightsResults(null)
+    setInsightsLoading(true)
+    setInsightsError(null)
+
+    Promise.all([
+      window.api.calculateImpact(exerciseTracker.id, insightsTargetTracker.id, 0),
+      window.api.calculateImpact(dietTracker.id, insightsTargetTracker.id, 1),
+    ])
+      .then(([exercise, diet]) => {
+        if (cancelled) return
+        setInsightsResults({
+          exercise,
+          diet,
+        })
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setInsightsResults(null)
+        setInsightsError(error instanceof Error ? error.message : "Failed to load weight insights.")
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setInsightsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, isWeightType, insightsTargetTracker, insightsNeedsMoreData, exerciseTracker, dietTracker])
+
+  const weightChartDaysBack = getWeightChartDaysBack(weightChartRange)
+  const weightChartDefaultGranularity = getDefaultWeightChartGranularity(weightChartDaysBack)
+
+  useEffect(() => {
+    if (!isWeightType) return
+    if (!weightGranularityLocked) {
+      setWeightChartGranularity(weightChartDefaultGranularity)
+    }
+  }, [isWeightType, weightGranularityLocked, weightChartDefaultGranularity])
+
+  const { data: weightChartData = [], isLoading: isWeightChartLoading } = useTrackerChartData(
+    trackerId,
+    weightChartDaysBack,
+    weightChartGranularity,
+    isWeightType
+  )
+
+  const handleWeightChartGranularityChange = (nextGranularity: TrackerChartGranularity) => {
+    setWeightChartGranularity(nextGranularity)
+    setWeightGranularityLocked(true)
+
+    const nextLayout: DashboardLayoutData = normalizedDashboardLayout?.widgets?.length
+      ? {
+          widgets: normalizedDashboardLayout.widgets,
+          weightChartGranularity: nextGranularity === "daily" || nextGranularity === "weekly"
+            ? nextGranularity
+            : "daily",
+        }
+      : {
+          weightChartGranularity: nextGranularity === "daily" || nextGranularity === "weekly"
+            ? nextGranularity
+            : "daily",
+        }
+
+    saveDashboardLayoutMutation.mutate(nextLayout)
+  }
+
+  const weightChartDisplayData = useMemo(() => {
+    return weightChartData.map((point: TrackerChartPoint) => ({
+      ...point,
+      label: formatWeightChartLabel(point.date, weightChartGranularity),
+    }))
+  }, [weightChartData, weightChartGranularity])
+
+  // 7-day rolling average computation
+  const rollingAverageData = useMemo(() => {
+    if (!weightChartDisplayData.length) return []
+    return weightChartDisplayData.map((_point, index) => {
+      const startIdx = Math.max(0, index - 6)
+      const window = weightChartDisplayData.slice(startIdx, index + 1)
+      const sum = window.reduce((acc, p) => acc + (p.value ?? 0), 0)
+      return {
+        ..._point,
+        value: parseFloat((sum / window.length).toFixed(2)),
+        label: _point.label,
+        date: _point.date,
+        fullDate: _point.fullDate,
+      }
+    })
+  }, [weightChartDisplayData])
+
+  if (!tracker) return null
+
+  return (
+    <div className="flex flex-col h-full overflow-y-auto">
+      {/* Hero Header */}
+      <div className="mb-8 relative overflow-hidden">
+        <div className={cn("absolute inset-0 bg-gradient-to-br pointer-events-none", directionTone)} />
+        <div className="flex items-center gap-4 mb-4">
+          <div className="p-4 rounded-2xl bg-white/[0.06]">
+            <Icon className="w-8 h-8 text-white/70" style={{ color: tracker.color ?? undefined }} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-display font-bold text-white">{tracker.name}</h1>
+            <p className="text-sm text-white/60 mt-1">
+              {selectedDate.toLocaleDateString("en-US", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric"
+              })}
+            </p>
+          </div>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex items-center gap-2 border-b border-white/10 pb-4 mb-4">
+          <button
+            className={cn(
+              "px-4 py-2 rounded-xl text-sm font-medium transition-all",
+              activeTab === "stats"
+                ? "bg-[hsl(266_73%_63%)] text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]"
+                : "text-white/50 hover:text-white hover:bg-white/5"
+            )}
+            onClick={() => setActiveTab("stats")}
+          >
+            Statistics
+          </button>
+          <button
+            className={cn(
+              "px-4 py-2 rounded-xl text-sm font-medium transition-all",
+              activeTab === "graphs"
+                ? "bg-[hsl(266_73%_63%)] text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]"
+                : "text-white/50 hover:text-white hover:bg-white/5"
+            )}
+            onClick={() => setActiveTab("graphs")}
+          >
+            Graphs
+          </button>
+          <button
+            className={cn(
+              "px-4 py-2 rounded-xl text-sm font-medium transition-all",
+              activeTab === "entries"
+                ? "bg-[hsl(266_73%_63%)] text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]"
+                : "text-white/50 hover:text-white hover:bg-white/5"
+            )}
+            onClick={() => setActiveTab("entries")}
+          >
+            Entries
+          </button>
+          {isWeightType && (
+            <button
+              className={cn(
+                "px-4 py-2 rounded-xl text-sm font-medium transition-all",
+                activeTab === "insights"
+                  ? "bg-[hsl(266_73%_63%)] text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]"
+                  : "text-white/50 hover:text-white hover:bg-white/5"
+              )}
+              onClick={() => setActiveTab("insights")}
+            >
+              Insights
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tab Content Rendering */}
+      <div className="flex-1 overflow-y-auto">
+        {activeTab === "stats" && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-3 gap-4">
+              {isWeightType ? (
+                <>
+                  <div className="border rounded-xl p-4 transition-colors bg-white/[0.03] border-white/5">
+                    <div className="text-xs text-white/60 mb-1">Current Weight</div>
+                    <div className="text-2xl font-bold text-white">
+                      {weightProgress?.currentWeight != null ? formatWeight(weightProgress.currentWeight, weightDisplayUnit) : "--"}
+                    </div>
+                  </div>
+                  <div className={cn("border rounded-xl p-4 transition-colors", goalCardClasses)}>
+                    <div className="text-xs text-white/60 mb-1">Goal Progress</div>
+                    {weightProgress?.goalWeight != null ? (
+                      <>
+                        <div className={cn("text-2xl font-bold", progressTextClasses)}>
+                          {Math.round(weightProgress.percentSinceGoal)}%
+                        </div>
+                        <div className="text-xs text-white/40 mt-1">
+                          {weightProgress.lostSinceGoal != null ? (
+                            <>
+                              {weightProgress.lostSinceGoal > 0 ? (
+                                <span className="text-emerald-400">-{weightProgress.lostSinceGoal.toFixed(1)}</span>
+                              ) : weightProgress.lostSinceGoal < 0 ? (
+                                <span className="text-rose-400">+{Math.abs(weightProgress.lostSinceGoal).toFixed(1)}</span>
+                              ) : (
+                                <span>On target</span>
+                              )}
+                              <span className="text-white/40"> since goal</span>
+                            </>
+                          ) : (
+                            `${lbsToGoal?.toFixed(1)} lbs to goal`
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold text-white/40">--</div>
+                        <div className="text-xs text-white/40 mt-1">No goal set</div>
+                      </>
+                    )}
+                  </div>
+                  <div className={cn("border rounded-xl p-4 transition-colors", lossCardClasses)}>
+                    <div className="text-xs text-white/60 mb-1">Loss Streak</div>
+                    <div className={cn("text-2xl font-bold", streakTextClasses)}>
+                      {weightProgress?.lossStreak ?? 0} days
+                    </div>
+                  </div>
+                </>
+              ) : isSleepType && sleepStats ? (
+                /* Sleep specialized stats */
+                <>
+                  <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                    <div className="text-xs text-white/60 mb-1">Avg Duration</div>
+                    <div className="text-2xl font-bold text-white">
+                      {sleepStats.averageDuration ? `${sleepStats.averageDuration.toFixed(1)}h` : "--"}
+                    </div>
+                  </div>
+                  <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                    <div className="text-xs text-white/60 mb-1">Avg Quality</div>
+                    <div className="text-2xl font-bold text-[hsl(266_73%_63%)]">
+                      {sleepStats.averageQuality ? `${sleepStats.averageQuality.toFixed(1)}/10` : "--"}
+                    </div>
+                  </div>
+                  <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                    <div className="text-xs text-white/60 mb-1">Total Entries</div>
+                    <div className="text-2xl font-bold text-white">{totalCount}</div>
+                  </div>
+                </>
+              ) : isMeditationType && meditationStats ? (
+                /* Meditation specialized stats */
+                <>
+                  <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                    <div className="text-xs text-white/60 mb-1">Avg Duration</div>
+                    <div className="text-2xl font-bold text-white">
+                      {meditationStats.averageDuration ? `${meditationStats.averageDuration.toFixed(0)} min` : "--"}
+                    </div>
+                  </div>
+                  <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                    <div className="text-xs text-white/60 mb-1">Total Sessions</div>
+                    <div className="text-2xl font-bold text-white">{meditationStats.totalSessions ?? totalCount}</div>
+                  </div>
+                  <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                    <div className="text-xs text-white/60 mb-1">Current Streak</div>
+                    <div className="text-2xl font-bold text-[hsl(266_73%_63%)]">{currentStreak} days</div>
+                  </div>
+                </>
+              ) : isHealthType && healthStats ? (
+                /* Health specialized stats */
+                <>
+                  <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                    <div className="text-xs text-white/60 mb-1">Avg Severity</div>
+                    <div className="text-2xl font-bold text-white">
+                      {healthStats.averageSeverity ? `${healthStats.averageSeverity.toFixed(1)}/10` : "--"}
+                    </div>
+                  </div>
+                  <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                    <div className="text-xs text-white/60 mb-1">Total Entries</div>
+                    <div className="text-2xl font-bold text-white">{totalCount}</div>
+                  </div>
+                  <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                    <div className="text-xs text-white/60 mb-1">Current Streak</div>
+                    <div className="text-2xl font-bold text-[hsl(266_73%_63%)]">{currentStreak} days</div>
+                  </div>
+                </>
+              ) : isMoodType && moodStats ? (
+                <>
+                  <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                    <div className="text-xs text-white/60 mb-1">Total Entries</div>
+                    <div className="text-2xl font-bold text-white">{totalCount}</div>
+                  </div>
+                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-300 mb-1">
+                      <ArrowUp className="w-3 h-3" />
+                      Peak
+                    </div>
+                    <div className="text-2xl font-bold text-emerald-300">
+                      {moodStats.highestMood.value}/10
+                    </div>
+                    <div className="text-xs text-white/40 mt-1">{moodStats.highestMood.dateStr}</div>
+                  </div>
+                  <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4">
+                    <div className="flex items-center gap-1.5 text-xs text-rose-300 mb-1">
+                      <ArrowDown className="w-3 h-3" />
+                      Low
+                    </div>
+                    <div className="text-2xl font-bold text-rose-300">
+                      {moodStats.lowestMood.value}/10
+                    </div>
+                    <div className="text-xs text-white/40 mt-1">{moodStats.lowestMood.dateStr}</div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                    <div className="text-xs text-white/60 mb-1">Total Entries</div>
+                    <div className="text-2xl font-bold text-white">{totalCount}</div>
+                  </div>
+                  <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                    <div className="text-xs text-white/60 mb-1">Current Streak</div>
+                    <div className="text-2xl font-bold text-[hsl(266_73%_63%)]">{currentStreak} days</div>
+                  </div>
+                  <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                    <div className="text-xs text-white/60 mb-1">Average Value</div>
+                    <div className="text-2xl font-bold text-white">
+                      {averageValue > 0 ? averageValue.toFixed(1) : "--"}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Deep Analytics Row */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {!isNumericType ? (
+                <>
+                  <div className="bg-white/[0.03] border border-[hsl(266_73%_63%_/_0.2)] rounded-xl p-4 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-gradient-to-br from-[hsl(266_73%_63%_/_0.1)] to-transparent opacity-50" />
+                    <div className="text-xs text-white/70 mb-1 relative z-10">
+                      {isMediaType ? "Items This Week" : isDietType ? "Meals This Week" : isTaskType ? "Tasks This Week" : "Entries This Week"}
+                    </div>
+                    <div className="text-3xl font-bold text-white relative z-10">
+                      {entriesThisWeek}
+                    </div>
+                  </div>
+                  <div className="bg-white/[0.03] border border-[hsl(266_73%_63%_/_0.2)] rounded-xl p-4 relative overflow-hidden group hidden md:block">
+                    <div className="absolute inset-0 bg-gradient-to-br from-[hsl(266_73%_63%_/_0.1)] to-transparent opacity-50" />
+                    <div className="text-xs text-white/70 mb-1 relative z-10">
+                      {isMediaType ? "Items This Year" : isDietType ? "Meals This Year" : isTaskType ? "Tasks This Year" : "Entries This Year"}
+                    </div>
+                    <div className="text-3xl font-bold text-white relative z-10">
+                      {entriesThisYear}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-white/[0.03] border border-[hsl(266_73%_63%_/_0.2)] rounded-xl p-4 relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-gradient-to-br from-[hsl(266_73%_63%_/_0.1)] to-transparent opacity-50" />
+                  <div className="text-xs text-white/70 mb-1 relative z-10">30-Day Average</div>
+                  <div className="flex items-end gap-2 relative z-10">
+                    <div className="text-3xl font-bold text-white">
+                      {monthAverage > 0 ? monthAverage.toFixed(1) : "--"}
+                    </div>
+                    {changeVsLastMonth !== 0 && (
+                      <div className={cn(
+                        "text-sm mb-1 font-medium flex items-center justify-center",
+                        changeVsLastMonth > 0 ? "text-emerald-400" : "text-rose-400"
+                      )} title={`Last month average: ${lastMonthAverage.toFixed(1)}`}>
+                        {changeVsLastMonth > 0 ? "+" : ""}{changeVsLastMonth.toFixed(0)}%
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                <div className="text-xs text-white/60 mb-1">
+                  {isMediaType ? "Days Since Last Item" : isDietType ? "Days Since Last Meal" : isTaskType ? "Days Since Last Task" : "Days Since Last Entry"}
+                </div>
+                <div className="text-3xl font-bold text-white">
+                  {daysSinceLastEntry !== null ? daysSinceLastEntry : "--"}
+                  <span className="text-sm font-normal text-white/40 ml-1">days</span>
+                </div>
+              </div>
+
+              {/* Optional Empty placeholder slot to preserve grid aesthetics */}
+              {isNumericType && (
+                <div className="hidden md:flex bg-white/[0.01] border border-white/5 border-dashed rounded-xl p-4 items-center justify-center text-white/20 text-xs">
+                  Insights Engine Active
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Graphs Tab */}
+        {activeTab === "graphs" && (
+          <div className="space-y-6">
+            <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-semibold text-white">Trend History</h2>
+                {isWeightType ? (
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-lg border border-white/5">
+                      {WEIGHT_CHART_RANGES.map((range) => (
+                        <button
+                          key={range.value}
+                          onClick={() => setWeightChartRange(range.value)}
+                          className={cn(
+                            "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                            weightChartRange === range.value
+                              ? "bg-[hsl(266_73%_63%)] text-white"
+                              : "text-white/40 hover:text-white/80 hover:bg-white/5"
+                          )}
+                        >
+                          {range.value}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-lg border border-white/5">
+                      {(["daily", "weekly"] as const).map((granularity) => (
+                        <button
+                          key={granularity}
+                          onClick={() => handleWeightChartGranularityChange(granularity)}
+                          className={cn(
+                            "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                            weightChartGranularity === granularity
+                              ? "bg-[hsl(266_73%_63%)] text-white"
+                              : "text-white/40 hover:text-white/80 hover:bg-white/5"
+                          )}
+                        >
+                          {granularity === "daily" ? "Daily" : "Weekly avg"}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-lg border border-white/5">
+                      <button
+                        onClick={() => setChartType("area")}
+                        className={cn(
+                          "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                          chartType === "area"
+                            ? "bg-[hsl(266_73%_63%)] text-white"
+                            : "text-white/40 hover:text-white/80 hover:bg-white/5"
+                        )}
+                      >
+                        Line
+                      </button>
+                      <button
+                        onClick={() => setChartType("bar")}
+                        className={cn(
+                          "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                          chartType === "bar"
+                            ? "bg-[hsl(266_73%_63%)] text-white"
+                            : "text-white/40 hover:text-white/80 hover:bg-white/5"
+                        )}
+                      >
+                        Bar
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-lg border border-white/5">
+                      <button
+                        onClick={() => setRollingAverageEnabled(!rollingAverageEnabled)}
+                        className={cn(
+                          "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                          rollingAverageEnabled
+                            ? "bg-[hsl(266_73%_63%)] text-white"
+                            : "text-white/40 hover:text-white/80 hover:bg-white/5"
+                        )}
+                      >
+                        7d Avg
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-lg border border-white/5">
+                    {(["1M", "3M", "1Y"] as const).map(filter => (
+                      <button
+                        key={filter}
+                        onClick={() => setChartTimeFilter(filter)}
+                        className={cn(
+                          "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                          chartTimeFilter === filter
+                            ? "bg-[hsl(266_73%_63%)] text-white"
+                            : "text-white/40 hover:text-white/80 hover:bg-white/5"
+                        )}
+                      >
+                        {filter}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setChartType("area")}
+                      className={cn(
+                        "ml-2 px-3 py-1 text-xs font-medium rounded-md transition-all",
+                        chartType === "area"
+                          ? "bg-[hsl(266_73%_63%)] text-white"
+                          : "text-white/40 hover:text-white/80 hover:bg-white/5"
+                      )}
+                    >
+                      Line
+                    </button>
+                    <button
+                      onClick={() => setChartType("bar")}
+                      className={cn(
+                        "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                        chartType === "bar"
+                          ? "bg-[hsl(266_73%_63%)] text-white"
+                          : "text-white/40 hover:text-white/80 hover:bg-white/5"
+                      )}
+                    >
+                      Bar
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {isWeightType ? (
+                isWeightChartLoading && weightChartDisplayData.length === 0 ? (
+                  <div className="h-64 flex items-center justify-center text-white/30 text-sm">
+                    Loading weight trend...
+                  </div>
+                ) : weightChartDisplayData.length > 1 ? (
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      {chartType === "area" ? (
+                        <AreaChart data={rollingAverageEnabled ? rollingAverageData : weightChartDisplayData}>
+                          <defs>
+                            <linearGradient id={`gradient-detail-${tracker.id}`} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="hsl(266 73% 63%)" stopOpacity={0.3} />
+                              <stop offset="100%" stopColor="hsl(266 73% 63%)" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <XAxis
+                            dataKey="label"
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fontSize: 11, fill: "rgba(255,255,255,0.5)" }}
+                            interval="preserveStartEnd"
+                          />
+                          <YAxis hide domain={["auto", "auto"]} />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Area
+                            type="monotone"
+                            dataKey="value"
+                            stroke="hsl(266 73% 63%)"
+                            strokeWidth={2}
+                            fill={`url(#gradient-detail-${tracker.id})`}
+                          />
+                        </AreaChart>
+                      ) : (
+                        <BarChart data={rollingAverageEnabled ? rollingAverageData : weightChartDisplayData}>
+                          <XAxis
+                            dataKey="label"
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fontSize: 11, fill: "rgba(255,255,255,0.5)" }}
+                            interval="preserveStartEnd"
+                          />
+                          <YAxis hide domain={["auto", "auto"]} />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                            {(rollingAverageEnabled ? rollingAverageData : weightChartDisplayData).map((_, index) => (
+                              <Cell key={`cell-${index}`} fill="hsl(266 73% 63%)" />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      )}
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="h-64 flex items-center justify-center text-white/30 text-sm">
+                    Not enough data within {weightChartRange} to plot a trend.
+                  </div>
+                )
+              ) : chartData.length > 1 ? (
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    {chartType === "area" ? (
+                      <AreaChart data={chartData}>
+                        <defs>
+                          <linearGradient id={`gradient-detail-${tracker.id}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="hsl(266 73% 63%)" stopOpacity={0.3} />
+                            <stop offset="100%" stopColor="hsl(266 73% 63%)" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <XAxis
+                          dataKey="date"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: "rgba(255,255,255,0.5)" }}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis hide domain={["auto", "auto"]} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Area
+                          type="monotone"
+                          dataKey="value"
+                          stroke="hsl(266 73% 63%)"
+                          strokeWidth={2}
+                          fill={`url(#gradient-detail-${tracker.id})`}
+                        />
+                      </AreaChart>
+                    ) : (
+                      <BarChart data={chartData}>
+                        <XAxis
+                          dataKey="date"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: "rgba(255,255,255,0.5)" }}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis hide domain={["auto", "auto"]} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                          {chartData.map((_, index) => (
+                            <Cell key={`cell-${index}`} fill="hsl(266 73% 63%)" />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-64 flex items-center justify-center text-white/30 text-sm">
+                  Not enough data within {chartTimeFilter} to plot a trend.
+                </div>
+              )}
+            </div>
+
+            {/* Year in Pixels Heatmap */}
+            <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-6 overflow-x-auto">
+              <h2 className="text-lg font-semibold text-white mb-6">Year in Pixels</h2>
+              <div className="min-w-[700px]">
+                {/* 52 columns, 7 rows layout (roughly year length) */}
+                <div
+                  className="grid gap-1"
+                  style={{
+                    gridTemplateColumns: 'repeat(52, minmax(0, 1fr))',
+                    gridTemplateRows: 'repeat(7, minmax(0, 1fr))',
+                    gridAutoFlow: 'column'
+                  }}
+                >
+                  {heatmapData.daysArray.map((dateStr, i) => {
+                    const intensity = heatmapData.intensityMap[dateStr] || 0
+
+                    // Simple opacity calculation relative to the max intensity
+                    let opacity = 0
+                    if (intensity > 0 && heatmapData.maxIntensity > 0) {
+                      // Minimum opacity of 0.2 if there's any value, max 1.0
+                      opacity = 0.2 + (0.8 * (intensity / heatmapData.maxIntensity))
+                    }
+
+                    return (
+                      <div
+                        key={i}
+                        className={cn(
+                          "w-3 h-3 rounded-[2px] transition-colors",
+                          intensity > 0 ? "bg-[hsl(266_73%_63%)]" : "bg-white/[0.03] border border-white/5"
+                        )}
+                        style={intensity > 0 ? { opacity } : {}}
+                        title={`${dateStr}: ${intensity.toFixed(1)}`}
+                      />
+                    )
+                  })}
+                </div>
+                <div className="flex justify-between text-xs text-white/40 mt-3 px-1">
+                  <span>Less</span>
+                  <div className="flex gap-1 items-center">
+                    {[0, 0.25, 0.5, 0.75, 1].map((lvl, i) => (
+                      <div
+                        key={i}
+                        className={cn("w-3 h-3 rounded-[2px]", lvl === 0 ? "bg-white/[0.03] border border-white/5" : "bg-[hsl(266_73%_63%)]")}
+                        style={lvl > 0 ? { opacity: 0.2 + (0.8 * lvl) } : {}}
+                      />
+                    ))}
+                  </div>
+                  <span>More</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Insights Tab */}
+        {activeTab === "insights" && isWeightType && (
+          <div className="space-y-6">
+            {insightsNeedsMoreData ? (
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 text-amber-100">
+                Need more data — keep logging for {insightsDaysRemaining} more {insightsDaysRemaining === 1 ? "day" : "days"}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {insightsLoading && (
+                  <div className="flex items-center gap-2 rounded-2xl border border-white/5 bg-white/[0.03] p-5 text-white/60">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading weight insights...
+                  </div>
+                )}
+
+                {insightsError && (
+                  <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-5 text-rose-100">
+                    {insightsError}
+                  </div>
+                )}
+
+                {insightsResults && (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="space-y-2">
+                      <div className="text-xs uppercase tracking-wider text-white/40">Exercise → Weight</div>
+                      <CorrelationResultCard result={insightsResults.exercise} trackers={trackers} />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-xs uppercase tracking-wider text-white/40">Diet → Weight</div>
+                      <CorrelationResultCard result={insightsResults.diet} trackers={trackers} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <Target className="w-4 h-4 text-[hsl(266_73%_63%)]" />
+                <h2 className="text-lg font-semibold text-white">Custom pair</h2>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,120px)_auto] lg:items-end">
+                <div className="space-y-1">
+                  <label className="text-xs uppercase tracking-wider text-white/40">Source</label>
+                  <select
+                    value={customSourceTrackerId}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      setCustomSourceTrackerId(value === "" ? "" : Number(value))
+                    }}
+                    className="w-full rounded-xl border border-white/10 bg-[hsl(210_20%_12%)] px-3 py-2 text-sm text-white outline-none focus:border-[hsl(266_73%_63%)]"
+                  >
+                    <option value="">Select source</option>
+                    {trackers.map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {candidate.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="hidden lg:flex items-center justify-center text-white/25 pb-2">
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs uppercase tracking-wider text-white/40">Target</label>
+                  <select
+                    value={customTargetTrackerId}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      setCustomTargetTrackerId(value === "" ? "" : Number(value))
+                    }}
+                    className="w-full rounded-xl border border-white/10 bg-[hsl(210_20%_12%)] px-3 py-2 text-sm text-white outline-none focus:border-[hsl(266_73%_63%)]"
+                  >
+                    <option value="">Select target</option>
+                    {trackers.map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {candidate.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs uppercase tracking-wider text-white/40">Offset days</label>
+                  <input
+                    type="number"
+                    value={customOffsetDays}
+                    onChange={(event) => setCustomOffsetDays(Number(event.target.value) || 0)}
+                    className="w-full rounded-xl border border-white/10 bg-[hsl(210_20%_12%)] px-3 py-2 text-sm text-white outline-none focus:border-[hsl(266_73%_63%)]"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (customSourceTrackerId === "" || customTargetTrackerId === "" || customSourceTrackerId === customTargetTrackerId) {
+                      return
+                    }
+                    calculateCustomCorrelation(customSourceTrackerId, customTargetTrackerId, customOffsetDays)
+                  }}
+                  disabled={
+                    customSourceTrackerId === "" ||
+                    customTargetTrackerId === "" ||
+                    customSourceTrackerId === customTargetTrackerId ||
+                    isCustomInsightCalculating
+                  }
+                  className="rounded-xl border border-[hsl(266_73%_63%)] bg-[hsl(266_73%_63%)] px-4 py-2 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isCustomInsightCalculating ? "Calculating..." : "Calculate"}
+                </button>
+              </div>
+
+              {customInsightError && (
+                <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-100">
+                  {customInsightError}
+                </div>
+              )}
+
+              {customInsightResult && (
+                <CorrelationResultCard result={customInsightResult} trackers={trackers} />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Entries Tab */}
+        {activeTab === "entries" && (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              {isToday ? "History" : `History for ${selectedDate.toLocaleDateString()}`}
+            </h2>
+
+            {historyEntries.length === 0 ? (
+              <div className="text-center py-12 text-white/40">
+                <p className="text-sm">No entries for {selectedDate.toLocaleDateString()}</p>
+              </div>
+            ) : isSleepType ? (
+              /* Sleep entries from dedicated table */
+              <div className="space-y-4">
+                {sleepEntries.map((entry) => (
+                  <SleepEntryCard
+                    key={entry.id}
+                    entry={entry as any}
+                    onEdit={() => {}}
+                    onDelete={() => {}}
+                  />
+                ))}
+              </div>
+            ) : isMeditationType ? (
+              /* Meditation entries from dedicated table */
+              <div className="space-y-4">
+                {meditationEntries.map((entry) => (
+                  <MeditationEntryCard
+                    key={entry.id}
+                    entry={entry as any}
+                    onEdit={() => {}}
+                    onDelete={() => {}}
+                  />
+                ))}
+              </div>
+            ) : isHealthType ? (
+              /* Health entries from dedicated table */
+              <div className="space-y-4">
+                {healthEntries.map((entry) => (
+                  <HealthEntryCard
+                    key={entry.id}
+                    entry={entry as any}
+                    onEdit={() => {}}
+                    onDelete={() => {}}
+                  />
+                ))}
+              </div>
+            ) : isDietType ? (
+              /* Diet entries from dedicated table */
+              <div className="space-y-4">
+                {dietEntries.map((entry) => (
+                  <DietEntryCard
+                    key={entry.id}
+                    entry={entry as any}
+                    onEdit={() => {}}
+                    onDelete={() => {}}
+                  />
+                ))}
+              </div>
+            ) : isGamingType ? (
+              /* Gaming entries from dedicated table */
+              <div className="space-y-4">
+                {gamingEntries.map((entry) => (
+                  <GamingEntryCard
+                    key={entry.id}
+                    entry={entry as any}
+                    onEdit={() => {}}
+                    onDelete={() => {}}
+                  />
+                ))}
+              </div>
+            ) : isBookType ? (
+              /* Book entries from dedicated table */
+              <div className="space-y-4">
+                {bookEntries.map((entry) => (
+                  <BookEntryCard
+                    key={entry.id}
+                    entry={entry as any}
+                    onEdit={() => {}}
+                    onDelete={() => {}}
+                  />
+                ))}
+              </div>
+            ) : isMoodType || semanticType === "mood" ? (
+              /* Mood entries from dedicated table */
+              <div className="space-y-4">
+                {moodEntries.map((entry) => (
+                  <MoodEntryCard
+                    key={entry.id}
+                    entry={entry as any}
+                    onEdit={() => {}}
+                    onDelete={() => {}}
+                  />
+                ))}
+              </div>
+            ) : isExerciseType ? (
+              /* Exercise entries from dedicated table */
+              <div className="space-y-4">
+                {exerciseEntries.map((entry) => (
+                  <ExerciseEntryCard
+                    key={entry.id}
+                    entry={entry as any}
+                    onEdit={() => {}}
+                    onDelete={() => {}}
+                  />
+                ))}
+              </div>
+            ) : isMediaType ? (
+              /* The Shelf - Media Grid: Asset as hero, fallback placeholder */
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {historyEntries.map((entry) => {
+                  const asset = entry.assetId != null ? assets.get(entry.assetId) : null
+                  return (
+                    <div
+                      key={entry.id}
+                      className="group relative bg-white/[0.03] border border-white/5 rounded-xl overflow-hidden hover:bg-white/[0.05] transition-colors"
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
+                    >
+                      <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="aspect-[2/3] overflow-hidden bg-white/[0.04] flex items-center justify-center">
+                        {asset ? (
+                          <img
+                            src={resolveChimeroAssetUrl(asset.thumbnailUrl || asset.assetUrl)}
+                            alt={entry.note || "Media"}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <ImageIcon className="w-12 h-12 text-white/20" aria-hidden />
+                        )}
+                      </div>
+                      <div className="p-3">
+                        <div className="text-sm font-medium text-white/90 truncate mb-1">
+                          {entry.note || "Untitled"}
+                        </div>
+                        {entry.value != null && entry.value > 0 && (
+                          <div className="flex items-center gap-1">
+                            <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                            <span className="text-xs text-white/50">{entry.value}</span>
+                          </div>
+                        )}
+                        <div className="text-xs text-white/40 mt-1">
+                          {new Date(entry.timestamp).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : isWeightType ? (
+              /* The Gallery - Weight with Photos: Large inline attachments */
+              <div className="space-y-4">
+                {historyEntries.map((entry) => {
+                  const change = historyEntries.length > 1
+                    ? (entry.value ?? 0) - (historyEntries[historyEntries.indexOf(entry) + 1]?.value ?? entry.value ?? 0)
+                    : 0
+                  const asset = entry.assetId != null ? assets.get(entry.assetId) : null
+                  return (
+                    <div
+                      key={entry.id}
+                      className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
+                    >
+                      <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm text-white/60">
+                          {new Date(entry.timestamp).toLocaleDateString()}
+                        </div>
+                        {change !== 0 && (
+                          <div className={cn(
+                            "flex items-center gap-1 text-xs",
+                            change > 0 ? "text-rose-400" : "text-emerald-400"
+                          )}>
+                            {change > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                            {Math.abs(change).toFixed(1)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-2xl font-bold text-white mb-2">
+                        {entry.value?.toFixed(1)}{(tracker.config as Record<string, unknown>)?.unit as string || "kg"}
+                      </div>
+                      {entry.note && (
+                        <div className="text-sm text-white/60 mb-2">{entry.note}</div>
+                      )}
+                      {asset && (
+                        <div className="mt-3 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
+                          <img
+                            src={resolveChimeroAssetUrl(asset.thumbnailUrl || asset.assetUrl)}
+                            alt="Weight photo"
+                            className="w-full h-auto max-h-[300px] object-contain"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : isTaskType ? (
+              /* The Timeline - Tasks/Journal with inline attachment */
+              <div className="space-y-3">
+                {historyEntries.map((entry) => {
+                  const asset = entry.assetId != null ? assets.get(entry.assetId) : null
+                  return (
+                    <div
+                      key={entry.id}
+                      className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
+                    >
+                      <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="w-2 h-2 rounded-full bg-[hsl(266_73%_63%)] mt-2 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-white/90 mb-1">{entry.note || "Task"}</div>
+                          {asset && (
+                            <div className="mt-2 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
+                              <img
+                                src={resolveChimeroAssetUrl(asset.thumbnailUrl || asset.assetUrl)}
+                                alt=""
+                                className="w-full h-auto max-h-[300px] object-contain"
+                              />
+                            </div>
+                          )}
+                          <div className="text-xs text-white/40 mt-2">
+                            {new Date(entry.timestamp).toLocaleString()}
+                          </div>
+                        </div>
+                        {entry.value != null && entry.value >= 1 && (
+                          <CheckSquare className="w-5 h-5 text-emerald-400 shrink-0" />
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : isDietType ? (
+              /* The Ledger - Diet: Large inline meal photos */
+              <div className="space-y-4">
+                {historyEntries.map((entry) => {
+                  const value = entry.value ?? 0
+                  const isHighCal = averageValue > 0 && value > averageValue * 1.3
+                  const asset = entry.assetId != null ? assets.get(entry.assetId) : null
+                  return (
+                    <div
+                      key={entry.id}
+                      className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
+                    >
+                      <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm text-white/60">
+                          {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                          {" · "}
+                          {new Date(entry.timestamp).toLocaleDateString()}
+                        </div>
+                        <div className={cn(
+                          "text-lg font-semibold",
+                          isHighCal ? "text-rose-400" : "text-white"
+                        )}>
+                          {Math.round(value)} kcal
+                        </div>
+                      </div>
+                      <div className="text-sm text-white/90 mb-2">{entry.note || "Meal"}</div>
+                      {asset && (
+                        <div className="mt-3 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
+                          <img
+                            src={resolveChimeroAssetUrl(asset.thumbnailUrl || asset.assetUrl)}
+                            alt=""
+                            className="w-full h-auto max-h-[300px] object-contain"
+                            title={entry.note || "Meal photo"}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : isSavingsType ? (
+              /* The Ledger - Savings/Finance: Large inline receipt photos */
+              <div className="space-y-4">
+                {historyEntries.map((entry) => {
+                  const value = entry.value ?? 0
+                  const unit = (tracker.config as Record<string, unknown>)?.unit as string | undefined
+                  const displayValue = unit === "$" ? `$${value.toLocaleString()}` : `${value.toFixed(1)}${unit ?? ""}`
+                  const asset = entry.assetId != null ? assets.get(entry.assetId) : null
+                  return (
+                    <div
+                      key={entry.id}
+                      className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
+                    >
+                      <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm text-white/60">
+                          {new Date(entry.timestamp).toLocaleDateString()}
+                        </div>
+                        <div className="text-lg font-semibold text-emerald-400">
+                          {displayValue}
+                        </div>
+                      </div>
+                      <div className="text-sm text-white/90 mb-2">{entry.note || "Category"}</div>
+                      {asset && (
+                        <div className="mt-3 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
+                          <img
+                            src={resolveChimeroAssetUrl(asset.thumbnailUrl || asset.assetUrl)}
+                            alt=""
+                            className="w-full h-auto max-h-[300px] object-contain"
+                            title={entry.note || "Receipt/photo"}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : isNumericType ? (
+              /* The Ledger - Generic numeric with large inline attachments */
+              <div className="space-y-4">
+                {historyEntries.map((entry) => {
+                  const value = entry.value ?? 0
+                  const isHigh = averageValue > 0 && value > averageValue * 1.5
+                  const isLow = averageValue > 0 && value < averageValue * 0.5
+                  const unit = (tracker.config as Record<string, unknown>)?.unit as string | undefined
+                  const displayUnit = (unit === "lbs" || unit === "kg") ? unit : "lbs"
+                  const displayValue = isWeightType
+                    ? formatWeight(value, displayUnit)
+                    : unit === "$" ? `$${value.toLocaleString()}` : `${value.toFixed(1)}${unit ?? ""}`
+                  const asset = entry.assetId != null ? assets.get(entry.assetId) : null
+                  return (
+                    <div
+                      key={entry.id}
+                      className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
+                    >
+                      <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm text-white/60">
+                          {new Date(entry.timestamp).toLocaleDateString()}
+                        </div>
+                        <div className={cn(
+                          "text-lg font-semibold",
+                          isHigh ? "text-rose-400" : isLow ? "text-blue-400" : "text-white"
+                        )}>
+                          {displayValue}
+                        </div>
+                      </div>
+                      <div className="text-sm text-white/90 mb-2">{entry.note || "Entry"}</div>
+                      {asset && (
+                        <div className="mt-3 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
+                          <img
+                            src={resolveChimeroAssetUrl(asset.thumbnailUrl || asset.assetUrl)}
+                            alt=""
+                            className="w-full h-auto max-h-[300px] object-contain"
+                            title={entry.note || "Attachment"}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              /* Default - Simple list with large inline attachments */
+              <div className="space-y-4">
+                {historyEntries.map((entry) => {
+                  const asset = entry.assetId != null ? assets.get(entry.assetId) : null
+                  return (
+                    <div
+                      key={entry.id}
+                      className="group relative bg-white/[0.03] border border-white/5 rounded-xl p-4"
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
+                    >
+                      <div className="absolute z-10 top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="text-sm text-white/90 mb-2">{entry.note || `Value: ${entry.value ?? "--"}`}</div>
+                      {asset && (
+                        <div className="mt-2 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
+                          <img
+                            src={resolveChimeroAssetUrl(asset.thumbnailUrl || asset.assetUrl)}
+                            alt=""
+                            className="w-full h-auto max-h-[300px] object-contain"
+                          />
+                        </div>
+                      )}
+                      <div className="text-xs text-white/40 mt-2">
+                        {new Date(entry.timestamp).toLocaleString()}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <EditEntryDialog
+        entry={editingEntry}
+        open={editingEntry !== null}
+        onOpenChange={(open) => !open && setEditingEntry(null)}
+      />
+
+      <ConfirmDeleteDialog
+        open={deletingEntry !== null}
+        onConfirm={() => {
+          if (deletingEntry) {
+            deleteEntryMutation.mutate(deletingEntry.id)
+          }
+          setDeletingEntry(null)
+        }}
+        onCancel={() => setDeletingEntry(null)}
+      />
+    </div>
+  )
+}
