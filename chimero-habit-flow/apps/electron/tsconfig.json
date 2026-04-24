@@ -26,10 +26,12 @@
     /* ALIAS PATHS - Deben coincidir con vite.config.ts */
     "baseUrl": ".",
     "paths": {
-      "@renderer/*": ["src/renderer/src/*"],
+      "@renderer/*": ["src/frontend/*"],
       "@packages/ui/*": ["../../packages/ui/*"],
       "@packages/db": ["../../packages/db/src/index.ts"],
-      "@packages/db/*": ["../../packages/db/src/*"]
+      "@packages/db/*": ["../../packages/db/src/*"],
+      "shared": ["../../packages/shared/src/index.ts"],
+      "shared/*": ["../../packages/shared/src/*"]
     }
   },
   "include": ["src/**/*", "../../packages/**/*", "electron.vite.config.ts"]

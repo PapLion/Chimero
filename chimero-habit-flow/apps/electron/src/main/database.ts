@@ -13,6 +13,7 @@ import { initDb, getDb, getRawDb, closeDb } from '@packages/db/database';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { trackers } from '@packages/db/schema';
 import { eq } from 'drizzle-orm';
+import { DEFAULT_TRACKERS } from 'shared';
 
 /**
  * Resolves the path to the Drizzle migrations folder.
@@ -189,21 +190,18 @@ function ensureSchemaAndMaybeReset(
 function seedDefaultTrackers(): void {
   const db = getDb();
 
-  const defaultTrackers = [
-    { name: "Books", type: "text" as const, icon: "book" },
-    { name: "Gaming", type: "text" as const, icon: "gamepad-2" },
-    { name: "Media", type: "text" as const, icon: "music" },
-    { name: "Diet", type: "numeric" as const, icon: "salad", config: { unit: "kcal" } },
-  ];
-
-  for (const tracker of defaultTrackers) {
+  for (const tracker of DEFAULT_TRACKERS) {
     const existing = db.select().from(trackers).where(eq(trackers.name, tracker.name)).get();
     if (!existing) {
       db.insert(trackers).values({
         name: tracker.name,
         type: tracker.type,
         icon: tracker.icon,
-        config: tracker.config ? JSON.stringify(tracker.config) : undefined,
+        color: tracker.color,
+        order: tracker.order,
+        config: JSON.stringify(tracker.config ?? {}),
+        isCustom: false,
+        archived: false,
       }).run();
       console.log(`[DB] Seeded default tracker: ${tracker.name}`);
     }

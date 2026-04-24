@@ -3,7 +3,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import type { Tracker, Entry } from './store'
+import type { Tracker, Entry } from '@packages/db'
 
 export const queryKeys = {
   trackers: ['trackers'] as const,
@@ -282,7 +282,7 @@ export function useUncompleteReminderMutation() {
 export function useUpdateEntryMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, updates }: { id: number; updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null; metadata?: Record<string, unknown> } }) =>
+    mutationFn: ({ id, updates }: { id: number; updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null } }) =>
       api.updateEntry(id, updates),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })

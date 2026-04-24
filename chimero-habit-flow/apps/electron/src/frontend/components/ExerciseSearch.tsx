@@ -58,9 +58,17 @@ export function ExerciseSearch({ onExerciseSelect, selectedExercises }: Exercise
   }, [searchQuery])
 
   // === DERIVADOS (no son hooks) ===
-  const exercises = debouncedQuery.trim().length > 0
-    ? searchResults as Exercise[]
-    : allExercises as Exercise[]
+  const exercises: Exercise[] = (debouncedQuery.trim().length > 0 ? searchResults : allExercises).map(
+    (row) => ({
+      id: String(row.id ?? ''),
+      name: String(row.name ?? ''),
+      category: String(row.category ?? ''),
+      level: String(row.level ?? ''),
+      equipment: row.equipment != null ? String(row.equipment) : null,
+      primaryMuscles: Array.isArray(row.primaryMuscles) ? (row.primaryMuscles as string[]) : [],
+      secondaryMuscles: Array.isArray(row.secondaryMuscles) ? (row.secondaryMuscles as string[]) : [],
+    })
+  )
 
   // === HANDLERS ===
   const handleExerciseClick = (exercise: Exercise) => {
@@ -259,7 +267,7 @@ export function ExerciseSearch({ onExerciseSelect, selectedExercises }: Exercise
           {exercises.length === 0 ? (
             <div className="py-8 px-4 text-center">
               <p className="text-sm text-[hsl(210_12%_47%)]">
-                No exercises found for '{searchQuery}'
+                No exercises found for &quot;{searchQuery}&quot;
               </p>
             </div>
           ) : (

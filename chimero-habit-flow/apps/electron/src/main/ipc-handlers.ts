@@ -6,11 +6,14 @@ import { ipcMain, app, dialog } from 'electron';
 import { copyFileSync, existsSync } from 'fs';
 import { getDb } from '@packages/db/database';
 import { trackers, entries, settings, assets, reminders, contacts, contactInteractions } from '@packages/db';
-import type { Tracker, Entry, TrackerInsert, EntryInsert, Asset, Reminder, ReminderInsert, Contact, ContactInteraction, ContactInsert, ContactUpdate, ContactInteractionInsert } from '@packages/db';
+import type { Tracker, Entry, TrackerInsert, EntryInsert, Reminder, ReminderInsert, Contact, ContactInteraction, ContactInsert, ContactUpdate, ContactInteractionInsert } from '@packages/db';
 import { eq, desc, and, sql, asc } from 'drizzle-orm';
 import { saveFile, deleteFile, getAssetAbsolutePath } from './services/asset-manager';
 import { getDashboardStats, getCalendarMonth, calculateImpact } from './services/stats-service';
 import { searchExercises, getAllExercises, getExerciseDbStatus } from './services/exercise-db-service';
+import { recalculateEntryDateStr } from './services/maintenance-service';
+import type { AssetWithUrls } from 'shared';
+import { DEFAULT_TRACKERS, dateToDateStrLocal } from 'shared';
 
 function db() {
   return getDb();
@@ -86,8 +89,6 @@ function mapReminder(row: Record<string, unknown>): Reminder {
   };
 }
 
-export type AssetWithUrls = Asset & { assetUrl: string; thumbnailUrl: string };
-
 function mapAsset(row: Record<string, unknown>): AssetWithUrls {
   const path = (row.path as string) ?? '';
   const thumbnailPath = (row.thumbnailPath ?? row.thumbnail_path) as string | null;
@@ -143,18 +144,7 @@ function mapContactInteraction(row: Record<string, unknown>): ContactInteraction
 }
 
 export function registerIpcHandlers(): void {
-  const defaultTrackers = [
-    { name: 'Weight', type: 'numeric' as const, icon: 'scale', color: '#a855f7', order: 0, config: { unit: 'lbs', goal: 70, semanticType: 'weight' } },
-    { name: 'Mood', type: 'range' as const, icon: 'smile', color: '#f59e0b', order: 1, config: { max: 5 } },
-    { name: 'Exercise', type: 'numeric' as const, icon: 'dumbbell', color: '#22c55e', order: 2, config: { unit: 'min', goal: 30 } },
-    { name: 'Social', type: 'numeric' as const, icon: 'users', color: '#3b82f6', order: 3, config: { unit: 'interactions' } },
-    { name: 'Tasks', type: 'text' as const, icon: 'check-square', color: '#ef4444', order: 4, config: {} },
-    { name: 'Savings', type: 'numeric' as const, icon: 'wallet', color: '#10b981', order: 5, config: { unit: '$', goal: 10000 } },
-    { name: 'Books', type: 'text' as const, icon: 'book', color: '#8b5cf6', order: 6, config: {} },
-    { name: 'Gaming', type: 'text' as const, icon: 'gamepad-2', color: '#10b981', order: 7, config: {} },
-    { name: 'Media/TV', type: 'text' as const, icon: 'tv', color: '#0ea5e9', order: 8, config: {} },
-    { name: 'Diet / Calories', type: 'numeric' as const, icon: 'salad', color: '#22c55e', order: 9, config: { unit: 'kcal' } },
-  ];
+  const defaultTrackers = DEFAULT_TRACKERS;
 
   // --- getTrackers ---
   ipcMain.handle('get-trackers', async () => {
@@ -269,26 +259,14 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('add-entry', async (_, data: Omit<EntryInsert, 'dateStr'>) => {
     try {
       const d = new Date(data.timestamp);
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; // YYYY-MM-DD local
-
-      // For weight trackers, persist the current storage unit in metadata for migration safety.
-      let metadata = data.metadata ?? {};
-      const [trackerRow] = await db().select().from(trackers).where(eq(trackers.id, data.trackerId));
-      if (trackerRow) {
-        const tConfig = (trackerRow.config as Record<string, unknown>) || {};
-        if (tConfig.semanticType === 'weight') {
-          const storedUnit: "lbs" | "kg" = (tConfig.unit as string) === 'kg' ? 'kg' : 'lbs';
-          metadata = { ...metadata, storedUnit };
-        }
-      }
-
+      const dateStr = dateToDateStrLocal(d); // YYYY-MM-DD local (single source)
       const [inserted] = await db()
         .insert(entries)
         .values({
           trackerId: data.trackerId,
           value: data.value ?? null,
           note: data.note ?? null,
-          metadata: JSON.stringify(metadata),
+          metadata: JSON.stringify(data.metadata ?? {}),
           timestamp: data.timestamp,
           dateStr,
           assetId: (data as EntryInsert).assetId ?? null,
@@ -302,17 +280,16 @@ export function registerIpcHandlers(): void {
   });
 
   // --- updateEntry ---
-  ipcMain.handle('update-entry', async (_, id: number, updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null; metadata?: Record<string, unknown> }) => {
+  ipcMain.handle('update-entry', async (_, id: number, updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null }) => {
     try {
       const set: Record<string, unknown> = {};
       if (updates.value !== undefined) set.value = updates.value;
       if (updates.note !== undefined) set.note = updates.note;
       if (updates.assetId !== undefined) set.assetId = updates.assetId;
-      if (updates.metadata !== undefined) set.metadata = JSON.stringify(updates.metadata);
       if (updates.timestamp !== undefined) {
         set.timestamp = updates.timestamp;
         const d = new Date(updates.timestamp);
-        set.dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        set.dateStr = dateToDateStrLocal(d);
       }
       if (Object.keys(set).length === 0) return null;
       await db().update(entries).set(set).where(eq(entries.id, id));
@@ -509,7 +486,7 @@ export function registerIpcHandlers(): void {
       const days = options?.days ?? 30;
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - days);
-      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      const cutoffStr = dateToDateStrLocal(cutoff);
       const moodTrackerId = options?.trackerId;
 
       const baseSelect = db()
@@ -736,21 +713,6 @@ export function registerIpcHandlers(): void {
     }
   ) => {
     try {
-      // Validate config.unit for weight trackers — only "lbs" or "kg" are accepted.
-      if (updates.config?.unit !== undefined) {
-        const [existing] = await db().select().from(trackers).where(eq(trackers.id, id));
-        if (existing) {
-          const existingConfig = (existing.config as Record<string, unknown>) || {};
-          const isWeightTracker = existingConfig.semanticType === 'weight';
-          if (isWeightTracker) {
-            const unit = updates.config.unit;
-            if (unit !== 'lbs' && unit !== 'kg') {
-              throw new Error(`Invalid unit "${unit}" for weight tracker. Accepted values: "lbs" | "kg".`);
-            }
-          }
-        }
-      }
-
       const set: Record<string, unknown> = {};
       if (updates.order !== undefined) set.order = updates.order;
       if (updates.isFavorite !== undefined) set.isFavorite = updates.isFavorite;
@@ -951,6 +913,16 @@ export function registerIpcHandlers(): void {
     } catch (e) {
       console.error('get-exercise-db-status error:', e);
       return { status: 'error', count: 0, error: 'Unknown error' };
+    }
+  });
+
+  // --- maintenance: recalculate entry.dateStr from timestamp (local) ---
+  ipcMain.handle('maintenance-recalculate-entry-datestr', async () => {
+    try {
+      return await recalculateEntryDateStr();
+    } catch (e) {
+      console.error('maintenance-recalculate-entry-datestr error:', e);
+      return { updated: 0, total: 0 };
     }
   });
 }

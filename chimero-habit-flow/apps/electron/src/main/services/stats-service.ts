@@ -10,6 +10,7 @@ import { getDb } from '@packages/db/database';
 import { entries, trackers, type CorrelationMetadata, type EnhancedCorrelationResult, type CorrelationCalculationOptions } from '@packages/db';
 import { sql, eq, and, gte, lte, desc } from 'drizzle-orm';
 import { computeCurrentStreak, computeBestStreak } from './streak-utils';
+import { addDaysToDateStrLocal, dateToDateStrLocal, getMonthRangeDateStrLocal } from 'shared';
 
 export { computeCurrentStreak, computeBestStreak } from './streak-utils';
 
@@ -50,8 +51,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const totalActivities = Number((actRows as unknown as { count: number }[])[0]?.count ?? 0);
 
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const { start: monthStart, end: monthEnd } = getMonthRangeDateStrLocal(now.getFullYear(), now.getMonth());
   const monthRows = await db
     .select({ count: sql<number>`count(*)` })
     .from(entries)
@@ -131,7 +131,7 @@ export async function calculateImpact(
   // Calculate date range using parameterized queries
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - 365);
-  const cutoffDateStr = cutoffDate.toISOString().slice(0, 10);
+  const cutoffDateStr = dateToDateStrLocal(cutoffDate);
   
   // Optimized SQL queries with proper parameterization
   const sourceQuery = db
@@ -174,23 +174,12 @@ export async function calculateImpact(
     targetMap.set(entry.dateStr, entry.value);
   });
 
-  // Apply offset: calculate target dates with explicit date handling
+  // Apply offset: calculate target dates using local DateStr helpers
   const cohortA: number[] = []; // Triggered days target values
   const cohortB: number[] = []; // Baseline days target values
 
-  // Helper function to format date as YYYY-MM-DD in local time
-  const formatDateLocal = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
   for (const [sourceDate, sourceData] of sourceMap) {
-    // Calculate target date with offset - use local time for consistency
-    const targetDate = new Date(sourceDate); // Clone date
-    targetDate.setDate(targetDate.getDate() + offsetDays); // Add days safely
-    const targetDateStr = formatDateLocal(targetDate);
+    const targetDateStr = addDaysToDateStrLocal(sourceDate, offsetDays);
 
     const targetValue = targetMap.get(targetDateStr);
     
@@ -297,8 +286,7 @@ export async function calculateImpact(
 /** Returns entries for the given month, grouped by dateStr, and list of active day numbers. */
 export async function getCalendarMonth(year: number, month: number): Promise<CalendarMonthData> {
   const db = getDb();
-  const monthStart = new Date(year, month, 1).toISOString().slice(0, 10);
-  const monthEnd = new Date(year, month + 1, 0).toISOString().slice(0, 10);
+  const { start: monthStart, end: monthEnd } = getMonthRangeDateStrLocal(year, month);
 
   const rows = await db
     .select()

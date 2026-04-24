@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react"
-import type { EnhancedCorrelationResult } from "../types/correlation"
+import type { EnhancedCorrelationResult } from "@packages/db"
 
 // Type guard for window API
 const hasCalculateImpactAPI = (window: Window & { api?: { calculateImpact?: (sourceTrackerId: number, targetTrackerId: number, offsetDays: number) => Promise<EnhancedCorrelationResult | Partial<EnhancedCorrelationResult>> } }): window is Window & { api: { calculateImpact: (sourceTrackerId: number, targetTrackerId: number, offsetDays: number) => Promise<EnhancedCorrelationResult | Partial<EnhancedCorrelationResult>> } } => {

@@ -2,7 +2,7 @@
 
 import { TrendingUp, TrendingDown, Target, Activity, BarChart3, AlertTriangle } from "lucide-react"
 import { cn } from "../lib/utils"
-import type { EnhancedCorrelationResult } from "../types/correlation"
+import type { EnhancedCorrelationResult } from "@packages/db"
 
 interface CorrelationResultCardProps {
   result: EnhancedCorrelationResult

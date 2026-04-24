@@ -11,13 +11,15 @@
   "scripts": {
     "dev": "turbo run dev",
     "db:migrate": "turbo run db:migrate",
-    "lint": "eslint \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\" --max-warnings 0",
+    "demo:seed": "node --no-warnings packages/db/scripts/demo-data.cjs seed",
+    "demo:clear": "node --no-warnings packages/db/scripts/demo-data.cjs clear",
+    "lint": "eslint \"apps/**/*.{ts,tsx}\" \"packages/db/**/*.{ts,tsx}\" \"packages/ui/**/*.{ts,tsx}\" \"packages/shared/**/*.ts\" --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "build": "pnpm --filter chimero-electron build",
     "package": "turbo run build && electron-builder",
-    "check-types": "pnpm --filter chimero-electron exec tsc --noEmit"
+    "check-types": "pnpm exec tsc --noEmit -p apps/electron/tsconfig.json"
   },
   "keywords": [],
   "license": "ISC",

@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useAppStore } from "../lib/store"
 import { useTrackers, useRecentTrackers, useFavoriteTrackers, useAddEntryMutation, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation } from "../lib/queries"
 import { cn } from "../lib/utils"
-import { getEntryConfig } from "../lib/entry-config"
 import type { Tracker } from "../lib/store"
 import { ContactBubblesGrid, type ContactMoodSelection } from "./ContactBubblesGrid"
 import { ExerciseSearch, type SelectedExercise } from "./ExerciseSearch"
@@ -18,6 +17,7 @@ import { Input } from "@packages/ui/input"
 import { Button } from "@packages/ui/button"
 import { CyberpunkSelect } from "../components/CyberpunkSelect"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Activity, Calendar, Flame, Book, Gamepad2, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, ImageIcon, X, type LucideIcon } from "lucide-react"
+import type { TrackerInputField, TrackerInputFieldType } from "@packages/db"
 
 const iconMap: Record<string, LucideIcon> = {
   scale: Scale,
@@ -54,8 +54,7 @@ export function QuickEntry() {
 
   const [search, setSearch] = useState("")
   const [selectedTracker, setSelectedTracker] = useState<number | null>(null)
-  const [value, setValue] = useState("")
-  const [note, setNote] = useState("")
+  const [fieldValues, setFieldValues] = useState<Record<string, unknown>>({})
   const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null)
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
   const [mode, setMode] = useState<QuickEntryMode>(MODE_ACTIVITY)
@@ -124,8 +123,7 @@ export function QuickEntry() {
     if (!commandBarOpen) {
       setSearch("")
       setSelectedTracker(null)
-      setValue("")
-      setNote("")
+      setFieldValues({})
       setSelectedAssetId(null)
       setAssetPickerOpen(false)
       setMode(MODE_ACTIVITY)
@@ -145,8 +143,7 @@ export function QuickEntry() {
         setLinkedTrackerId(undefined)
       }
       setSearch("")
-      setValue("")
-      setNote("")
+      setFieldValues({})
       setSelectedAssetId(null)
       setAssetPickerOpen(false)
       setMode(MODE_ACTIVITY)
@@ -158,6 +155,46 @@ export function QuickEntry() {
       setSelectedExercises([])
     }
   }, [commandBarOpen, activeTracker])
+
+  const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
+
+  const schemaFields: TrackerInputField[] = useMemo(() => {
+    if (!selectedTrackerData) return []
+    const schema = selectedTrackerData.config?.inputSchema
+    if (schema?.fields?.length) return schema.fields
+
+    // Legacy fallback (should be migrated to config.inputSchema)
+    const t = selectedTrackerData.type as string
+    if (t === "rating") {
+      return [{ key: "value", type: "rating", label: "Rating", min: 1, max: 10, required: true }]
+    }
+    if (t === "text" || t === "list" || t === "binary" || t === "composite") {
+      return [{ key: "note", type: "text", label: "Note", placeholder: "Enter text...", required: true }]
+    }
+    return [{ key: "value", type: "number", label: "Value", placeholder: "Enter value...", required: true }]
+  }, [selectedTrackerData])
+
+  const hasFieldType = useCallback((type: TrackerInputFieldType) => {
+    return schemaFields.some((f) => f.type === type)
+  }, [schemaFields])
+
+  // Initialize fields when tracker changes
+  useEffect(() => {
+    if (!selectedTrackerData) return
+    setFieldValues((prev) => {
+      const next: Record<string, unknown> = { ...prev }
+      for (const f of schemaFields) {
+        if (next[f.key] === undefined) {
+          next[f.key] = f.type === "boolean" ? false : ""
+        }
+      }
+      return next
+    })
+    // reset structured selectors when schema doesn't need them
+    if (!hasFieldType("contacts")) setSelectedContacts([])
+    if (!hasFieldType("exercises")) setSelectedExercises([])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTrackerData?.id])
 
   // Close asset picker when clicking outside
   useEffect(() => {
@@ -191,112 +228,63 @@ export function QuickEntry() {
   const handleSubmit = useCallback(() => {
     if (!selectedTracker) return
 
-    const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
     if (!selectedTrackerData) return
+    const schema = selectedTrackerData.config?.inputSchema
+    const requiredMissing = schemaFields.some((f) => {
+      if (!f.required) return false
+      if (f.type === "contacts") return selectedContacts.length === 0
+      if (f.type === "exercises") return selectedExercises.length === 0
+      const v = fieldValues[f.key]
+      if (f.type === "boolean") return v !== true && v !== false ? true : false
+      return v == null || String(v).trim() === ""
+    })
+    if (requiredMissing) return
 
-    // Check if this is a Social tracker (by icon "users" or name containing "social")
-    const isSocialTracker = 
-      selectedTrackerData.icon === "users" || 
-      selectedTrackerData.name.toLowerCase().includes("social") ||
-      selectedTrackerData.name.toLowerCase().includes("connection")
-
-    // Check if this is an Exercise tracker
-    const isExerciseTracker =
-      selectedTrackerData.icon === "dumbbell" ||
-      selectedTrackerData.name.toLowerCase().includes("exercise") ||
-      selectedTrackerData.name.toLowerCase().includes("workout") ||
-      selectedTrackerData.name.toLowerCase().includes("gym") ||
-      selectedTrackerData.name.toLowerCase().includes("fitness")
-
-    // Exercise tracker: save selected exercises to metadata
-    if (isExerciseTracker && selectedExercises.length > 0) {
-      const timestamp = Date.now()
-      addEntryMutation.mutate(
-        {
-          trackerId: selectedTracker,
-          value: selectedExercises.length, // number of exercises as value
-          note: note.trim() || null,
-          assetId: selectedAssetId,
-          metadata: { exercises: selectedExercises },
-          timestamp,
-        },
-        { onSuccess: () => setQuickEntryOpen(false) }
-      )
-      return
+    const metadata: Record<string, unknown> = {}
+    for (const f of schemaFields) {
+      if (f.type === "contacts") metadata[f.key] = selectedContacts
+      else if (f.type === "exercises") metadata[f.key] = selectedExercises
+      else metadata[f.key] = fieldValues[f.key]
     }
 
-    // For Social trackers, handle contact interactions
-    if (isSocialTracker && selectedContacts.length > 0) {
-      // Create contact interactions for each selected contact
-      const timestamp = Date.now()
-      
-      // Create the entry first (optional - for the general note)
-      const entryNote = note.trim() || null
-      const entryValue = value ? parseFloat(value) : 1
+    const valueKey = schema?.valueKey
+      ?? schemaFields.find((f) => f.type === "number" || f.type === "rating")?.key
+      ?? null
+    const noteKey = schema?.noteKey
+      ?? schemaFields.find((f) => f.type === "text")?.key
+      ?? null
 
-      addEntryMutation.mutate(
-        {
-          trackerId: selectedTracker,
-          value: entryValue,
-          note: entryNote,
-          assetId: selectedAssetId,
-          metadata: {},
-          timestamp,
-        },
-        {
-          onSuccess: () => {
-            // After entry is created, create contact interactions
-            selectedContacts.forEach((contact) => {
-              createContactInteractionMutation.mutate({
-                contactId: contact.contactId,
-                mood: contact.mood,
-                entryId: null, // Will be linked after entry is created if needed
-                notes: entryNote,
-              })
-            })
-            setQuickEntryOpen(false)
-          },
-        }
-      )
-      return
-    }
-
-    // Determine value and note based on tracker type
-    let entryValue: number | null = null
-    let entryNote: string | null = null
-
-    if (selectedTrackerData.type === "text" || selectedTrackerData.type === "list") {
-      // Text/List trackers: note is main, value is optional number or 1 (count)
-      entryNote = note.trim() || null
-      entryValue = value ? parseFloat(value) : 1
-    } else if (selectedTrackerData.type === "binary" || selectedTrackerData.type === "composite") {
-      // Tasks: text input only, value is 1
-      entryNote = note.trim() || null
-      entryValue = 1
-    } else {
-      // Numeric/Range trackers: value is main, note is optional
-      if (!value) return // Require value for numeric trackers
-      entryValue = parseFloat(value)
-      entryNote = note.trim() || null
-    }
-
-    // For text/list trackers, require at least note or value
-    if ((selectedTrackerData.type === "text" || selectedTrackerData.type === "list") && !note.trim() && !value) {
-      return
-    }
+    const entryValueRaw = valueKey ? metadata[valueKey] : null
+    const entryValue = entryValueRaw == null || entryValueRaw === "" ? null : Number(entryValueRaw)
+    const entryNoteRaw = noteKey ? metadata[noteKey] : null
+    const entryNote = entryNoteRaw == null || String(entryNoteRaw).trim() === "" ? null : String(entryNoteRaw)
 
     addEntryMutation.mutate(
       {
         trackerId: selectedTracker,
-        value: entryValue,
+        value: Number.isFinite(entryValue) ? entryValue : null,
         note: entryNote,
         assetId: selectedAssetId,
-        metadata: {},
+        metadata,
         timestamp: Date.now(),
       },
-      { onSuccess: () => setQuickEntryOpen(false) }
+      {
+        onSuccess: (entry) => {
+          if (entry && hasFieldType("contacts") && selectedContacts.length > 0) {
+            selectedContacts.forEach((contact) => {
+              createContactInteractionMutation.mutate({
+                contactId: contact.contactId,
+                mood: contact.mood,
+                entryId: entry.id,
+                notes: entryNote,
+              })
+            })
+          }
+          setQuickEntryOpen(false)
+        },
+      }
     )
-  }, [selectedTracker, value, note, selectedAssetId, trackers, addEntryMutation, setQuickEntryOpen, selectedContacts, selectedExercises, createContactInteractionMutation])
+  }, [selectedTracker, selectedTrackerData, schemaFields, fieldValues, selectedAssetId, selectedContacts, selectedExercises, addEntryMutation, createContactInteractionMutation, hasFieldType, setQuickEntryOpen])
 
   const handleReminderSubmit = useCallback(() => {
     if (!reminderTitle || !reminderDate || !reminderTime) return
@@ -315,26 +303,8 @@ export function QuickEntry() {
     )
   }, [reminderTitle, reminderDescription, reminderDate, reminderTime, linkedTrackerId, upsertReminderMutation, setQuickEntryOpen])
 
-  const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
-
-  // Get human-centric entry config for the selected tracker
-  const entryConfig = selectedTrackerData ? getEntryConfig(selectedTrackerData) : null
-
-  // Check if this is a Social tracker (by icon "users" or name containing "social"/"connection")
-  const isSocialTracker = selectedTrackerData
-    ? selectedTrackerData.icon === "users" ||
-      selectedTrackerData.name.toLowerCase().includes("social") ||
-      selectedTrackerData.name.toLowerCase().includes("connection")
-    : false
-
-  // Check if this is an Exercise tracker (by icon "dumbbell" or name containing "exercise"/"workout"/"gym")
-  const isExerciseTracker = selectedTrackerData
-    ? selectedTrackerData.icon === "dumbbell" ||
-      selectedTrackerData.name.toLowerCase().includes("exercise") ||
-      selectedTrackerData.name.toLowerCase().includes("workout") ||
-      selectedTrackerData.name.toLowerCase().includes("gym") ||
-      selectedTrackerData.name.toLowerCase().includes("fitness")
-    : false
+  const isContactsDriven = hasFieldType("contacts")
+  const isExercisesDriven = hasFieldType("exercises")
 
   const renderTrackerList = (trackerList: typeof trackers, title: string) => {
     if (trackerList.length === 0) return null
@@ -506,14 +476,14 @@ export function QuickEntry() {
                   )}
                 </div>
 
-                {/* Social Tracker: ContactBubblesGrid */}
-                {isSocialTracker ? (
+                {/* Config-driven fields */}
+                {isContactsDriven ? (
                   <div className="mb-4">
                     <ContactBubblesGrid
                       onSelectionChange={(selected) => setSelectedContacts(selected)}
                     />
                   </div>
-                ) : isExerciseTracker ? (
+                ) : isExercisesDriven ? (
                   <div className="mb-4">
                     <ExerciseSearch
                       onExerciseSelect={(exercise) => setSelectedExercises((prev) => [...prev, exercise])}
@@ -522,168 +492,87 @@ export function QuickEntry() {
                   </div>
                 ) : (
                   <>
-                  {/* Dynamic Input Fields Based on Entry Config */}
-                  {entryConfig && entryConfig.mainType === "rating" ? (
-                  <div className="mb-4">
-                    {/* 1-10 Scale for Mood */}
-                    {selectedTrackerData?.icon === "smile" ? (
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-5 gap-2">
-                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => {
-                            const moodEmojis = ["🤬", "😠", "😞", "☹️", "😐", "🙂", "😊", "😄", "🤩", "😍"]
-                            return (
-                              <button
-                                type="button"
-                                key={rating}
-                                onClick={() => setValue(rating.toString())}
-                                className={cn(
-                                  "py-2 rounded-lg border transition-all text-lg flex flex-col items-center gap-1",
-                                  value === rating.toString()
-                                    ? "border-[hsl(266_73%_63%)] bg-[hsl(266_73%_63%/0.1)] text-[hsl(266_73%_63%)]"
-                                    : "border-[hsl(210_18%_22%)] hover:border-[hsl(266_73%_63%/0.5)] text-[hsl(210_25%_97%)]"
-                                )}
-                              >
-                                <span>{moodEmojis[rating - 1]}</span>
-                                <span className="text-xs">{rating}</span>
-                              </button>
-                            )
-                          })}
-                        </div>
-                        {value && (
-                          <div className="text-center text-sm text-[hsl(210_12%_47%)]">
-                            Selected: {value}/10
-                          </div>
-                        )}
-                        {entryConfig.notePlaceholder && (
-                          <Input
-                            type="text"
-                            placeholder={entryConfig.notePlaceholder}
-                            value={note}
-                            onChange={(e) => setNote(e.target.value)}
-                            className="bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)] mt-2"
-                          />
-                        )}
-                      </div>
-                    ) : (
-                      /* Default 1-5 scale for other rating types */
-                      <div className="flex gap-2">
-                        {[1, 2, 3, 4, 5].map((rating) => (
-                          <button
-                            type="button"
-                            key={rating}
-                            onClick={() => setValue(rating.toString())}
-                            className={cn(
-                              "flex-1 py-3 rounded-lg border transition-all text-lg",
-                              value === rating.toString()
-                                ? "border-[hsl(266_73%_63%)] bg-[hsl(266_73%_63%/0.1)] text-[hsl(266_73%_63%)]"
-                                : "border-[hsl(210_18%_22%)] hover:border-[hsl(266_73%_63%/0.5)] text-[hsl(210_25%_97%)]"
-                            )}
-                          >
-                            {["😢", "😔", "😐", "🙂", "😄"][rating - 1]}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : entryConfig && entryConfig.mainType === "text" ? (
-                  /* Text-based Trackers (Books, TV, Games, Tasks) */
-                  <div className="space-y-3 mb-4">
-                    <div>
-                      {entryConfig.mainLabel && (
-                        <label className="block text-xs text-[hsl(210_12%_47%)] mb-1.5">
-                          {entryConfig.mainLabel}
-                        </label>
-                      )}
-                      <Input
-                        type="text"
-                        placeholder={entryConfig.mainPlaceholder}
-                        value={note}
-                        onChange={(e) => setNote(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); handleSubmit() } }}
-                        className="text-lg h-12 bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
-                        autoFocus
-                      />
-                    </div>
-                    {entryConfig.secondaryPlaceholder && (
-                      <div>
-                        {entryConfig.noteLabel && (
-                          <label className="block text-xs text-[hsl(210_12%_47%)] mb-1.5">
-                            {entryConfig.noteLabel}
-                          </label>
-                        )}
-                        <Input
-                          type="number"
-                          placeholder={entryConfig.secondaryPlaceholder}
-                          value={value}
-                          onChange={(e) => setValue(e.target.value)}
-                          className="bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
-                        />
-                      </div>
-                    )}
-                  </div>
-                ) : entryConfig && entryConfig.mainType === "number" ? (
-                  /* Numeric Trackers (Exercise, Weight, Diet, etc.) */
-                  <div className="space-y-3 mb-4">
-                    <div className="relative">
-                      {entryConfig.mainLabel && (
-                        <label className="block text-xs text-[hsl(210_12%_47%)] mb-1.5">
-                          {entryConfig.mainLabel}
-                        </label>
-                      )}
-                      <Input
-                        type="number"
-                        placeholder={entryConfig.mainPlaceholder}
-                        value={value}
-                        onChange={(e) => setValue(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); handleSubmit() } }}
-                        className="text-lg h-12 bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
-                        autoFocus
-                      />
-                      {selectedTrackerData?.config.unit && (
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(210_12%_47%)]">
-                          {selectedTrackerData.config.unit as string}
-                        </span>
-                      )}
-                    </div>
-                    {entryConfig.notePlaceholder && (
-                      <div>
-                        {entryConfig.noteLabel && (
-                          <label className="block text-xs text-[hsl(210_12%_47%)] mb-1.5">
-                            {entryConfig.noteLabel}
-                          </label>
-                        )}
-                        {entryConfig.noteHint && (
-                          <p className="text-xs text-[hsl(210_12%_47%)] mb-1.5">{entryConfig.noteHint}</p>
-                        )}
-                        <Input
-                          type="text"
-                          placeholder={entryConfig.notePlaceholder}
-                          value={note}
-                          onChange={(e) => setNote(e.target.value)}
-                          className="bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
-                        />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  /* Fallback: Default behavior */
-                  <div className="space-y-3 mb-4">
-                    <Input
-                      type="text"
-                      placeholder="Enter value..."
-                      value={note || value}
-                      onChange={(e) => {
-                        if (selectedTrackerData?.type === "text" || selectedTrackerData?.type === "list") {
-                          setNote(e.target.value)
-                        } else {
-                          setValue(e.target.value)
+                    <div className="space-y-3 mb-4">
+                      {schemaFields.map((field) => {
+                        if (field.type === "contacts" || field.type === "exercises") return null
+
+                        if (field.type === "rating") {
+                          const min = field.min ?? 1
+                          const max = field.max ?? 10
+                          const current = String(fieldValues[field.key] ?? "")
+                          return (
+                            <div key={field.key} className="space-y-2">
+                              {field.label && (
+                                <label className="block text-xs text-[hsl(210_12%_47%)] mb-1.5">
+                                  {field.label}
+                                </label>
+                              )}
+                              <div className="grid grid-cols-5 gap-2">
+                                {Array.from({ length: max - min + 1 }, (_, idx) => min + idx).map((rating) => (
+                                  <button
+                                    type="button"
+                                    key={rating}
+                                    onClick={() => setFieldValues((p) => ({ ...p, [field.key]: String(rating) }))}
+                                    className={cn(
+                                      "py-2 rounded-lg border transition-all text-sm flex items-center justify-center",
+                                      current === String(rating)
+                                        ? "border-[hsl(266_73%_63%)] bg-[hsl(266_73%_63%/0.1)] text-[hsl(266_73%_63%)]"
+                                        : "border-[hsl(210_18%_22%)] hover:border-[hsl(266_73%_63%/0.5)] text-[hsl(210_25%_97%)]"
+                                    )}
+                                  >
+                                    {rating}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )
                         }
-                      }}
-                      className="text-lg h-12 bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
-                      autoFocus
-                    />
-                  </div>
-                )}
+
+                        if (field.type === "select") {
+                          const options = (field.options ?? []).map((o) => ({ value: o, label: o }))
+                          return (
+                            <div key={field.key}>
+                              {field.label && (
+                                <label className="block text-xs text-[hsl(210_12%_47%)] mb-1.5">
+                                  {field.label}
+                                </label>
+                              )}
+                              <CyberpunkSelect
+                                value={(fieldValues[field.key] as string | null) ?? null}
+                                onValueChange={(v) => setFieldValues((p) => ({ ...p, [field.key]: v }))}
+                                options={options}
+                                placeholder={field.placeholder ?? "Select..."}
+                              />
+                            </div>
+                          )
+                        }
+
+                        const inputType = field.type === "number" ? "number" : "text"
+                        return (
+                          <div key={field.key} className="relative">
+                            {field.label && (
+                              <label className="block text-xs text-[hsl(210_12%_47%)] mb-1.5">
+                                {field.label}
+                              </label>
+                            )}
+                            <Input
+                              type={inputType}
+                              placeholder={field.placeholder ?? ""}
+                              value={String(fieldValues[field.key] ?? "")}
+                              onChange={(e) => setFieldValues((p) => ({ ...p, [field.key]: e.target.value }))}
+                              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); handleSubmit() } }}
+                              className="text-lg h-12 bg-[hsl(210_20%_15%)] border-[hsl(210_18%_22%)] text-[hsl(210_25%_97%)] placeholder:text-[hsl(210_12%_47%)]"
+                              autoFocus={schemaFields[0]?.key === field.key}
+                            />
+                            {field.type === "number" && field.key === "value" && selectedTrackerData?.config.unit && (
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(210_12%_47%)]">
+                                {selectedTrackerData.config.unit as string}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                 </>
                 )}
 
@@ -776,17 +665,14 @@ export function QuickEntry() {
                   <Button
                     type="submit"
                     className="flex-1 bg-[hsl(266_73%_63%)] text-white hover:bg-[hsl(266_73%_58%)]"
-                    disabled={
-                      isExerciseTracker
-                        ? selectedExercises.length === 0 // Exercise trackers need at least one exercise selected
-                        : isSocialTracker
-                          ? selectedContacts.length === 0 // Social trackers need at least one contact selected
-                          : selectedTrackerData?.type === "text" || selectedTrackerData?.type === "list"
-                            ? !note.trim() && !value
-                            : selectedTrackerData?.type === "binary" || selectedTrackerData?.type === "composite"
-                              ? !note.trim()
-                              : !value
-                    }
+                    disabled={schemaFields.some((f) => {
+                      if (!f.required) return false
+                      if (f.type === "contacts") return selectedContacts.length === 0
+                      if (f.type === "exercises") return selectedExercises.length === 0
+                      const v = fieldValues[f.key]
+                      if (f.type === "boolean") return v !== true && v !== false
+                      return v == null || String(v).trim() === ""
+                    })}
                   >
                     Save Entry
                   </Button>

@@ -6,6 +6,7 @@ import { cn } from "../lib/utils"
 import type { Reminder, Entry } from "../lib/store"
 import { useTrackers, useCalendarMonth, useStats, useReminders, useEntries } from "../lib/queries"
 import { TimelineView } from "../components/TimelineView"
+import { dateToDateStrLocal } from "shared"
 
 const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
@@ -44,7 +45,7 @@ export function CalendarPage() {
   // Get entries for selected day from calendar API
   const selectedDayEntries = useMemo(() => {
     if (!selectedDay) return []
-    const dateStr = new Date(currentYear, currentMonth, selectedDay).toISOString().slice(0, 10)
+    const dateStr = dateToDateStrLocal(new Date(currentYear, currentMonth, selectedDay))
     return entriesByDate[dateStr] ?? []
   }, [entriesByDate, selectedDay, currentMonth, currentYear])
 

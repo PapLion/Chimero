@@ -4,26 +4,12 @@ import type { Tracker, Entry, TrackerConfig, Reminder } from "@packages/db"
 export type { Tracker, Entry, TrackerConfig, Reminder }
 export type TrackerType = Tracker["type"]
 export type PageType = "home" | "calendar" | "assets" | "custom-trackers" | "tracking" | "stats" | "contact"
-export type AssetCategory = "games" | "books" | "tv" | "apps" | "person" | "other"
-export type AssetType = "svg" | "png" | "jpg" | "gif" | "webp" | "other"
 
 export interface Widget {
   id: string
   trackerId: number
   position: number
   size: "small" | "medium" | "large"
-}
-
-export interface Asset {
-  id: string
-  name: string
-  category: AssetCategory
-  url: string
-  type: AssetType
-  size?: number
-  createdAt: number
-  // Optional optimized thumbnail URL for previews (when available from backend)
-  thumbnailUrl?: string | null
 }
 
 /** UI-only state. Server data lives in TanStack Query (lib/queries.ts). */

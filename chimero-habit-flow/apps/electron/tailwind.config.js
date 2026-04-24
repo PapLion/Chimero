@@ -1,8 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    "./src/renderer/index.html",
-    "./src/renderer/src/**/*.{js,ts,jsx,tsx}",
+    "./src/frontend/index.html",
+    "./src/frontend/**/*.{js,ts,jsx,tsx}",
     // UI package: only source files at root (no ** to avoid matching node_modules)
     "../../packages/ui/*.{js,ts,jsx,tsx}"
   ],

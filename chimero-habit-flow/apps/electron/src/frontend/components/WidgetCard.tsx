@@ -1,12 +1,14 @@
 "use client"
 
 import { cn } from "../lib/utils"
-import { formatWeight } from "../lib/weightUtils"
 import { type Widget, type Tracker, type Entry } from "../lib/store"
 import { useMoodDailyAggregates, useUpdateEntryMutation } from "../lib/queries"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, Salad, type LucideIcon } from "lucide-react"
+import type { AssetWithUrls } from "shared"
+import { dateStrToLocalDate, dateToDateStrLocal } from "shared"
+import { aggregateEntriesForDateStr } from "../lib/aggregation"
 import {
   LineChart,
   Line,
@@ -51,18 +53,11 @@ const cardBaseClasses = cn(
   "transition-all duration-200 ease-out"
 )
 
-interface Asset {
-  id: number
-  thumbnailUrl: string
-  assetUrl: string
-  originalName?: string | null
-}
-
 interface WidgetCardProps {
   widget: Widget
   tracker: Tracker
   entries: Entry[]
-  assets: Map<number, Asset>
+  assets: Map<number, AssetWithUrls>
   selectedDate: Date
 }
 
@@ -87,13 +82,6 @@ function isSameDay(timestamp1: number, timestamp2: number): boolean {
 }
 
 /**
- * Converts a Date to YYYY-MM-DD format
- */
-function dateToDateStr(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
-}
-
-/**
  * Calculates the daily aggregate value for a tracker based on selected date's entries.
  * 
  * Strategy:
@@ -106,36 +94,7 @@ function dateToDateStr(date: Date): string {
  * @returns The aggregated value for the selected date, or null if no entries exist
  */
 function getDateValue(entries: Entry[], tracker: Tracker, selectedDate: Date): number | null {
-  const targetDateStr = dateToDateStr(selectedDate)
-  
-  // Filter entries for selected date using dateStr (faster) or timestamp comparison
-  const dateEntries = entries.filter((entry) => {
-    // Prefer dateStr if available (more efficient)
-    if (entry.dateStr) {
-      return entry.dateStr === targetDateStr
-    }
-    // Fallback to timestamp comparison
-    return isSameDay(entry.timestamp, selectedDate.getTime())
-  })
-
-  if (dateEntries.length === 0) {
-    return null
-  }
-
-  // Determine aggregation strategy
-  const trackerNameLower = tracker.name.toLowerCase()
-  const isWeightTracker = tracker.config.semanticType === 'weight' || trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
-  const isRatingType = tracker.type === "rating"
-
-  // Use LAST strategy for weight or rating types
-  if (isWeightTracker || isRatingType) {
-    // Return the last entry of the selected date (most recent)
-    const lastEntry = dateEntries[dateEntries.length - 1]
-    return lastEntry?.value ?? null
-  }
-
-  // Use SUM strategy for numeric, counter, range types
-  return dateEntries.reduce((acc, entry) => acc + (entry.value ?? 0), 0)
+  return aggregateEntriesForDateStr(entries, tracker, dateToDateStrLocal(selectedDate))
 }
 
 function getTrend(entries: Entry[]): "up" | "down" | "neutral" {
@@ -275,7 +234,7 @@ function CounterWidget({
     
     // Group entries by date for the last 7 days
     entries.slice(-30).forEach((entry) => {
-      const entryDateStr = entry.dateStr || new Date(entry.timestamp).toISOString().split("T")[0]
+      const entryDateStr = entry.dateStr || dateToDateStrLocal(new Date(entry.timestamp))
       if (!last7Days[entryDateStr]) {
         last7Days[entryDateStr] = []
       }
@@ -287,7 +246,7 @@ function CounterWidget({
     return dates.map((dateStr) => {
       const dayEntries = last7Days[dateStr]
       const trackerNameLower = tracker.name.toLowerCase()
-      const isWeightTracker = tracker.config.semanticType === 'weight' || trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
+      const isWeightTracker = trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
       const isRatingType = tracker.type === "rating"
       
       let aggregatedValue: number
@@ -299,7 +258,7 @@ function CounterWidget({
         aggregatedValue = dayEntries.reduce((acc, e) => acc + (e.value ?? 0), 0)
       }
 
-      const date = new Date(dateStr)
+      const date = dateStrToLocalDate(dateStr)
       return {
         value: aggregatedValue,
         date: date.toLocaleDateString("en", { weekday: "short" }),
@@ -389,7 +348,7 @@ function MediaWidget({
 }: { 
   entries: Entry[]; 
   tracker: Tracker;
-  assets: Map<number, Asset>;
+  assets: Map<number, AssetWithUrls>;
 }) {
   // Get last 3-4 entries
   const recentEntries = entries
@@ -469,15 +428,12 @@ function WeightWidget({
 }: { 
   entries: Entry[]; 
   tracker: Tracker;
-  assets: Map<number, Asset>;
+  assets: Map<number, AssetWithUrls>;
   selectedDate: Date;
 }) {
-  const targetDateStr = dateToDateStr(selectedDate)
+  const targetDateStr = dateToDateStrLocal(selectedDate)
   const dateEntry = entries
-    .filter((e) => {
-      if (e.dateStr) return e.dateStr === targetDateStr
-      return isSameDay(e.timestamp, selectedDate.getTime())
-    })
+    .filter((e) => e.dateStr === targetDateStr || dateToDateStrLocal(new Date(e.timestamp)) === targetDateStr)
     .sort((a, b) => b.timestamp - a.timestamp)[0] // Most recent for selected date
 
   const dateAsset = dateEntry?.assetId ? assets.get(dateEntry.assetId) : null
@@ -485,8 +441,8 @@ function WeightWidget({
   // Chart data: Last 30 days
   const chartData = (() => {
     const last30Days: Record<string, Entry[]> = {}
-    entries.slice(-60).forEach((entry) => {
-      const entryDateStr = entry.dateStr || new Date(entry.timestamp).toISOString().split("T")[0]
+  entries.slice(-60).forEach((entry) => {
+      const entryDateStr = entry.dateStr || dateToDateStrLocal(new Date(entry.timestamp))
       if (!last30Days[entryDateStr]) {
         last30Days[entryDateStr] = []
       }
@@ -497,7 +453,7 @@ function WeightWidget({
     return dates.map((dateStr) => {
       const dayEntries = last30Days[dateStr]
       const lastEntry = dayEntries[dayEntries.length - 1]
-      const date = new Date(dateStr)
+      const date = dateStrToLocalDate(dateStr)
       return {
         value: lastEntry?.value ?? null,
         date: date.toLocaleDateString("en", { weekday: "short" }),
@@ -506,7 +462,7 @@ function WeightWidget({
     }).filter((d) => d.value !== null)
   })()
 
-  const displayUnit = ((tracker.config as Record<string, unknown>)?.unit as "lbs" | "kg" | undefined) ?? "lbs"
+  const unit = (tracker.config as Record<string, unknown>)?.unit as string | undefined || "kg"
   const currentWeight = dateEntry?.value ?? null
 
   return (
@@ -533,7 +489,7 @@ function WeightWidget({
 
         <div className="flex-1 flex flex-col">
           <div className="text-5xl font-bold text-white tracking-tight mb-4">
-          {currentWeight !== null ? formatWeight(currentWeight, displayUnit) : "--"}
+            {currentWeight !== null ? `${currentWeight.toFixed(1)}${unit}` : "--"}
           </div>
 
           {chartData.length > 1 && (
@@ -579,7 +535,7 @@ function ExerciseWidget({
   selectedDate: Date
 }) {
   const dateValue = getDateValue(entries, tracker, selectedDate)
-  const targetDateStr = dateToDateStr(selectedDate)
+  const targetDateStr = dateToDateStrLocal(selectedDate)
   
   // Get today's entries with activity names (notes)
   const dateEntries = entries.filter((e) => {
@@ -603,7 +559,7 @@ function ExerciseWidget({
   const chartData = (() => {
     const last7Days: Record<string, Entry[]> = {}
     entries.slice(-30).forEach((entry) => {
-      const entryDateStr = entry.dateStr || new Date(entry.timestamp).toISOString().split("T")[0]
+      const entryDateStr = entry.dateStr || dateToDateStrLocal(new Date(entry.timestamp))
       if (!last7Days[entryDateStr]) {
         last7Days[entryDateStr] = []
       }
@@ -614,7 +570,7 @@ function ExerciseWidget({
     return dates.map((dateStr) => {
       const dayEntries = last7Days[dateStr]
       const aggregatedValue = dayEntries.reduce((acc, e) => acc + (e.value ?? 0), 0)
-      const date = new Date(dateStr)
+      const date = dateStrToLocalDate(dateStr)
       return {
         value: aggregatedValue,
         date: date.toLocaleDateString("en", { weekday: "short" }),
@@ -709,7 +665,7 @@ function ProgressWidget({
   const chartData = (() => {
     const last7Days: Record<string, Entry[]> = {}
     entries.slice(-30).forEach((entry) => {
-      const entryDateStr = entry.dateStr || new Date(entry.timestamp).toISOString().split("T")[0]
+      const entryDateStr = entry.dateStr || dateToDateStrLocal(new Date(entry.timestamp))
       if (!last7Days[entryDateStr]) {
         last7Days[entryDateStr] = []
       }
@@ -720,7 +676,7 @@ function ProgressWidget({
     return dates.map((dateStr) => {
       const dayEntries = last7Days[dateStr]
       const aggregatedValue = dayEntries.reduce((acc, e) => acc + (e.value ?? 0), 0)
-      const date = new Date(dateStr)
+      const date = dateStrToLocalDate(dateStr)
       return {
         value: aggregatedValue,
         date: date.toLocaleDateString("en", { weekday: "short" }),
@@ -819,7 +775,7 @@ function ProgressWidget({
 // SocialWidget: For Social/Connection trackers
 function SocialWidget({ entries, tracker, selectedDate }: { entries: Entry[]; tracker: Tracker; selectedDate: Date }) {
   const dateValue = getDateValue(entries, tracker, selectedDate)
-  const targetDateStr = dateToDateStr(selectedDate)
+  const targetDateStr = dateToDateStrLocal(selectedDate)
   
   // Get today's entries
   const dateEntries = entries.filter((e) => {
@@ -903,7 +859,7 @@ function SocialWidget({ entries, tracker, selectedDate }: { entries: Entry[]; tr
 }
 
 function TaskWidget({ entries, tracker, selectedDate }: { entries: Entry[]; tracker: Tracker; selectedDate: Date }) {
-  const targetDateStr = dateToDateStr(selectedDate)
+  const targetDateStr = dateToDateStrLocal(selectedDate)
   const updateEntryMutation = useUpdateEntryMutation()
   
   // Filter tasks to show only those for selected date
@@ -1000,7 +956,7 @@ export function WidgetCard({ widget, tracker, entries, assets, selectedDate }: W
     }
 
     // Weight Widget: weight tracker
-    if (tracker.config.semanticType === 'weight' || trackerNameLower.includes("weight") || trackerNameLower.includes("peso")) {
+    if (trackerNameLower.includes("weight") || trackerNameLower.includes("peso")) {
       return <WeightWidget entries={entries} tracker={tracker} assets={assets} selectedDate={selectedDate} />
     }
 

@@ -20,6 +20,8 @@ Paquete compartido de base de datos Drizzle + SQLite (better-sqlite3) para Chime
 | `pnpm db:push` | **Deprecado.** Falla por ABI mismatch. No usar. |
 | `pnpm db:studio` | Abre Drizzle Studio (requiere Node.js compatible; puede fallar por better-sqlite3). |
 | `pnpm db:reset` | **Dev.** Borra el archivo `chimero.db` en userData (Windows: `%LOCALAPPDATA%/Chimero/chimero.db`). Útil para forzar recreación con todas las migraciones si hay schema drift. |
+| `pnpm demo:seed` | Inserta datos demo realistas (entries, reminders, contacts e interacciones) etiquetados para borrado selectivo. |
+| `pnpm demo:clear` | Elimina únicamente los datos demo previamente sembrados por `demo:seed`. |
 
 ## Flujo de trabajo
 

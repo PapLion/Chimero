@@ -5,7 +5,7 @@ import { useState, useRef } from "react"
 import { Upload, Search, Grid3x3, List, Trash2, Edit, Download, AlertCircle, ImageIcon } from "lucide-react"
 import { cn } from "../lib/utils"
 import { useAssets, useUploadAssetMutation, useUpdateAssetMutation, useDeleteAssetMutation } from "../lib/queries"
-import { type AssetCategory } from "../lib/store"
+import type { AssetCategory } from '../lib/assets'
 
 /** API asset shape (from get-assets / upload-asset) */
 interface ApiAsset {

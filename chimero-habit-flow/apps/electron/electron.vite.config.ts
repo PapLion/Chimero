@@ -7,7 +7,7 @@ function copySplashPlugin() {
   return {
     name: 'copy-splash',
     closeBundle() {
-      const src = resolve(__dirname, 'src/main/splash.html')
+      const src = resolve(__dirname, 'src/backend/splash.html')
       const outDir = resolve(__dirname, 'out/main')
       const dest = resolve(outDir, 'splash.html')
       if (existsSync(src)) {
@@ -76,15 +76,18 @@ function copyMigrationsPlugin() {
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin(), copySplashPlugin(), copyMigrationsPlugin()],
-    // 👇 AGREGA ESTO PARA ARREGLAR LA DB
     build: {
+      lib: {
+        entry: 'src/backend/index.ts'
+      },
       rollupOptions: {
         external: ['better-sqlite3']
       }
     },
     resolve: {
       alias: {
-        '@packages/db': resolve(__dirname, '../../packages/db/src')
+        '@packages/db': resolve(__dirname, '../../packages/db/src'),
+        shared: resolve(__dirname, '../../packages/shared/src')
       }
     }
   },
@@ -94,24 +97,30 @@ export default defineConfig({
       lib: {
         entry: 'src/preload/index.ts'
       }
+    },
+    resolve: {
+      alias: {
+        shared: resolve(__dirname, '../../packages/shared/src')
+      }
     }
   },
   renderer: {
-    root: 'src/renderer',
+    root: 'src/frontend',
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/renderer/index.html')
+          index: resolve(__dirname, 'src/frontend/index.html')
         }
       }
     },
     resolve: {
       alias: {
-        '@renderer': resolve('src/renderer/src'),
-        '@components': resolve('src/renderer/src/components'),
-        '@/': resolve(__dirname, 'src/renderer/src'),
+        '@renderer': resolve(__dirname, 'src/frontend'),
+        '@components': resolve(__dirname, 'src/frontend/components'),
+        '@/': resolve(__dirname, 'src/frontend'),
         '@packages/ui': resolve(__dirname, '../../packages/ui'),
-        '@packages/db': resolve(__dirname, '../../packages/db/src')
+        '@packages/db': resolve(__dirname, '../../packages/db/src'),
+        shared: resolve(__dirname, '../../packages/shared/src')
       }
     },
     optimizeDeps: {

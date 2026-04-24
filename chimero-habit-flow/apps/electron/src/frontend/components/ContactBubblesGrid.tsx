@@ -130,7 +130,7 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
     return (
       <div className="py-8 px-4 text-center">
         <p className="text-sm text-[hsl(210_12%_47%)]">
-          No contacts found for '{searchQuery}'
+          No contacts found for &quot;{searchQuery}&quot;
         </p>
       </div>
     )

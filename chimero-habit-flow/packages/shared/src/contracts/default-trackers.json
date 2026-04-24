@@ -1,0 +1,192 @@
+[
+  {
+    "name": "Weight",
+    "type": "numeric",
+    "icon": "scale",
+    "color": "#a855f7",
+    "order": 0,
+    "config": {
+      "unit": "kg",
+      "goal": 70,
+      "aggregation": "last",
+      "inputSchema": {
+        "fields": [
+          { "key": "value", "type": "number", "label": "Weight", "placeholder": "Current weight", "required": true },
+          { "key": "context", "type": "text", "label": "Context", "placeholder": "Optional context", "required": false }
+        ],
+        "valueKey": "value",
+        "noteKey": "context"
+      }
+    }
+  },
+  {
+    "name": "Mood",
+    "type": "range",
+    "icon": "smile",
+    "color": "#f59e0b",
+    "order": 1,
+    "config": {
+      "min": 1,
+      "max": 10,
+      "aggregation": "last",
+      "inputSchema": {
+        "fields": [
+          { "key": "value", "type": "rating", "label": "Mood", "min": 1, "max": 10, "required": true },
+          { "key": "note", "type": "text", "label": "Why?", "placeholder": "Optional context", "required": false }
+        ],
+        "valueKey": "value",
+        "noteKey": "note"
+      }
+    }
+  },
+  {
+    "name": "Exercise",
+    "type": "numeric",
+    "icon": "dumbbell",
+    "color": "#22c55e",
+    "order": 2,
+    "config": {
+      "unit": "min",
+      "goal": 30,
+      "aggregation": "sum",
+      "inputSchema": {
+        "fields": [
+          { "key": "value", "type": "number", "label": "Minutes", "placeholder": "Duration in minutes", "required": true },
+          { "key": "exercises", "type": "exercises", "label": "Exercises", "required": false },
+          { "key": "note", "type": "text", "label": "Note", "placeholder": "Optional note", "required": false }
+        ],
+        "valueKey": "value",
+        "noteKey": "note"
+      }
+    }
+  },
+  {
+    "name": "Social",
+    "type": "numeric",
+    "icon": "users",
+    "color": "#3b82f6",
+    "order": 3,
+    "config": {
+      "unit": "interactions",
+      "aggregation": "sum",
+      "inputSchema": {
+        "fields": [
+          { "key": "value", "type": "number", "label": "Quality (1-10)", "placeholder": "1-10", "required": false },
+          { "key": "contacts", "type": "contacts", "label": "Contacts", "required": true },
+          { "key": "note", "type": "text", "label": "Note", "placeholder": "Optional note", "required": false }
+        ],
+        "valueKey": "value",
+        "noteKey": "note"
+      }
+    }
+  },
+  {
+    "name": "Tasks",
+    "type": "text",
+    "icon": "check-square",
+    "color": "#ef4444",
+    "order": 4,
+    "config": {
+      "aggregation": "count",
+      "inputSchema": {
+        "fields": [
+          { "key": "note", "type": "text", "label": "Task", "placeholder": "Task description", "required": true }
+        ],
+        "noteKey": "note"
+      }
+    }
+  },
+  {
+    "name": "Savings",
+    "type": "numeric",
+    "icon": "wallet",
+    "color": "#10b981",
+    "order": 5,
+    "config": {
+      "unit": "$",
+      "goal": 10000,
+      "aggregation": "sum",
+      "inputSchema": {
+        "fields": [
+          { "key": "value", "type": "number", "label": "Amount", "placeholder": "Amount", "required": true },
+          { "key": "note", "type": "text", "label": "Category", "placeholder": "Optional category", "required": false }
+        ],
+        "valueKey": "value",
+        "noteKey": "note"
+      }
+    }
+  },
+  {
+    "name": "Books",
+    "type": "text",
+    "icon": "book",
+    "color": "#8b5cf6",
+    "order": 6,
+    "config": {
+      "aggregation": "count",
+      "inputSchema": {
+        "fields": [
+          { "key": "note", "type": "text", "label": "Book", "placeholder": "Book title", "required": true },
+          { "key": "value", "type": "number", "label": "Pages", "placeholder": "Optional pages", "required": false }
+        ],
+        "noteKey": "note",
+        "valueKey": "value"
+      }
+    }
+  },
+  {
+    "name": "Gaming",
+    "type": "text",
+    "icon": "gamepad-2",
+    "color": "#10b981",
+    "order": 7,
+    "config": {
+      "aggregation": "count",
+      "inputSchema": {
+        "fields": [
+          { "key": "note", "type": "text", "label": "Game", "placeholder": "Game name", "required": true },
+          { "key": "value", "type": "number", "label": "Hours", "placeholder": "Optional hours", "required": false }
+        ],
+        "noteKey": "note",
+        "valueKey": "value"
+      }
+    }
+  },
+  {
+    "name": "Media/TV",
+    "type": "text",
+    "icon": "tv",
+    "color": "#0ea5e9",
+    "order": 8,
+    "config": {
+      "aggregation": "count",
+      "inputSchema": {
+        "fields": [
+          { "key": "note", "type": "text", "label": "Title", "placeholder": "Show / Movie", "required": true },
+          { "key": "value", "type": "number", "label": "Rating", "placeholder": "Optional rating", "required": false }
+        ],
+        "noteKey": "note",
+        "valueKey": "value"
+      }
+    }
+  },
+  {
+    "name": "Diet / Calories",
+    "type": "numeric",
+    "icon": "salad",
+    "color": "#22c55e",
+    "order": 9,
+    "config": {
+      "unit": "kcal",
+      "aggregation": "sum",
+      "inputSchema": {
+        "fields": [
+          { "key": "value", "type": "number", "label": "Calories", "placeholder": "Calories", "required": true },
+          { "key": "note", "type": "text", "label": "Meal", "placeholder": "Optional meal", "required": false }
+        ],
+        "valueKey": "value",
+        "noteKey": "note"
+      }
+    }
+  }
+]

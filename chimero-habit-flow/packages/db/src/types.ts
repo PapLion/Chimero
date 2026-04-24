@@ -11,6 +11,38 @@ export type TrackerSchemaType = "numeric" | "range" | "binary" | "text" | "compo
 /** UI-friendly tracker type mapping (counter→numeric, rating→range, list→text) */
 export type TrackerUIType = "counter" | "rating" | "list" | TrackerSchemaType
 
+export type TrackerAggregation = "sum" | "last" | "avg" | "count"
+
+export type TrackerInputFieldType =
+  | "number"
+  | "text"
+  | "rating"
+  | "boolean"
+  | "select"
+  | "contacts"
+  | "exercises"
+
+export type TrackerInputField = {
+  /** Stable key used to persist in Entry.metadata or map to Entry.value/note. */
+  key: string
+  type: TrackerInputFieldType
+  label?: string
+  placeholder?: string
+  required?: boolean
+  /** For number/rating. */
+  min?: number
+  max?: number
+  step?: number
+  /** For select. */
+  options?: string[]
+}
+
+export type TrackerPresentation = {
+  title?: string
+  description?: string
+  unitLabel?: string
+}
+
 export interface TrackerConfig {
   min?: number
   max?: number
@@ -19,8 +51,24 @@ export interface TrackerConfig {
   step?: number
   options?: string[]
   isCustom?: boolean
-  /** Stable semantic identifier for tracker-specific UI/logic (e.g. "weight"). Preferred over name matching. */
-  semanticType?: string
+
+  /**
+   * Config-driven entry UI + validation contract.
+   * If not present, UI falls back to legacy behavior but should be migrated.
+   */
+  inputSchema?: {
+    fields: TrackerInputField[]
+    /**
+     * How inputs map to the Entry columns.
+     * - valueKey: metadata key that should be copied into Entry.value (number)
+     * - noteKey: metadata key that should be copied into Entry.note (string)
+     */
+    valueKey?: string
+    noteKey?: string
+  }
+
+  aggregation?: TrackerAggregation
+  presentation?: TrackerPresentation
 }
 
 export interface Tracker {
@@ -46,12 +94,6 @@ export interface Entry {
   timestamp: number
   dateStr: string
   assetId?: number | null
-}
-
-export interface WeightEntryMetadata {
-  waist?: number
-  waistUnit?: "in" | "cm"
-  storedUnit?: "lbs" | "kg"
 }
 
 export interface EntryInsert {

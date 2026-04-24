@@ -14,9 +14,10 @@ export default defineConfig({
       '@packages/ui/input': resolve(root, 'packages/ui/input.tsx'),
       '@packages/ui/tooltip': resolve(root, 'packages/ui/tooltip.tsx'),
       '@packages/ui/utils': resolve(root, 'packages/ui/utils.ts'),
-      '@renderer': resolve(root, 'apps/electron/src/renderer/src'),
-      '@components': resolve(root, 'apps/electron/src/renderer/src/components'),
-      '@/': resolve(root, 'apps/electron/src/renderer/src'),
+      '@renderer': resolve(root, 'apps/electron/src/frontend'),
+      '@components': resolve(root, 'apps/electron/src/frontend/components'),
+      '@/': resolve(root, 'apps/electron/src/frontend'),
+      shared: resolve(root, 'packages/shared/src'),
     },
   },
   test: {

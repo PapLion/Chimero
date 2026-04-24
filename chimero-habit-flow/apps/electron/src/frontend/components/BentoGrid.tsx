@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, type ComponentProps } from "react"
+import type { AssetWithUrls } from "shared"
 import { useAppStore } from "../lib/store"
 import { useTrackers, useEntries, useDashboardLayout, useSaveDashboardLayoutMutation, useAssets } from "../lib/queries"
 import { WidgetCard } from "./WidgetCard"
@@ -72,18 +73,11 @@ export function BentoGrid() {
   const { data: assetsData = [] } = useAssets({ limit: 200 })
   const saveLayoutMutation = useSaveDashboardLayoutMutation()
 
-  // Map assets by ID for quick lookup (API returns unknown[]; we expect { id, thumbnailUrl?, assetUrl? })
-  interface AssetRecord {
-    id: number
-    thumbnailUrl?: string
-    assetUrl?: string
-    [key: string]: unknown
-  }
   const assetsById = useMemo(() => {
-    const map = new Map<number, AssetRecord>()
-      ; (assetsData as AssetRecord[]).forEach((asset) => {
-        if (asset?.id != null) map.set(asset.id, asset)
-      })
+    const map = new Map<number, AssetWithUrls>()
+    assetsData.forEach((asset) => {
+      map.set(asset.id, asset)
+    })
     return map
   }, [assetsData])
 

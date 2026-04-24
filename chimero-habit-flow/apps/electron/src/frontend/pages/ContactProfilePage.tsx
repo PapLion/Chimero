@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, Fragment } from "react"
 import { useAppStore } from "../lib/store"
 import { useContact, useContactInteractions, useCreateContactMutation, useUpdateContactMutation, useDeleteContactMutation, useAssets } from "../lib/queries"
 import { Input } from "@packages/ui/input"
@@ -430,11 +430,13 @@ export function ContactProfilePage() {
                 <SortableContext items={traits} strategy={horizontalListSortingStrategy}>
                   <div className="flex flex-wrap gap-2">
                     {traits.map((trait) => (
-                      <SortableTrait
-                        id={trait}
-                        trait={trait}
-                        onRemove={() => handleRemoveTrait(trait)}
-                      />
+                      <Fragment key={trait}>
+                        <SortableTrait
+                          id={trait}
+                          trait={trait}
+                          onRemove={() => handleRemoveTrait(trait)}
+                        />
+                      </Fragment>
                     ))}
                   </div>
                 </SortableContext>

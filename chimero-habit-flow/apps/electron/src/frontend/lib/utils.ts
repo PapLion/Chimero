@@ -1,15 +1,11 @@
-import { clsx, type ClassValue } from 'clsx'
-import { twMerge } from 'tailwind-merge'
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
+export { cn } from '@packages/ui/utils'
+import { dateToDateStrLocal, type DateStr } from "shared"
 
 /**
  * Converts a Date to YYYY-MM-DD format
  */
 export function dateToDateStr(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+  return dateToDateStrLocal(date)
 }
 
 /**
@@ -29,7 +25,7 @@ export function isSameDay(date1: Date | number, date2: Date | number): boolean {
  * Filters entries to only those for a specific date
  */
 export function filterEntriesByDate(entries: Array<{ dateStr?: string | null; timestamp: number }>, date: Date): typeof entries {
-  const targetDateStr = dateToDateStr(date)
+  const targetDateStr = dateToDateStr(date) as DateStr
   return entries.filter((entry) => {
     if (entry.dateStr) {
       return entry.dateStr === targetDateStr

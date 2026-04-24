@@ -4,8 +4,10 @@ import React, { useMemo, useState } from "react"
 import { useAppStore } from "../lib/store"
 import { useTrackers, useEntries, useDeleteEntryMutation } from "../lib/queries"
 import { filterEntriesByDate } from "../lib/utils"
-import { formatWeight } from "../lib/weightUtils"
 import type { Entry } from "../lib/store"
+import type { AssetWithUrls } from "shared"
+import { dateStrToLocalDate, dateToDateStrLocal } from "shared"
+import { aggregateEntriesForDateStr } from "../lib/aggregation"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, type LucideIcon } from "lucide-react"
 import { EditEntryDialog } from "./modals/EditEntryDialog"
 import { ConfirmDeleteDialog } from "./modals/ConfirmDeleteDialog"
@@ -43,17 +45,10 @@ const iconMap: Record<string, LucideIcon> = {
   salad: Salad,
 }
 
-interface Asset {
-  id: number
-  thumbnailUrl: string
-  assetUrl: string
-  originalName?: string | null
-}
-
 interface TrackerDetailViewProps {
   trackerId: number
   selectedDate: Date
-  assets: Map<number, Asset>
+  assets: Map<number, AssetWithUrls>
 }
 
 // Recharts Tooltip content props
@@ -83,13 +78,6 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const { data: trackers = [] } = useTrackers()
   const { data: allEntries = [] } = useEntries({ limit: 1000 })
   const deleteEntryMutation = useDeleteEntryMutation()
-
-  const handleDeleteEntry = (e: React.MouseEvent, id: number) => {
-    e.stopPropagation()
-    if (window.confirm("Delete this entry?")) {
-      deleteEntryMutation.mutate(id)
-    }
-  }
 
   const [deletingEntry, setDeletingEntry] = useState<Entry | null>(null)
 
@@ -225,7 +213,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     const relevantEntries = trackerEntries.filter(e => e.timestamp >= cutoffTime && e.timestamp <= refTime)
 
     relevantEntries.forEach((entry) => {
-      const entryDateStr = entry.dateStr || new Date(entry.timestamp).toISOString().split("T")[0]
+      const entryDateStr = entry.dateStr || dateToDateStrLocal(new Date(entry.timestamp))
       if (!datesMap[entryDateStr]) {
         datesMap[entryDateStr] = []
       }
@@ -234,19 +222,8 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
 
     const dates = Object.keys(datesMap).sort()
     return dates.map((dateStr) => {
-      const dayEntries = datesMap[dateStr]
-      const trackerNameLower = tracker.name.toLowerCase()
-      const isWeightTracker = tracker.config.semanticType === 'weight' || trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
-      const isRatingType = tracker.type === "rating"
-
-      let aggregatedValue: number
-      if (isWeightTracker || isRatingType) {
-        aggregatedValue = dayEntries[dayEntries.length - 1]?.value ?? 0
-      } else {
-        aggregatedValue = dayEntries.reduce((acc, e) => acc + (e.value ?? 0), 0)
-      }
-
-      const date = new Date(dateStr)
+      const aggregatedValue = aggregateEntriesForDateStr(datesMap[dateStr], tracker, dateStr) ?? 0
+      const date = dateStrToLocalDate(dateStr)
       return {
         value: aggregatedValue,
         // Shorten label if it's 1Y to avoid cramming
@@ -272,7 +249,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     const daysArray = Array.from({ length: numDays }).map((_, i) => {
       const d = new Date(startDate.getTime())
       d.setDate(startDate.getDate() + i)
-      return d.toISOString().split("T")[0]
+      return dateToDateStrLocal(d)
     })
 
     // Map intensity per date
@@ -285,7 +262,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     const pastEntries = trackerEntries.filter((e) => e.timestamp <= refTimeEnd.getTime())
 
     pastEntries.forEach(entry => {
-      const dateStr = entry.dateStr || new Date(entry.timestamp).toISOString().split("T")[0]
+      const dateStr = entry.dateStr || dateToDateStrLocal(new Date(entry.timestamp))
       if (!intensityMap[dateStr]) intensityMap[dateStr] = 0
 
       // Binary/Task trackers add 1, others add their scalar value
@@ -310,7 +287,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     trackerNameLower.includes("movie") || trackerNameLower.includes("game") ||
     trackerNameLower.includes("media") ||
     tracker.icon === "book" || tracker.icon === "gamepad-2" || tracker.icon === "music"
-  const isWeightType = tracker.config.semanticType === 'weight' || trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
+  const isWeightType = trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
   const isTaskType = tracker.type === "list" || tracker.type === "binary" || trackerNameLower.includes("task")
   const isDietType = trackerNameLower.includes("diet") || trackerNameLower.includes("calorie") || trackerNameLower.includes("food") || trackerNameLower.includes("meal") || tracker.icon === "salad"
   const isSavingsType = trackerNameLower.includes("saving") || trackerNameLower.includes("finance") || trackerNameLower.includes("money") || trackerNameLower.includes("budget") || tracker.icon === "wallet"
@@ -553,7 +530,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                         <YAxis hide domain={["auto", "auto"]} />
                         <Tooltip content={<CustomTooltip />} />
                         <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                          {chartData.map((entry, index) => (
+                          {chartData.map((_entry, index) => (
                             <Cell key={`cell-${index}`} fill="hsl(266 73% 63%)" />
                           ))}
                         </Bar>
@@ -887,10 +864,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                   const isHigh = averageValue > 0 && value > averageValue * 1.5
                   const isLow = averageValue > 0 && value < averageValue * 0.5
                   const unit = (tracker.config as Record<string, unknown>)?.unit as string | undefined
-                  const displayUnit = (unit === "lbs" || unit === "kg") ? unit : "lbs"
-                  const displayValue = isWeightType
-                    ? formatWeight(value, displayUnit)
-                    : unit === "$" ? `$${value.toLocaleString()}` : `${value.toFixed(1)}${unit ?? ""}`
+                  const displayValue = unit === "$" ? `$${value.toLocaleString()}` : `${value.toFixed(1)}${unit ?? ""}`
                   const asset = entry.assetId != null ? assets.get(entry.assetId) : null
                   return (
                     <div
@@ -1001,7 +975,7 @@ function calculateStreak(entries: Entry[]): number {
   // Sort by date descending
   const sorted = entries
     .map((e) => ({
-      dateStr: e.dateStr || new Date(e.timestamp).toISOString().split("T")[0],
+      dateStr: e.dateStr || dateToDateStrLocal(new Date(e.timestamp)),
       timestamp: e.timestamp,
     }))
     .sort((a, b) => b.dateStr.localeCompare(a.dateStr))
@@ -1017,7 +991,7 @@ function calculateStreak(entries: Entry[]): number {
   for (let i = 0; i < uniqueDates.length; i++) {
     const checkDate = new Date(today)
     checkDate.setDate(checkDate.getDate() - i)
-    const checkDateStr = checkDate.toISOString().split("T")[0]
+    const checkDateStr = dateToDateStrLocal(checkDate)
 
     if (uniqueDates.includes(checkDateStr)) {
       streak++

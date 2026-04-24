@@ -1,4 +1,3 @@
-import React from "react"
 import { Dialog, DialogContent } from "@packages/ui/dialog"
 import { Button } from "@packages/ui/button"
 import { Trash2 } from "lucide-react"
