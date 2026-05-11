@@ -3,9 +3,9 @@ import { join, resolve, normalize } from 'path'
 import { pathToFileURL } from 'url'
 import { existsSync } from 'fs'
 import { setupDatabase } from './database'
-import { registerIpcHandlers } from './ipc-handlers'
-import { startReminderLoop, setMainWindowRef as setReminderMainWindow } from './services/reminder-service'
-import { initExerciseDb } from './services/exercise-db-service'
+import { registerIpcHandlers } from './features'
+import { startReminderLoop, setMainWindowRef as setReminderMainWindow } from './features/reminders/service'
+import { initExerciseDb } from './features/exercises/service'
 
 // Allow chimero-asset:// to load files from userData (must be before app.ready)
 protocol.registerSchemesAsPrivileged([

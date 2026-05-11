@@ -15,6 +15,13 @@
       "when": 1773547170953,
       "tag": "0001_nasty_praxagora",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1778209917639,
+      "tag": "0002_foundation_tags_weight",
+      "breakpoints": true
     }
   ]
 }

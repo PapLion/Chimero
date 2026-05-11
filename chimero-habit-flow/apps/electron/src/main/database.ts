@@ -211,28 +211,15 @@ function seedDefaultTrackers(): void {
 }
 
 /**
- * Handles transition from old migrations (0000-0006) to consolidated migration.
- * If schema is complete but __drizzle_migrations__ has old entries (2+ rows),
- * clear them so migrate() will run the consolidated migration (uses IF NOT EXISTS).
+ * Historical compatibility hook.
+ *
+ * This used to clear __drizzle_migrations__ when a "complete" schema was
+ * detected. That is unsafe now because 0002 contains non-idempotent ALTER
+ * statements for settings.weight_unit and settings.measure_unit. Keep this as
+ * an explicit no-op so startup never replays already-applied migrations.
  */
-function prepareConsolidatedMigrationTransition(_migrationsFolder: string): void {
-  const raw = getRawDb();
-  if (!raw) return;
-
-  const diag = runSchemaDiagnostic();
-  const schemaComplete = diag.hasIsFavorite && diag.hasDashboardLayout;
-  if (!schemaComplete) return;
-
-  try {
-    const rows = raw.prepare("SELECT COUNT(*) as cnt FROM __drizzle_migrations").get() as { cnt: number };
-    if (rows.cnt < 2) return;
-
-    // Old multi-migration setup (0000-0006). Clear so migrate() runs consolidated.
-    raw.prepare("DELETE FROM __drizzle_migrations").run();
-    console.log('[DB] Cleared old migration entries for consolidated migration transition.');
-  } catch {
-    // Table may not exist yet (fresh DB) - migrate() will create it
-  }
+export function prepareConsolidatedMigrationTransition(_migrationsFolder: string): void {
+  return;
 }
 
 /**
@@ -270,7 +257,7 @@ export function setupDatabase(): void {
   initDb(dbPath);
   const db = getDb();
 
-  // Transition: if DB has old migrations (0000-0006), clear them so migrate() runs consolidated
+  // Historical no-op. Never clear migration history before migrate().
   prepareConsolidatedMigrationTransition(migrationsFolder);
 
   console.log('[DB] Running migrations...');

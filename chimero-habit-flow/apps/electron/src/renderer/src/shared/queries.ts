@@ -1,0 +1,519 @@
+/**
+ * TanStack Query hooks for Chimero - fetches real data via IPC.
+ */
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { api } from './api'
+import type { Tracker, Entry } from './store'
+import type { CreateWeightEntryRequest, SetTrackerGoalRequest, TrackerConfig, UpdateWeightEntryRequest } from '@contracts/contracts'
+import type { AssetWithUrls } from '@contracts/features/assets'
+
+export const queryKeys = {
+  trackers: ['trackers'] as const,
+  entries: (opts?: { trackerId?: number }) => ['entries', opts] as const,
+  entriesRoot: ['entries'] as const,
+  recentTrackers: (limit?: number) => ['recent-trackers', limit] as const,
+  recentTrackersRoot: ['recent-trackers'] as const,
+  favoriteTrackers: ['favorite-trackers'] as const,
+  quickEntryContext: ['quick-entry-context'] as const,
+  stats: ['stats'] as const,
+  statsQuery: (opts?: { trackerIds?: number[]; tagIds?: number[]; startDate?: string; endDate?: string; groupBy?: 'day' | 'week' | 'month' }) => ['stats-query', opts] as const,
+  calendarMonth: (year: number, month: number) => ['calendar-month', year, month] as const,
+  calendarMonthRoot: ['calendar-month'] as const,
+  moodAggregates: (trackerId?: number, days?: number) => ['mood-aggregates', trackerId, days] as const,
+  moodAggregatesRoot: ['mood-aggregates'] as const,
+  taskEntries: (trackerId: number) => ['task-entries', trackerId] as const,
+  taskEntriesRoot: ['task-entries'] as const,
+  assets: (opts?: { limit?: number; offset?: number }) => ['assets', opts] as const,
+  assetsRoot: ['assets'] as const,
+  reminders: ['reminders'] as const,
+  dashboardLayout: ['dashboard-layout'] as const,
+  tags: ['tags'] as const,
+  tagTree: ['tag-tree'] as const,
+  weightDetail: (trackerId: number) => ['weight-detail', trackerId] as const,
+  weightDetailRoot: ['weight-detail'] as const,
+  weightGoal: (trackerId: number) => ['weight-goal', trackerId] as const,
+  // Contacts
+  contacts: ['contacts'] as const,
+  contact: (id: number) => ['contact', id] as const,
+  contactInteractions: (contactId: number) => ['contact-interactions', contactId] as const,
+}
+
+export function useTrackers() {
+  return useQuery({
+    queryKey: queryKeys.trackers,
+    queryFn: () => api.getTrackers() as Promise<Tracker[]>,
+    staleTime: 30_000,
+  })
+}
+
+export function useEntries(options?: { limit?: number; trackerId?: number }) {
+  return useQuery({
+    queryKey: queryKeys.entries(options),
+    queryFn: () => api.getEntries(options) as Promise<Entry[]>,
+    staleTime: 10_000,
+  })
+}
+
+export function useRecentTrackers(limit = 10) {
+  return useQuery({
+    queryKey: queryKeys.recentTrackers(limit),
+    queryFn: () => api.getRecentTrackers(limit) as Promise<Tracker[]>,
+    staleTime: 15_000,
+  })
+}
+
+export function useFavoriteTrackers() {
+  return useQuery({
+    queryKey: queryKeys.favoriteTrackers,
+    queryFn: () => api.getFavoriteTrackers() as Promise<Tracker[]>,
+    staleTime: 30_000,
+  })
+}
+
+export function useQuickEntryContext(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.quickEntryContext,
+    queryFn: () => api.getQuickEntryContext(),
+    enabled,
+    staleTime: 15_000,
+  })
+}
+
+export function useMoodDailyAggregates(trackerId?: number, days = 30) {
+  return useQuery({
+    queryKey: queryKeys.moodAggregates(trackerId, days),
+    queryFn: () => api.getMoodDailyAggregates({ trackerId, days }),
+    staleTime: 60_000,
+  })
+}
+
+export function useStats() {
+  return useQuery({
+    queryKey: queryKeys.stats,
+    queryFn: () => api.getDashboardStats(),
+    staleTime: 60_000,
+  })
+}
+
+export function useStatsQuery(options?: { trackerIds?: number[]; tagIds?: number[]; startDate?: string; endDate?: string; groupBy?: 'day' | 'week' | 'month' }) {
+  return useQuery({
+    queryKey: queryKeys.statsQuery(options),
+    queryFn: () => api.getStats(options),
+    staleTime: 60_000,
+  })
+}
+
+export function useTags() {
+  return useQuery({
+    queryKey: queryKeys.tags,
+    queryFn: () => api.getTags(),
+    staleTime: 60_000,
+  })
+}
+
+export function useTagTree() {
+  return useQuery({
+    queryKey: queryKeys.tagTree,
+    queryFn: () => api.getTagTree(),
+    staleTime: 60_000,
+  })
+}
+
+export function useWeightDetail(trackerId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.weightDetail(trackerId),
+    queryFn: () => api.getWeightDetail(trackerId),
+    enabled: enabled && !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
+export function useWeightGoal(trackerId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.weightGoal(trackerId),
+    queryFn: () => api.getWeightGoal(trackerId),
+    enabled: enabled && !!trackerId,
+    staleTime: 30_000,
+  })
+}
+
+export function useCalendarMonth(year: number, month: number) {
+  return useQuery({
+    queryKey: queryKeys.calendarMonth(year, month),
+    queryFn: () => api.getCalendarMonth(year, month),
+    staleTime: 30_000,
+  })
+}
+
+export function useTaskEntries(trackerId: number) {
+  return useQuery({
+    queryKey: queryKeys.taskEntries(trackerId),
+    queryFn: () => api.getTaskEntries(trackerId) as Promise<Entry[]>,
+    enabled: !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
+export function useAssets(options?: { limit?: number; offset?: number }) {
+  return useQuery<AssetWithUrls[]>({
+    queryKey: queryKeys.assets(options),
+    queryFn: () => api.getAssets(options),
+    staleTime: 60_000,
+  })
+}
+
+export function useDashboardLayout() {
+  return useQuery({
+    queryKey: queryKeys.dashboardLayout,
+    queryFn: () => api.getDashboardLayout(),
+    staleTime: 60_000,
+  })
+}
+
+export function useReminders() {
+  return useQuery({
+    queryKey: queryKeys.reminders,
+    queryFn: () => api.getReminders(),
+    staleTime: 30_000,
+  })
+}
+
+export function useAddEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { trackerId: number; value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp: number; assetId?: number | null }) =>
+      api.addEntry(data),
+    onSuccess: () => {
+      // Invalidate and refetch all entry-related data so widgets update immediately
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.moodAggregatesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.taskEntriesRoot })
+      // Ensure active queries refetch immediately for a snappy dashboard experience
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+      qc.refetchQueries({ queryKey: queryKeys.stats, type: 'active' })
+    },
+  })
+}
+
+export function useAddWeightEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateWeightEntryRequest) => api.addWeightEntry(data),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.weightDetail(variables.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.weightGoal(variables.trackerId) })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useUpdateWeightEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ entryId, updates }: { entryId: number; updates: UpdateWeightEntryRequest }) =>
+      api.updateWeightEntry(entryId, updates),
+    onSuccess: (result) => {
+      const trackerId = result?.entry.trackerId
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      if (trackerId) qc.invalidateQueries({ queryKey: queryKeys.weightDetail(trackerId) })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useSetWeightGoalMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: SetTrackerGoalRequest) => api.setWeightGoal(data),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.weightGoal(variables.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.weightDetail(variables.trackerId) })
+    },
+  })
+}
+
+export function useSaveDashboardLayoutMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (layout: Array<{ id: string; trackerId: number; position: number; size: string }>) =>
+      api.saveDashboardLayout(layout),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.dashboardLayout })
+    },
+  })
+}
+
+export function useUpdateTrackerMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      updates,
+    }: {
+      id: number
+      updates: { order?: number; isFavorite?: boolean; name?: string; icon?: string | null; color?: string | null; type?: string; config?: TrackerConfig }
+    }) => api.updateTracker(id, updates),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.trackers })
+      qc.invalidateQueries({ queryKey: queryKeys.favoriteTrackers })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackers() })
+    },
+  })
+}
+
+export function useCreateTrackerMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { name: string; type: string; icon?: string; color?: string; config?: TrackerConfig }) =>
+      api.createTracker(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.trackers })
+      qc.invalidateQueries({ queryKey: queryKeys.dashboardLayout })
+    },
+  })
+}
+
+export function useDeleteTrackerMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.deleteTracker(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.trackers })
+      qc.invalidateQueries({ queryKey: queryKeys.dashboardLayout })
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+    },
+  })
+}
+
+export function useUploadAssetMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const { path } = await api.openFileDialog()
+      if (!path) return null
+      return api.uploadAsset(path)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.assets() })
+    },
+  })
+}
+
+export function useUpdateAssetMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, originalName }: { id: number; originalName?: string | null }) =>
+      api.updateAsset(id, { originalName }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.assets() })
+    },
+  })
+}
+
+export function useDeleteAssetMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.deleteAsset(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.assets() })
+    },
+  })
+}
+
+export function useUpsertReminderMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { id?: number; title: string; description?: string | null; trackerId?: number | null; time: string; date?: string | null; days?: number[] | null; enabled?: boolean }) =>
+      api.upsertReminder(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.reminders })
+    },
+  })
+}
+
+export function useDeleteReminderMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.deleteReminder(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.reminders })
+    },
+  })
+}
+
+export function useToggleReminderMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) => api.toggleReminder(id, enabled),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.reminders })
+    },
+  })
+}
+
+export function useCompleteReminderMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.completeReminder(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.reminders })
+      qc.refetchQueries({ queryKey: queryKeys.reminders })
+    },
+  })
+}
+
+export function useUncompleteReminderMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.uncompleteReminder(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.reminders })
+      qc.refetchQueries({ queryKey: queryKeys.reminders })
+    },
+  })
+}
+
+export function useUpdateEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, updates }: { id: number; updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null } }) =>
+      api.updateEntry(id, updates),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.weightDetailRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.taskEntriesRoot })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useDeleteEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.deleteEntry(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.taskEntriesRoot })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+// === CONTACTS (Personal CRM) ===
+
+export function useContacts() {
+  return useQuery({
+    queryKey: queryKeys.contacts,
+    queryFn: () => api.getContacts(),
+    staleTime: 30_000,
+  })
+}
+
+export function useContact(id: number) {
+  return useQuery({
+    queryKey: queryKeys.contact(id),
+    queryFn: () => api.getContact(id),
+    enabled: !!id,
+    staleTime: 30_000,
+  })
+}
+
+export function useContactInteractions(contactId: number) {
+  return useQuery({
+    queryKey: queryKeys.contactInteractions(contactId),
+    queryFn: () => api.getContactInteractions(contactId),
+    enabled: !!contactId,
+    staleTime: 15_000,
+  })
+}
+
+export function useCreateContactMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { name: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; notes?: string | null }) =>
+      api.createContact(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.contacts })
+    },
+  })
+}
+
+export function useUpdateContactMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, updates }: { id: number; updates: { name?: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; dateLastTalked?: string | null; traits?: string[] | null; notes?: string | null } }) =>
+      api.updateContact(id, updates),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.contacts })
+    },
+  })
+}
+
+export function useDeleteContactMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.deleteContact(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.contacts })
+    },
+  })
+}
+
+export function useCreateContactInteractionMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { contactId: number; entryId?: number | null; mood: "positive" | "negative" | "neutral"; notes?: string | null }) =>
+      api.createContactInteraction(data),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.contactInteractions(variables.contactId) })
+      qc.invalidateQueries({ queryKey: queryKeys.contacts })
+    },
+  })
+}
+
+// === EXERCISE DB ===
+
+export function useSearchExercises(query: string, limit?: number) {
+  return useQuery({
+    queryKey: ['exercises', 'search', query, limit],
+    queryFn: () => api.searchExercises(query, limit),
+    enabled: query.trim().length > 0,
+    staleTime: Infinity, // Los ejercicios no cambian
+  })
+}
+
+export function useAllExercises(limit?: number) {
+  return useQuery({
+    queryKey: ['exercises', 'all', limit],
+    queryFn: () => api.getAllExercises(limit),
+    staleTime: Infinity,
+  })
+}
+
+export function useExerciseDbStatus() {
+  return useQuery({
+    queryKey: ['exercises', 'status'],
+    queryFn: () => api.getExerciseDbStatus(),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      // Poll every 1.5s while loading or idle, stop when ready or error
+      return status === 'ready' || status === 'error' ? false : 1500
+    },
+    staleTime: 0, // Always refetch — status changes over time
+  })
+}

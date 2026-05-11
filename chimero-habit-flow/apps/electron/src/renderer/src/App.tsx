@@ -1,19 +1,20 @@
 "use client"
 
-import { Sidebar } from "./components/Sidebar"
-import { Header } from "./components/Header"
-import { BentoGrid } from "./components/BentoGrid"
-import { QuickEntry } from "./components/QuickEntry"
-import { FloatingActionButton } from "./components/FloatingActionButton"
-import { NotificationsModal } from "./components/modals/NotificationsModal"
-import { CalendarPage } from "./pages/CalendarPage"
-import { AssetsPage } from "./pages/AssetsPage"
-import { CustomTrackersPage } from "./pages/CustomTrackersPage"
-// NEW IMPORT
-import StatsPage from "./pages/StatsPage"
-import { ContactProfilePage } from "./pages/ContactProfilePage"
-import { ExerciseDownloadToast } from "./components/ExerciseDownloadToast"
-import { useAppStore } from "./lib/store"
+import { Sidebar } from "@features/dashboard/components/Sidebar"
+import { Header } from "@features/dashboard/components/Header"
+import { BentoGrid } from "@features/dashboard/components/BentoGrid"
+import { QuickEntry } from "@features/entry/components/QuickEntry"
+import { FloatingActionButton } from "@shared/components/FloatingActionButton"
+import { NotificationsModal } from "@features/reminders/modals/NotificationsModal"
+import { CalendarPage } from "@features/calendar/page"
+import { AssetsPage } from "@features/assets/page"
+import { CustomTrackersPage } from "@features/trackers/page"
+import StatsPage from "@features/tracking/page"
+import { ContactProfilePage } from "@features/contacts/page"
+import { ExerciseDownloadToast } from "@features/exercises/components/ExerciseDownloadToast"
+import { useAppStore } from "@shared/store"
+import { ToastHost } from "@shared/components/ToastHost"
+import { ToastProvider } from "@shared/components/toast"
 
 export default function ChimeroApp() {
   const { currentPage } = useAppStore()
@@ -38,41 +39,47 @@ export default function ChimeroApp() {
   }
 
   return (
-    <div className="h-screen bg-[hsl(210_35%_7%)]">
-      {/* Main App Layout */}
-      <div className="flex h-full overflow-hidden">
-        {/* Sidebar */}
-        <Sidebar />
+    <ToastProvider>
+      <div className="app-shell relative h-[100dvh] overflow-hidden">
+        {/* Main App Layout */}
+        <div className="relative z-10 flex h-full min-w-0 overflow-hidden">
+          {/* Sidebar */}
+          <Sidebar />
 
-        {/* Main Content */}
-        <main className="flex-1 flex flex-col overflow-hidden">
-          {/* Header */}
-          <Header />
+          {/* Main Content */}
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {/* Header */}
+            <Header />
 
-          {/* Dashboard Content */}
-          <div className="flex-1 overflow-y-auto p-8">
-            {renderPage()}
-          </div>
-        </main>
+            {/* Dashboard Content */}
+            <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-6 lg:px-8 lg:py-7">
+              {renderPage()}
+            </div>
+          </main>
+        </div>
+
+        {/* Quick Entry Command Bar */}
+        <QuickEntry />
+
+        {/* Notifications Modal */}
+        <NotificationsModal />
+
+        {/* Floating Action Button */}
+        <FloatingActionButton />
+
+        {/* Keyboard Shortcut Hint */}
+        <div className="surface-chip fixed bottom-6 left-[calc(var(--dashboard-sidebar-width)+1rem)] hidden items-center gap-2 px-3 py-2 text-xs text-[hsl(var(--muted-foreground))] md:flex">
+          <kbd className="rounded-md border border-[hsl(var(--border)/0.75)] bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-[hsl(var(--foreground))]">
+            Alt+Q
+          </kbd>
+          <span>Quick Entry</span>
+        </div>
+
+        {/* Exercise Download Toast */}
+        <ExerciseDownloadToast />
+
+        <ToastHost />
       </div>
-
-      {/* Quick Entry Command Bar */}
-      <QuickEntry />
-
-      {/* Notifications Modal */}
-      <NotificationsModal />
-
-      {/* Floating Action Button */}
-      <FloatingActionButton />
-
-      {/* Keyboard Shortcut Hint */}
-      <div className="fixed bottom-6 left-[272px] hidden md:flex items-center gap-2 text-xs text-[hsl(210_12%_47%)] bg-[hsl(210_25%_11%)] backdrop-blur-md px-3 py-2 rounded-lg border border-[hsl(210_18%_22%)]">
-        <kbd className="px-1.5 py-0.5 bg-[hsl(210_20%_15%)] rounded text-[10px] font-mono text-[hsl(210_25%_97%)]">Alt+Q</kbd>
-        <span>Quick Entry</span>
-      </div>
-
-      {/* Exercise Download Toast */}
-      <ExerciseDownloadToast />
-    </div>
+    </ToastProvider>
   )
 }

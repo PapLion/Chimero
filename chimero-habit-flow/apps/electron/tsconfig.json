@@ -27,6 +27,13 @@
     "baseUrl": ".",
     "paths": {
       "@renderer/*": ["src/renderer/src/*"],
+      "@features/*": ["src/renderer/src/features/*"],
+      "@shared/*": ["src/renderer/src/shared/*"],
+      "@shared/utils": ["src/renderer/src/shared/utils.ts"],
+      "@shared/store": ["src/renderer/src/shared/store.ts"],
+      "@shared/queries": ["src/renderer/src/shared/queries.ts"],
+      "@shared/api": ["src/renderer/src/shared/api.ts"],
+      "@contracts/*": ["../../packages/shared/src/*"],
       "@packages/ui/*": ["../../packages/ui/*"],
       "@packages/db": ["../../packages/db/src/index.ts"],
       "@packages/db/*": ["../../packages/db/src/*"]

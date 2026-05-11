@@ -10,14 +10,16 @@
   "main": "index.js",
   "scripts": {
     "dev": "turbo run dev",
+    "dev:web": "pnpm --filter chimero-web dev",
     "db:migrate": "turbo run db:migrate",
     "lint": "eslint \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\" --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "build": "pnpm --filter chimero-electron build",
+    "build:web": "pnpm --filter chimero-web build",
     "package": "turbo run build && electron-builder",
-    "check-types": "pnpm --filter chimero-electron exec tsc --noEmit"
+    "check-types": "pnpm --filter chimero-electron exec tsc --noEmit && pnpm --filter chimero-web check-types"
   },
   "keywords": [],
   "license": "ISC",

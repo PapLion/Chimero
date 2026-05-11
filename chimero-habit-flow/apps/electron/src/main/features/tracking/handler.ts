@@ -1,0 +1,339 @@
+import { ipcMain } from 'electron'
+import { eq, desc, and, sql, asc } from 'drizzle-orm'
+import { trackers, entries, settings } from '@packages/db'
+import { getDb as db } from '@packages/db/database'
+import { mapTracker } from '../../shared/mappers'
+import { getDashboardStats, calculateImpact, getCorrelationResult, getStats } from './service'
+import type { CorrelationQueryRequest, StatsQueryRequest, TrackerInsert } from '@contracts/contracts'
+
+export function registerTrackingHandlers(): void {
+  const defaultTrackers = [
+    { name: 'Weight', type: 'numeric' as const, icon: 'scale', color: '#a855f7', order: 0, config: { unit: 'kg', goal: 70 } },
+    { name: 'Mood', type: 'range' as const, icon: 'smile', color: '#f59e0b', order: 1, config: { max: 5 } },
+    { name: 'Exercise', type: 'numeric' as const, icon: 'dumbbell', color: '#22c55e', order: 2, config: { unit: 'min', goal: 30 } },
+    { name: 'Social', type: 'numeric' as const, icon: 'users', color: '#3b82f6', order: 3, config: { unit: 'interactions' } },
+    { name: 'Tasks', type: 'text' as const, icon: 'check-square', color: '#ef4444', order: 4, config: {} },
+    { name: 'Savings', type: 'numeric' as const, icon: 'wallet', color: '#10b981', order: 5, config: { unit: '$', goal: 10000 } },
+    { name: 'Books', type: 'text' as const, icon: 'book', color: '#8b5cf6', order: 6, config: {} },
+    { name: 'Gaming', type: 'text' as const, icon: 'gamepad-2', color: '#10b981', order: 7, config: {} },
+    { name: 'Media/TV', type: 'text' as const, icon: 'tv', color: '#0ea5e9', order: 8, config: {} },
+    { name: 'Diet / Calories', type: 'numeric' as const, icon: 'salad', color: '#22c55e', order: 9, config: { unit: 'kcal' } },
+  ]
+
+  ipcMain.handle('get-trackers', async () => {
+    try {
+      let rows = await db()
+        .select()
+        .from(trackers)
+        .where(eq(trackers.archived, false))
+        .orderBy(asc(trackers.order))
+
+      const existingTrackerNames = new Set(rows.map((row: Record<string, unknown>) => row.name as string))
+      const missingDefaults = defaultTrackers.filter((t) => !existingTrackerNames.has(t.name))
+
+      if (missingDefaults.length > 0) {
+        let maxOrder = -1
+        if (rows.length > 0) {
+          maxOrder = Math.max(...rows.map((r: Record<string, unknown>) => (r.order as number) ?? -1))
+        }
+
+        const toInsert = missingDefaults.map((t, index) => ({
+          name: t.name,
+          type: t.type,
+          icon: t.icon,
+          color: t.color,
+          order: maxOrder !== -1 ? maxOrder + 1 + index : t.order,
+          config: JSON.stringify(t.config),
+          isCustom: false,
+          archived: false,
+        }))
+
+        await db().insert(trackers).values(toInsert)
+
+        rows = await db()
+          .select()
+          .from(trackers)
+          .where(eq(trackers.archived, false))
+          .orderBy(asc(trackers.order))
+      }
+
+      return rows.map((r) => mapTracker(r as Record<string, unknown>))
+    } catch (e) {
+      console.error('get-trackers error:', e)
+      return []
+    }
+  })
+
+  ipcMain.handle('create-tracker', async (_, data: TrackerInsert & { type?: string }) => {
+    try {
+      if (!data.name || typeof data.name !== 'string' || !data.name.trim()) {
+        throw new Error('Invalid tracker name')
+      }
+
+      const uiType = (data.type as string) || 'numeric'
+      const schemaType = uiType === 'counter' ? 'numeric' : uiType === 'rating' ? 'range' : uiType === 'list' ? 'text' : uiType
+      const [inserted] = await db()
+        .insert(trackers)
+        .values({
+          name: data.name,
+          type: schemaType as 'numeric' | 'range' | 'binary' | 'text' | 'composite',
+          icon: data.icon ?? null,
+          color: data.color ?? null,
+          order: data.order ?? 0,
+          config: JSON.stringify(data.config ?? {}),
+          isCustom: data.isCustom ?? true,
+          archived: false,
+        })
+        .returning()
+      return inserted ? mapTracker(inserted as Record<string, unknown>) : null
+    } catch (e) {
+      console.error('create-tracker error:', e)
+      return null
+    }
+  })
+
+  ipcMain.handle('delete-tracker', async (_, id: number) => {
+    try {
+      await db().delete(trackers).where(eq(trackers.id, id))
+      return true
+    } catch (e) {
+      console.error('delete-tracker error:', e)
+      return false
+    }
+  })
+
+  ipcMain.handle('get-recent-trackers', async (_, limit = 10) => {
+    try {
+      const rows = await db()
+        .select({
+          trackerId: entries.trackerId,
+          maxTs: sql<number>`max(${entries.timestamp})`,
+        })
+        .from(entries)
+        .groupBy(entries.trackerId)
+        .orderBy(desc(sql`max(${entries.timestamp})`))
+        .limit(Math.min(limit, 50))
+      const ids = rows.map((r) => r.trackerId).filter(Boolean)
+      if (ids.length === 0) return []
+      const allTrackers = await db()
+        .select()
+        .from(trackers)
+        .where(eq(trackers.archived, false))
+      const byId = new Map(allTrackers.map((t) => [(t as { id: number }).id, t]))
+      return ids
+        .map((id) => byId.get(id))
+        .filter(Boolean)
+        .map((r) => mapTracker(r as Record<string, unknown>))
+    } catch (e) {
+      console.error('get-recent-trackers error:', e)
+      return []
+    }
+  })
+
+  ipcMain.handle('get-favorite-trackers', async () => {
+    try {
+      const rows = await db()
+        .select()
+        .from(trackers)
+        .where(and(eq(trackers.archived, false), eq(trackers.isFavorite, true)))
+        .orderBy(trackers.order)
+      return rows.map((r) => mapTracker(r as Record<string, unknown>))
+    } catch (e) {
+      console.error('get-favorite-trackers error:', e)
+      return []
+    }
+  })
+
+  ipcMain.handle('toggle-tracker-favorite', async (_, trackerId: number) => {
+    try {
+      const rows = await db().select().from(trackers).where(eq(trackers.id, trackerId))
+      const row = rows[0]
+      if (!row) return null
+      const current = !!row.isFavorite
+      await db()
+        .update(trackers)
+        .set({ isFavorite: !current })
+        .where(eq(trackers.id, trackerId))
+      const [updated] = await db().select().from(trackers).where(eq(trackers.id, trackerId))
+      return updated ? mapTracker(updated as Record<string, unknown>) : null
+    } catch (e) {
+      console.error('toggle-tracker-favorite error:', e)
+      return null
+    }
+  })
+
+  ipcMain.handle('get-dashboard-stats', async () => {
+    try {
+      return await getDashboardStats()
+    } catch (e) {
+      console.error('get-dashboard-stats error:', e)
+      return { currentStreak: 0, bestStreak: 0, totalActivities: 0, totalEntriesMonth: 0 }
+    }
+  })
+
+  ipcMain.handle('get-dashboard-layout', async () => {
+    try {
+      const rows = await db().select().from(settings).where(eq(settings.id, 1))
+      const row = rows[0]
+      const layout = (row as { dashboardLayout?: string } | undefined)?.dashboardLayout
+      if (!layout) return null
+      return typeof layout === 'string' ? JSON.parse(layout) : layout
+    } catch (e) {
+      console.error('get-dashboard-layout error:', e)
+      return null
+    }
+  })
+
+  ipcMain.handle('save-dashboard-layout', async (_, layout: Array<{ id: string; trackerId: number; position: number; size: string }>) => {
+    try {
+      const json = JSON.stringify(layout)
+      const existing = await db().select().from(settings).where(eq(settings.id, 1))
+      if (existing.length > 0) {
+        await db().update(settings).set({ dashboardLayout: json }).where(eq(settings.id, 1))
+      } else {
+        await db().insert(settings).values({ id: 1, dashboardLayout: json })
+      }
+      return true
+    } catch (e) {
+      console.error('save-dashboard-layout error:', e)
+      return false
+    }
+  })
+
+  ipcMain.handle('reorder-trackers', async (_, ids: number[]) => {
+    try {
+      const database = db()
+      await database.transaction(async (tx) => {
+        for (let i = 0; i < ids.length; i++) {
+          await tx.update(trackers).set({ order: i }).where(eq(trackers.id, ids[i]))
+        }
+      })
+      return true
+    } catch (e) {
+      console.error('reorder-trackers error:', e)
+      return false
+    }
+  })
+
+  ipcMain.handle('update-tracker', async (
+    _,
+    id: number,
+    updates: {
+      order?: number
+      isFavorite?: boolean
+      name?: string
+      icon?: string | null
+      color?: string | null
+      type?: string
+      config?: Record<string, unknown>
+    }
+  ) => {
+    try {
+      const set: Record<string, unknown> = {}
+      if (updates.order !== undefined) set.order = updates.order
+      if (updates.isFavorite !== undefined) set.isFavorite = updates.isFavorite
+      if (updates.name !== undefined) set.name = updates.name
+      if (updates.icon !== undefined) set.icon = updates.icon
+      if (updates.color !== undefined) set.color = updates.color
+      if (updates.config !== undefined) set.config = JSON.stringify(updates.config)
+      if (updates.type !== undefined) {
+        const uiType = updates.type
+        const schemaType = uiType === 'counter' ? 'numeric' : uiType === 'rating' ? 'range' : uiType === 'list' ? 'text' : uiType
+        set.type = schemaType
+      }
+      if (Object.keys(set).length === 0) return null
+      await db().update(trackers).set(set).where(eq(trackers.id, id))
+      const [updated] = await db().select().from(trackers).where(eq(trackers.id, id))
+      return updated ? mapTracker(updated as Record<string, unknown>) : null
+    } catch (e) {
+      console.error('update-tracker error:', e)
+      return null
+    }
+  })
+
+  ipcMain.handle('calculate-impact', async (_, sourceTrackerId: number, targetTrackerId: number, offsetDays: number) => {
+    try {
+      return await calculateImpact(sourceTrackerId, targetTrackerId, offsetDays)
+    } catch (e) {
+      console.error('calculate-impact error:', e)
+      return {
+        sourceTrackerId,
+        targetTrackerId,
+        offsetDays,
+        impact: 0,
+        confidence: 0,
+        baselineAvg: 0,
+        impactedAvg: 0,
+        triggeredDays: 0,
+        baselineDays: 0,
+      }
+    }
+  })
+
+  ipcMain.handle('get-stats', async (_, request?: StatsQueryRequest) => {
+    try {
+      return await getStats(request ?? {})
+    } catch (e) {
+      console.error('get-stats error:', e)
+      return {
+        totals: { entryCount: 0, trackerCount: 0, activeDays: 0 },
+        series: [],
+        caveat: 'Stats unavailable; local calculation failed.',
+      }
+    }
+  })
+
+  ipcMain.handle('get-correlation-result', async (_, request: CorrelationQueryRequest) => {
+    try {
+      return await getCorrelationResult(request)
+    } catch (e) {
+      console.error('get-correlation-result error:', e)
+      return {
+        sourceTrackerId: request?.sourceTrackerId ?? 0,
+        targetTrackerId: request?.targetTrackerId ?? 0,
+        offsetDays: request?.offsetDays ?? 0,
+        impact: 0,
+        confidence: 0,
+        baselineAvg: 0,
+        impactedAvg: 0,
+        triggeredDays: 0,
+        baselineDays: 0,
+        caveat: 'Correlation unavailable; local calculation failed.',
+      }
+    }
+  })
+
+  ipcMain.handle('get-mood-daily-aggregates', async (_, options?: { trackerId?: number; days?: number }) => {
+    try {
+      const days = options?.days ?? 30
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - days)
+      const cutoffStr = cutoff.toISOString().slice(0, 10)
+      const moodTrackerId = options?.trackerId
+
+      const rows = await db()
+        .select({
+          dateStr: entries.dateStr,
+          avg: sql<number>`avg(${entries.value})`,
+          count: sql<number>`count(*)`,
+        })
+        .from(entries)
+        .where(
+          moodTrackerId
+            ? and(sql`${entries.dateStr} >= ${cutoffStr}`, eq(entries.trackerId, moodTrackerId))
+            : sql`${entries.dateStr} >= ${cutoffStr}`
+        )
+        .groupBy(entries.dateStr)
+        .orderBy(entries.dateStr)
+
+      return rows.map((r) => ({
+        date: r.dateStr,
+        value: Math.round((Number(r.avg) || 0) * 10) / 10,
+        count: Number(r.count) || 0,
+      }))
+    } catch (e) {
+      console.error('get-mood-daily-aggregates error:', e)
+      return []
+    }
+  })
+}

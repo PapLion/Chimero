@@ -8,6 +8,8 @@ export const settings = sqliteTable("settings", {
   theme: text("theme").default("dark"),
   currency: text("currency").default("USD"),
   language: text("language").default("es"),
+  weightUnit: text("weight_unit", { enum: ["kg", "lb"] }).default("kg"),
+  measureUnit: text("measure_unit", { enum: ["cm", "in"] }).default("cm"),
   dashboardLayout: text("dashboard_layout", { mode: "json" }), // JSON: [{ id, trackerId, position, size }]
   createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
 });
@@ -110,6 +112,59 @@ export const entriesToTags = sqliteTable("entries_to_tags", {
   tagId: integer("tag_id").references(() => tags.id, { onDelete: "cascade" }).notNull(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.entryId, t.tagId] }),
+  entryTagIdx: index("entries_to_tags_entry_idx").on(t.entryId),
+  tagEntryIdx: index("entries_to_tags_tag_idx").on(t.tagId),
+}));
+
+export const tagRelationships = sqliteTable("tag_relationships", {
+  parentTagId: integer("parent_tag_id").references(() => tags.id, { onDelete: "cascade" }).notNull(),
+  childTagId: integer("child_tag_id").references(() => tags.id, { onDelete: "cascade" }).notNull(),
+  relationshipType: text("relationship_type").default("parent"),
+  createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.parentTagId, t.childTagId] }),
+  parentIdx: index("tag_relationships_parent_idx").on(t.parentTagId),
+  childIdx: index("tag_relationships_child_idx").on(t.childTagId),
+}));
+
+export const entryWeight = sqliteTable("entry_weight", {
+  entryId: integer("entry_id").primaryKey().references(() => entries.id, { onDelete: "cascade" }),
+  weightValue: real("weight_value").notNull(),
+  weightUnit: text("weight_unit", { enum: ["kg", "lb"] }).notNull().default("kg"),
+  waistValue: real("waist_value"),
+  waistUnit: text("waist_unit", { enum: ["cm", "in"] }),
+  bodyFatPercentage: real("body_fat_percentage"),
+}, (t) => ({
+  weightUnitIdx: index("entry_weight_unit_idx").on(t.weightUnit),
+}));
+
+export const trackerGoals = sqliteTable("tracker_goals", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  trackerId: integer("tracker_id").references(() => trackers.id, { onDelete: "cascade" }).notNull(),
+  goalType: text("goal_type", { enum: ["target", "range", "minimum", "maximum"] }).notNull().default("target"),
+  targetValue: real("target_value").notNull(),
+  unit: text("unit"),
+  direction: text("direction", { enum: ["decrease", "increase", "maintain"] }),
+  startDate: text("start_date"),
+  targetDate: text("target_date"),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
+  updatedAt: integer("updated_at").default(sql`(strftime('%s', 'now') * 1000)`),
+}, (t) => ({
+  trackerIdx: index("tracker_goals_tracker_idx").on(t.trackerId),
+  trackerActiveIdx: index("tracker_goals_tracker_active_idx").on(t.trackerId, t.active),
+}));
+
+export const assetLinks = sqliteTable("asset_links", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  assetId: integer("asset_id").references(() => assets.id, { onDelete: "cascade" }).notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: integer("entity_id").notNull(),
+  relationType: text("relation_type"),
+  createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
+}, (t) => ({
+  assetIdx: index("asset_links_asset_idx").on(t.assetId),
+  entityIdx: index("asset_links_entity_idx").on(t.entityType, t.entityId),
 }));
 
 // --- 7. CONTACTS (Personal CRM) ---

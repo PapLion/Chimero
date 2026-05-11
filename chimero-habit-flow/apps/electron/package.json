@@ -38,6 +38,8 @@
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@electron/rebuild": "^4.0.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
     "autoprefixer": "^10.4.23",
     "electron": "^40.0.0",

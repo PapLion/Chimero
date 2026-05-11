@@ -84,6 +84,7 @@ export default defineConfig({
     },
     resolve: {
       alias: {
+        '@contracts': resolve(__dirname, '../../packages/shared/src'),
         '@packages/db': resolve(__dirname, '../../packages/db/src')
       }
     }
@@ -107,9 +108,15 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        '@renderer': resolve('src/renderer/src'),
-        '@components': resolve('src/renderer/src/components'),
-        '@/': resolve(__dirname, 'src/renderer/src'),
+        '@renderer': resolve(__dirname, 'src/renderer/src'),
+        '@features': resolve(__dirname, 'src/renderer/src/features'),
+        '@shared': resolve(__dirname, 'src/renderer/src/shared'),
+        '@shared/utils': resolve(__dirname, 'src/renderer/src/shared/utils.ts'),
+        '@shared/store': resolve(__dirname, 'src/renderer/src/shared/store.ts'),
+        '@shared/queries': resolve(__dirname, 'src/renderer/src/shared/queries.ts'),
+        '@shared/api': resolve(__dirname, 'src/renderer/src/shared/api.ts'),
+        '@contracts': resolve(__dirname, '../../packages/shared/src'),
+        '@components': resolve(__dirname, 'src/renderer/src/shared/components'),
         '@packages/ui': resolve(__dirname, '../../packages/ui'),
         '@packages/db': resolve(__dirname, '../../packages/db/src')
       }
