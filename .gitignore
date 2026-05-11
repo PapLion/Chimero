@@ -37,6 +37,17 @@ lerna-debug.log*
 # Testing
 coverage/
 .nyc_output/
+chimero-habit-flow/.playwright-cli/
+playwright-report/
+test-results/
+*.trace.zip
+
+# Local Codex/tool artifacts
+.codex/
+**/.codex/
+*.tmp
+*smoke*.png
+*responsive*.png
 
 # Turbo
 .turbo/
@@ -44,6 +55,7 @@ coverage/
 # Electron
 chimero.db
 *.db
+chimero-habit-flow/apps/web/.data/
 chimero-habit-flow/apps/electron/Chimero/
 
 # Package managers
