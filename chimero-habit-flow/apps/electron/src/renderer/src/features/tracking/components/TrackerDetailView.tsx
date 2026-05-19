@@ -6,11 +6,12 @@ import type { AssetWithUrls } from "@contracts/features/assets"
 import type { WeightEntryHistoryItem } from "@contracts/contracts"
 import { buildWeightEntriesTabReadModel, buildWeightStatisticsReadModel } from "@contracts/domain"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useEntries, useDeleteEntryMutation, useWeightDetail } from "@shared/queries"
+import { useTrackers, useEntries, useDeleteEntryMutation, useWeightDetail, useTags } from "@shared/queries"
 import { filterEntriesByDate, cn } from "@shared/utils"
 import type { Entry } from "@shared/store"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, type LucideIcon } from "lucide-react"
 import { EditEntryDialog } from "@features/entry/modals/EditEntryDialog"
+import { TagChips } from "@features/tags/components/TagChips"
 import { ConfirmDeleteDialog } from "@shared/components/ConfirmDeleteDialog"
 import { formatToastError, useToast } from "@shared/components/toast"
 import {
@@ -109,6 +110,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const { selectedDate: storeSelectedDate } = useAppStore()
   const { data: trackers = [] } = useTrackers()
   const { data: allEntries = [] } = useEntries({ limit: 1000 })
+  const { data: tags = [] } = useTags()
   const deleteEntryMutation = useDeleteEntryMutation()
   const toast = useToast()
 
@@ -121,6 +123,10 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     e.preventDefault()
     setEditingEntry(entry)
   }
+
+  const renderEntryTags = (tagIds?: number[], className = "mb-2 mt-2") => (
+    <TagChips tagIds={tagIds} tags={tags} limit={4} className={className} />
+  )
 
   const [activeTab, setActiveTab] = useState<"stats" | "graphs" | "entries">("entries")
   const [chartTimeFilter, setChartTimeFilter] = useState<"1M" | "3M" | "1Y">("1M")
@@ -853,6 +859,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                         <div className="text-sm font-medium text-white/90 truncate mb-1">
                           {entry.note || "Untitled"}
                         </div>
+                        {renderEntryTags(entry.tagIds, "mb-1 mt-2")}
                         {entry.value != null && entry.value > 0 && (
                           <div className="flex items-center gap-1">
                             <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
@@ -915,6 +922,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                       {entry.note && (
                         <div className="text-sm text-white/60 mb-2">{entry.note}</div>
                       )}
+                      {renderEntryTags(entry.tagIds)}
                       {asset && (
                         <div className="mt-3 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
                           <img
@@ -952,6 +960,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                         <div className="w-2 h-2 rounded-full bg-[hsl(266_73%_63%)] mt-2 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="text-sm text-white/90 mb-1">{entry.note || "Task"}</div>
+                          {renderEntryTags(entry.tagIds)}
                           {asset && (
                             <div className="mt-2 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
                               <img
@@ -1009,6 +1018,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                         </div>
                       </div>
                       <div className="text-sm text-white/90 mb-2">{entry.note || "Meal"}</div>
+                      {renderEntryTags(entry.tagIds)}
                       {asset && (
                         <div className="mt-3 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
                           <img
@@ -1055,6 +1065,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                         </div>
                       </div>
                       <div className="text-sm text-white/90 mb-2">{entry.note || "Category"}</div>
+                      {renderEntryTags(entry.tagIds)}
                       {asset && (
                         <div className="mt-3 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
                           <img
@@ -1106,6 +1117,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                         </div>
                       </div>
                       <div className="text-sm text-white/90 mb-2">{entry.note || "Entry"}</div>
+                      {renderEntryTags(entry.tagIds)}
                       {asset && (
                         <div className="mt-3 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
                           <img
@@ -1141,6 +1153,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                         </button>
                       </div>
                       <div className="text-sm text-white/90 mb-2">{entry.note || `Value: ${entry.value ?? "--"}`}</div>
+                      {renderEntryTags(entry.tagIds)}
                       {asset && (
                         <div className="mt-2 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
                           <img

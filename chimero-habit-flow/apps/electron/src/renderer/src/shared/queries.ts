@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type { Tracker, Entry } from './store'
-import type { CreateWeightEntryRequest, SetTrackerGoalRequest, TrackerConfig, UpdateWeightEntryRequest } from '@contracts/contracts'
+import type { BaseEntryRequest, CreateWeightEntryRequest, SetTrackerGoalRequest, TrackerConfig, UpdateWeightEntryRequest } from '@contracts/contracts'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
 export const queryKeys = {
@@ -111,6 +111,18 @@ export function useTags() {
   })
 }
 
+export function useCreateTagMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { name: string; color?: string | null }) => api.createTag(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.tags })
+      qc.invalidateQueries({ queryKey: queryKeys.tagTree })
+      qc.invalidateQueries({ queryKey: queryKeys.quickEntryContext })
+    },
+  })
+}
+
 export function useTagTree() {
   return useQuery({
     queryKey: queryKeys.tagTree,
@@ -181,7 +193,7 @@ export function useReminders() {
 export function useAddEntryMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { trackerId: number; value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp: number; assetId?: number | null }) =>
+    mutationFn: (data: BaseEntryRequest) =>
       api.addEntry(data),
     onSuccess: () => {
       // Invalidate and refetch all entry-related data so widgets update immediately
@@ -385,7 +397,7 @@ export function useUncompleteReminderMutation() {
 export function useUpdateEntryMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, updates }: { id: number; updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null } }) =>
+    mutationFn: ({ id, updates }: { id: number; updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null; tagIds?: number[] } }) =>
       api.updateEntry(id, updates),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })

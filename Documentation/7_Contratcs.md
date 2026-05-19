@@ -94,11 +94,11 @@ type EntryMutationResponse = {
 
 | Surface | Base read responsibility |
 | --- | --- |
-| Quick Entry | Capture the tracker-specific input plus note, optional asset, and eventually tags where supported. |
+| Quick Entry | Capture the tracker-specific input plus note, optional asset, and explicit tags where supported. |
 | BentoGrid / Home | Show a compact current-day or recent summary using `Entry.value`, `note`, `assetId`, and tracker config. |
 | Tracker Detail / Entries | Show exact logged data, edit action, delete action, note, timestamp, and attachment. |
 | Tracker Detail / Statistics | Aggregate count, streak, average, charts, and tracker-specific computed values where available. |
-| Calendar selected day | Show entries grouped by selected `dateStr`, tracker name/color, value/unit, and note. |
+| Calendar selected day | Show entries grouped by selected `dateStr`, tracker name/color, value/unit, note, and explicit tags. |
 
 ---
 
@@ -143,11 +143,12 @@ Quick Entry currently captures:
 - `waistUnit` derived from weight unit (`cm` for kg, `in` for lb).
 - `note` from the optional note/context field.
 - `assetId` from the image attachment picker.
+- `tagIds` from the explicit tag selector, including newly created tags.
 
-Quick Entry planned/required gaps:
+Quick Entry remaining refinement:
 
-- `tagIds` must be capturable when the tag picker is exposed in Quick Entry.
 - `waistUnit` should remain explicit in the request, even if the UI auto-selects it.
+- Inherited tag expansion remains opt-in and must not be silently persisted by the Quick Entry surface.
 
 ### B. Backend Write Contract
 
@@ -298,7 +299,7 @@ Current implementation:
 
 - `TrackerDetailView` uses `WeightDetailResponse.history` through `WeightEntriesTabReadModel` for Weight entries.
 - Weight entries display exact weight, unit, optional waist, waist unit, note, timestamp, and asset.
-- Tag IDs are carried when available, but tag labels/chips remain pending until the tag UI/read-label surface is complete.
+- Explicit tag IDs are carried when available and rendered as resolved tag chips through the shared tag list.
 
 ### G. Statistics Tab Read Model
 
@@ -365,7 +366,7 @@ Current implementation:
 
 - `getCalendarMonth` enriches entries with `entry_weight` data when present.
 - Calendar selected-day cards prefer enriched Weight unit and show waist/waistUnit when available.
-- Calendar responses include `tagIds` and `assetId` when available, but tag labels and inline asset rendering remain pending UI work.
+- Calendar responses include `tagIds` and `assetId` when available. The renderer resolves explicit tag IDs through `useTags` and renders chips in the selected-day summary; inline asset rendering remains pending UI work.
 
 ### I. Field Visibility Matrix
 
@@ -376,7 +377,7 @@ Current implementation:
 | `waist` | Implemented input | Implemented | Implemented | Implemented in `entry_weight.waist_value` | Implemented in `history` and `chartData` | Implemented as optional secondary waist | Implemented when entered | Implemented conditionally when waist data exists; threshold still undefined | Implemented in enriched selected-day summary | Implemented through `update-weight-entry` | Removed through `entry_weight` delete |
 | `waistUnit` | Implemented derived unit | Implemented | Implemented | Implemented in `entry_weight.waist_unit` | Returned in `WeightEntry` | Implemented with optional secondary waist | Implemented when waist is shown | Implemented with conditional waist stats | Implemented in enriched selected-day summary | Implemented through `update-weight-entry` | Removed through `entry_weight` delete |
 | `note/context` | Implemented | Implemented | Implemented | Implemented in `entries.note` | Returned in `WeightEntry` | Not primary, okay optional | Implemented | Not required | Implemented | Implemented | Removed with entry |
-| `tags` | Planned/gap | Implemented as `tagIds` | Implemented via `replaceEntryTags` | Implemented in `entries_to_tags` | Returned as `tagIds` / `tags` | Planned optional chips if design wants them | Planned/gap | Aggregation future | Gap in calendar response | Gap in edit UI unless generic tag editing is added | Removed via delete |
+| `tags` | Implemented explicit selector/create | Implemented as `tagIds` | Implemented via `replaceEntryTags` | Implemented in `entries_to_tags` | Returned as explicit `tagIds` / `tags`; inheritance remains opt-in | Not required for this milestone | Implemented explicit chips from resolved tag IDs | Aggregation future | Implemented explicit chips from selected-day `tagIds` | Implemented explicit selector/create and replace | Removed via delete |
 | `assets` | Implemented single `assetId` | Implemented single `assetId` | Implemented | Implemented in `entries.asset_id`; `asset_links` exists separately | Returned in `WeightEntry` as `assetId` | Implemented as widget background when selected-day asset exists | Implemented inline image | Not required | Not currently shown in selected-day summary | Implemented single image attachment | Entry removal leaves asset record intact |
 | `bodyFatPercentage` | Not required | Optional/future only | Current service accepts it if sent | Existing optional/future column | Current mapper/service can return it | Not required | Not required | Not required | Not required | Not required | Removed with `entry_weight` row |
 
@@ -388,7 +389,7 @@ This matrix maps implemented and planned tracker contracts across the real surfa
 
 | Tracker | Status | Quick Entry Request | Persistence | Service / Computed | BentoGrid / Home | Entries Tab | Statistics Tab | Calendar Day |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Weight | Specialized implemented with honest gaps | Specialized weight request with weight, unit, optional waist, note, asset, tags planned | `entries` + `entry_weight` + tags | `WeightDetailResponse` | Specialized widget uses Weight detail for current weight, delta, trend, sparkline, and optional waist | Entries tab uses specialized Weight history and shows waist when entered; tag labels/chips pending | Specialized stats use Weight detail; waist stats remain conditional and threshold undefined | Enriched day entry includes weight, unit, optional waist, assetId, and tagIds; tag labels and inline asset rendering pending |
+| Weight | Specialized implemented with honest gaps | Specialized weight request with weight, unit, optional waist, note, asset, explicit tags | `entries` + `entry_weight` + tags | `WeightDetailResponse` | Specialized widget uses Weight detail for current weight, delta, trend, sparkline, and optional waist | Entries tab uses specialized Weight history and shows waist plus explicit tag chips when entered | Specialized stats use Weight detail; waist stats remain conditional and threshold undefined | Enriched day entry includes weight, unit, optional waist, assetId, and explicit tag chips; inline asset rendering pending |
 | Mood | Generic implemented, deeper planned | Numeric/rating value plus optional note/asset; energy/stress planned only if requested | `entries.value`, `metadata`, tags/assets | Mood daily aggregates exist for widget; deeper stats planned | Specialized mood widget with daily aggregates | Generic exact entry display | Generic stats plus mood-specific aggregates planned | Generic summary |
 | Exercise / Workout | Generic implemented with exercise search | Quick Entry can capture selected exercises into metadata | `entries.metadata.exercises`, value count, note, asset | Exercise service/search exists; volume PRs planned | Specialized exercise widget shows selected-day total/activity names | Generic/fitness display with assets | Generic stats; total volume planned | Generic summary |
 | Social / Contacts | Partially implemented | Quick Entry can create generic social entry and contact interactions | `entries`, `contact_interactions`, `contacts` | Contact interaction handlers/services | Specialized social widget extracts people from notes | Generic social entries | Generic stats; relationship stats planned | Generic summary |
@@ -435,7 +436,7 @@ For non-specialized trackers:
 Quick Entry
   -> value and/or note and/or metadata
   -> optional asset
-  -> optional tags when UI supports them
+  -> optional explicit tags
   -> BaseEntryRequest
 ```
 
@@ -460,7 +461,7 @@ Weight should use a specialized read model when showing more than current weight
 
 Entries tab is the exact logged-data surface.
 
-It must not lose fields that the user entered. For Weight, this means waist must be shown if entered. For tags/assets, it must show attached chips/images once those are part of the read model.
+It must not lose fields that the user entered. For Weight, this means waist must be shown if entered. For tags/assets, it shows explicit tag chips from `tagIds` and attached images once those are part of the read model.
 
 ### Tracker Detail / Statistics Tab Contract
 
@@ -484,6 +485,103 @@ For Weight, Calendar must include optional waist data because waist is a first-c
 
 ---
 
+# Tags Deep Contract
+
+## Request contract
+
+All entry creation and update requests may carry explicit tag IDs as `tagIds?: number[]`.
+
+```ts
+type TaggedEntryRequest = BaseEntryRequest | CreateWeightEntryRequest | UpdateWeightEntryRequest
+```
+
+Rules:
+
+- `tagIds` means the explicit tags selected by the user on that entry.
+- Empty `tagIds: []` intentionally clears entry tags on update.
+- Omitted `tagIds` leaves existing relationships untouched on update paths that support partial updates.
+- New tag creation uses `createTag({ name, color? })`; the created tag ID may then be included in the entry request.
+- Inherited tags are not automatically written by Quick Entry or Edit Entry. Inheritance remains a separate opt-in service contract.
+
+## Persistence contract
+
+Explicit entry tags persist only in the join table:
+
+```txt
+entries_to_tags
+  entry_id
+  tag_id
+```
+
+Rules:
+
+- Entry rows continue to persist value, note, metadata, timestamp, dateStr, and assetId in `entries`.
+- Weight entries continue to persist specialized values in `entry_weight`.
+- `replaceEntryTags(entryId, tagIds)` validates positive integer IDs, deduplicates IDs, rejects unknown IDs, deletes old join rows, and inserts the explicit replacement set.
+- Delete entry removes `entries_to_tags` rows together with specialized rows and the base entry.
+- There are no schema changes in this milestone.
+
+## Service/computed contract
+
+Services expose explicit tags as IDs on read models:
+
+- `getEntries`, `getTaskEntries`, and tracker entry reads attach `tagIds`.
+- Weight create/update/detail/history attach `tagIds`; `WeightEntryResponse.tags` may include resolved explicit tags for mutation responses.
+- Calendar month reads attach `tagIds` per selected-day entry.
+- Quick Entry context returns all tags and suggested tags for selection.
+- Tag inheritance uses `resolveTagInheritance` and must be invoked explicitly by a future surface or workflow.
+
+Computed statistics, correlations, and inherited-tag rollups are not part of this surface milestone.
+
+## Response/read contract
+
+Renderer surfaces receive entry-level `tagIds` and resolve labels/colors with the tag list from `useTags`.
+
+Rules:
+
+- Unknown tag IDs are ignored when rendering chips.
+- Overflow chips count only resolved visible tags.
+- Responses do not need to embed full tag objects for every entry as long as the surface also has access to the tag list.
+- Calendar selected-day and Entries tab render explicit chips; BentoGrid/Home and Statistics are out of scope for this milestone.
+
+# Tags Surface Contract
+
+## Quick Entry
+
+- Shows a tag selector for the active entry mode.
+- Uses Quick Entry context tags and suggested tags, with `useTags` as fallback.
+- Can create a tag, select it, and submit its ID in `tagIds`.
+- Sends explicit `tagIds` for generic, exercise, and Weight entry creation.
+- Resets selected tags when the dialog closes or the active tracker changes.
+
+## Edit Entry
+
+- Initializes the selector from `entry.tagIds`.
+- Can create a tag, select it, and submit its ID.
+- Sends explicit `tagIds` through generic update and Weight update.
+- `tagIds: []` is the user-visible clear operation.
+
+## Entries tab
+
+- Uses `useTags` and `TagChips` to render resolved explicit tag chips for entry rows.
+- Ignores unknown IDs rather than rendering placeholder or inherited tags.
+- Keeps existing weight, waist, note, timestamp, edit, delete, and asset rendering behavior.
+
+## Calendar selected-day summary
+
+- Uses `CalendarDayEntry.tagIds` plus `useTags` to render compact explicit tag chips.
+- Keeps specialized Weight selected-day fields for weight, unit, waist, waistUnit, note, and timestamp.
+- Does not render inherited tags unless a future opt-in read model adds them.
+
+## Weight verification flow
+
+- Quick Entry submits Weight `tagIds` through `CreateWeightEntryRequest`.
+- Edit Entry submits Weight `tagIds` through `UpdateWeightEntryRequest`.
+- Weight service stores replacement tags through `replaceEntryTags`.
+- Weight history/detail and generic entry reads return explicit `tagIds` for Entries and Calendar surfaces.
+
+---
+
 ## 5. Mutation Contracts
 
 ### Edit Entry
@@ -494,6 +592,7 @@ Generic edit currently supports:
 - Note.
 - Date/time.
 - Asset.
+- Explicit tags.
 
 Weight edit currently supports:
 
@@ -504,10 +603,11 @@ Weight edit currently supports:
 - Note.
 - Date/time.
 - Asset.
+- Explicit tags.
 
-Remaining Weight edit gap:
+Remaining Weight edit refinement:
 
-- Tags are persisted and replaceable in the backend, but the current edit UI does not expose tag editing.
+- Inherited tag expansion is not automatic; only explicit tags selected in the edit dialog are persisted.
 
 ### Delete Entry
 
@@ -525,11 +625,11 @@ For assets, deleting an entry should remove the attachment relationship/referenc
 ## 6. Key Vague Contracts Remaining
 
 - Minimum sample threshold for "enough waist data exists" is not defined.
-- Calendar day response includes specialized Weight fields and tag IDs, but not resolved tag labels.
-- Entries tab uses specialized Weight history for Weight and carries tag IDs, but not resolved tag labels.
+- Calendar day response includes specialized Weight fields and explicit tag IDs; the renderer resolves labels/colors through `useTags`.
+- Entries tab uses specialized Weight history for Weight and renders explicit tag chips from resolved tag IDs.
 - BentoGrid Weight widget uses specialized Weight detail where available and generic entries as a fallback.
-- Quick Entry has suggested tags in context, but no visible tag picker in the current Weight submit path.
-- Edit Entry can update Weight waist, but tag editing is still not exposed.
+- Quick Entry and Edit Entry expose explicit tags, but inherited tags are still opt-in/future.
+- Tags are not yet part of the Statistics/BentoGrid aggregation surfaces.
 - Body fat exists in the current persistence/service code but is not a product requirement in this contract; keep it optional/future unless explicitly requested.
 - Planned trackers need per-tracker thresholds, units, entity schemas, and statistics definitions before implementation.
 

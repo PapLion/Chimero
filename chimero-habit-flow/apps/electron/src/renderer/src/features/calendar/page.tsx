@@ -5,8 +5,9 @@ import { AnimatePresence, motion } from "framer-motion"
 import { ChevronLeft, ChevronRight, Bell, Clock, Check, Eye, EyeOff } from "lucide-react"
 import { cn } from "@shared/utils"
 import type { Reminder, Entry } from "@shared/store"
-import { useTrackers, useCalendarMonth, useStats, useReminders, useEntries } from "@shared/queries"
+import { useTrackers, useCalendarMonth, useStats, useReminders, useEntries, useTags } from "@shared/queries"
 import { TimelineView } from "./components/TimelineView"
+import { TagChips } from "@features/tags/components/TagChips"
 import type { CalendarDayEntry } from "@contracts/features/calendar"
 
 const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -20,6 +21,7 @@ export function CalendarPage() {
   const [activeTab, setActiveTab] = useState<"calendar" | "timeline">("calendar")
   const { data: reminders = [] } = useReminders()
   const { data: trackers = [] } = useTrackers()
+  const { data: tags = [] } = useTags()
   const { data: stats } = useStats()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [hiddenCalendarTrackers, setHiddenCalendarTrackers] = useState<Set<number>>(new Set())
@@ -486,6 +488,12 @@ export function CalendarPage() {
                                 {entry.note && (
                                   <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
                                 )}
+                                <TagChips
+                                  tagIds={(entry as CalendarDayEntry).tagIds}
+                                  tags={tags}
+                                  limit={3}
+                                  className="mt-2"
+                                />
                                 <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))/0.8]">{entryTime}</p>
                               </div>
                             )

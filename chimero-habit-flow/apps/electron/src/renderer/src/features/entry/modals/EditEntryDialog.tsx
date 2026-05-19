@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { useTrackers, useUpdateEntryMutation, useUpdateWeightEntryMutation, useAssets } from "@shared/queries"
+import { useTrackers, useUpdateEntryMutation, useUpdateWeightEntryMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
 import { Dialog, DialogContent } from "@packages/ui/dialog"
 import { Input } from "@packages/ui/input"
 import { format } from "date-fns"
@@ -8,6 +8,7 @@ import { PencilLine, Trash2, Camera, ImageIcon } from "lucide-react"
 import { Button } from "@packages/ui/button"
 import { cn } from "@shared/utils"
 import { api } from "@shared/api"
+import { TagSelector } from "@features/tags/components/TagChips"
 import type { Entry } from "@shared/store"
 import { formatToastError, useToast } from "@shared/components/toast"
 import type { AssetWithUrls } from "@contracts/features/assets"
@@ -22,6 +23,7 @@ interface EditEntryDialogProps {
 export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogProps) {
     const { data: trackers = [] } = useTrackers()
     const { data: assetsData = [] } = useAssets()
+    const { data: tags = [] } = useTags()
     const assetList = useMemo<AssetWithUrls[]>(() => assetsData as AssetWithUrls[], [assetsData])
     const assets = useMemo<Map<number, AssetWithUrls>>(
         () => new Map(assetList.map((asset) => [asset.id, asset])),
@@ -29,6 +31,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     )
     const updateEntryMutation = useUpdateEntryMutation()
     const updateWeightEntryMutation = useUpdateWeightEntryMutation()
+    const createTagMutation = useCreateTagMutation()
     const qc = useQueryClient()
     const toast = useToast()
 
@@ -38,6 +41,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     const [date, setDate] = useState("")
     const [time, setTime] = useState("")
     const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null)
+    const [selectedTagIds, setSelectedTagIds] = useState<number[]>([])
     const [assetPickerOpen, setAssetPickerOpen] = useState(false)
 
     const readMetadata = (metadata: Entry["metadata"]): Record<string, unknown> => {
@@ -64,6 +68,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
             setValue(entry.value != null ? entry.value.toString() : "")
             setNote(entry.note || "")
             setSelectedAssetId(entry.assetId || null)
+            setSelectedTagIds(entry.tagIds ?? [])
             const metadata = readMetadata(entry.metadata)
             const metadataWaist = metadata.waist
             setWaist(typeof metadataWaist === "number" ? metadataWaist.toString() : "")
@@ -118,6 +123,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                         waistUnit: parsedWaist !== null ? getWaistUnit() : null,
                         note: note.trim() || null,
                         assetId: selectedAssetId,
+                        tagIds: selectedTagIds,
                         timestamp,
                     },
                 })
@@ -128,6 +134,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                         value: parsedValue,
                         note: note.trim() || null,
                         assetId: selectedAssetId,
+                        tagIds: selectedTagIds,
                         timestamp,
                     },
                 })
@@ -158,6 +165,22 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                 formatToastError(error, "Please try again in a moment."),
             )
             console.error("Upload failed", error)
+        }
+    }
+
+    const handleCreateTag = async (name: string) => {
+        try {
+            const createdTag = await createTagMutation.mutateAsync({ name })
+            if (createdTag) {
+                toast.success("Tag created.", createdTag.name)
+            }
+            return createdTag
+        } catch (error) {
+            toast.error(
+                "We couldn't create that tag.",
+                formatToastError(error, "Please try again in a moment."),
+            )
+            return null
         }
     }
 
@@ -289,6 +312,18 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                                 </div>
                             </div>
                         )}
+
+                        <div className="space-y-2">
+                            <TagSelector
+                                tags={tags}
+                                selectedTagIds={selectedTagIds}
+                                onChange={setSelectedTagIds}
+                                onCreateTag={handleCreateTag}
+                                disabled={isPending}
+                                creating={createTagMutation.isPending}
+                                compact
+                            />
+                        </div>
 
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">

@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useRecentTrackers, useFavoriteTrackers, useAddEntryMutation, useAddWeightEntryMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation } from "@shared/queries"
+import { useTrackers, useRecentTrackers, useFavoriteTrackers, useAddEntryMutation, useAddWeightEntryMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
 import { cn } from "@shared/utils"
 import { getEntryConfig } from "../entry-config"
 import type { Tracker } from "@shared/store"
 import { ContactBubblesGrid, type ContactMoodSelection } from "@features/contacts/components/ContactBubblesGrid"
 import { ExerciseSearch, type SelectedExercise } from "@features/exercises/components/ExerciseSearch"
+import { TagSelector } from "@features/tags/components/TagChips"
 import {
   Dialog,
   DialogContent,
@@ -51,10 +52,21 @@ export function QuickEntry() {
   const { data: recentTrackersFallback = [] } = useRecentTrackers(10)
   const { data: favoriteTrackersFallback = [] } = useFavoriteTrackers()
   const { data: quickEntryContext } = useQuickEntryContext(commandBarOpen)
+  const { data: tagFallback = [] } = useTags()
   const recentTrackers = quickEntryContext?.recentTrackers ?? recentTrackersFallback
   const favoriteTrackers = quickEntryContext?.favoriteTrackers ?? favoriteTrackersFallback
+  const tags = useMemo(() => {
+    const seen = new Set<number>()
+    const ordered = [...(quickEntryContext?.suggestedTags ?? []), ...(quickEntryContext?.tags ?? tagFallback)]
+    return ordered.filter((tag) => {
+      if (seen.has(tag.id)) return false
+      seen.add(tag.id)
+      return true
+    })
+  }, [quickEntryContext?.suggestedTags, quickEntryContext?.tags, tagFallback])
   const addEntryMutation = useAddEntryMutation()
   const addWeightEntryMutation = useAddWeightEntryMutation()
+  const createTagMutation = useCreateTagMutation()
   const createContactInteractionMutation = useCreateContactInteractionMutation()
   const toast = useToast()
 
@@ -64,6 +76,7 @@ export function QuickEntry() {
   const [waist, setWaist] = useState("")
   const [note, setNote] = useState("")
   const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null)
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([])
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
   const [mode, setMode] = useState<QuickEntryMode>(MODE_ACTIVITY)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -136,6 +149,7 @@ export function QuickEntry() {
       setWaist("")
       setNote("")
       setSelectedAssetId(null)
+      setSelectedTagIds([])
       setAssetPickerOpen(false)
       setMode(MODE_ACTIVITY)
       setReminderTitle("")
@@ -158,6 +172,7 @@ export function QuickEntry() {
       setWaist("")
       setNote("")
       setSelectedAssetId(null)
+      setSelectedTagIds([])
       setAssetPickerOpen(false)
       setMode(MODE_ACTIVITY)
       setReminderTitle("")
@@ -168,6 +183,22 @@ export function QuickEntry() {
       setSelectedExercises([])
     }
   }, [commandBarOpen, activeTracker])
+
+  const handleCreateTag = useCallback(async (name: string) => {
+    try {
+      const createdTag = await createTagMutation.mutateAsync({ name })
+      if (createdTag) {
+        toast.success("Tag created.", createdTag.name)
+      }
+      return createdTag
+    } catch (error) {
+      toast.error(
+        "We couldn't create that tag.",
+        formatToastError(error, "Please try again in a moment."),
+      )
+      return null
+    }
+  }, [createTagMutation, toast])
 
   // Close asset picker when clicking outside
   useEffect(() => {
@@ -230,6 +261,7 @@ export function QuickEntry() {
           value: selectedExercises.length,
           note: note.trim() || null,
           assetId: selectedAssetId,
+          tagIds: selectedTagIds,
           metadata: { exercises: selectedExercises },
           timestamp: Date.now(),
         })
@@ -255,6 +287,7 @@ export function QuickEntry() {
           waistUnit: weightUnit === "lb" ? "in" : "cm",
           note: note.trim() || null,
           assetId: selectedAssetId,
+          tagIds: selectedTagIds,
           timestamp: Date.now(),
         })
 
@@ -287,6 +320,7 @@ export function QuickEntry() {
         value: entryValue,
         note: entryNote,
         assetId: selectedAssetId,
+        tagIds: selectedTagIds,
         metadata: {},
         timestamp: Date.now(),
       })
@@ -336,6 +370,7 @@ export function QuickEntry() {
     selectedAssetId,
     selectedContacts,
     selectedExercises,
+    selectedTagIds,
     selectedTracker,
     setQuickEntryOpen,
     toast,
@@ -774,6 +809,18 @@ export function QuickEntry() {
                 )}
                 </>
                 )}
+
+                <div className="mb-4">
+                  <TagSelector
+                    tags={tags}
+                    selectedTagIds={selectedTagIds}
+                    onChange={setSelectedTagIds}
+                    onCreateTag={handleCreateTag}
+                    disabled={isSubmitting}
+                    creating={createTagMutation.isPending}
+                    compact
+                  />
+                </div>
 
                 {/* Asset Attachment */}
                 <div className="mb-4 relative">
