@@ -245,7 +245,7 @@ Units must be preserved from persisted values when the tracker stores a unit and
 | Tracker | Contract file | Status summary |
 | --- | --- | --- |
 | Weight | `Documentation/Contracts/Trackers/Weight.md` | Reference specialized tracker; implemented with honest gaps. |
-| Mood | `Documentation/Contracts/Trackers/Mood.md` | Generic mutations plus mood aggregate; scale normalization needs confirmation. |
+| Mood | `Documentation/Contracts/Trackers/Mood.md` | Generic entries plus typed Mood read models; canonical scale is 1-10 with no `entry_mood` table or migration. |
 | Hydration | `Documentation/Contracts/Trackers/Hydration.md` | Generic numeric tracker with simple daily-total conventions. |
 | Diet / Calories | `Documentation/Contracts/Trackers/Diet-Calories.md` | Generic numeric tracker; broader Food/Diet intent documented without inventing schema. |
 | Exercise | `Documentation/Contracts/Trackers/Exercise.md` | Exercise search implemented; workout logging is generic metadata. |
@@ -339,7 +339,7 @@ Do not duplicate incompatible tracker-specific shapes. Extend shared contracts d
 
 - Generic non-Weight trackers mostly use generic entry APIs, generic stats, generic calendar, and widget-side heuristics.
 - Generic entry validation is thin compared with specialized Weight validation.
-- Mood scale normalization remains `NEEDS_CLIENT_CONFIRMATION`.
+- Mood scale is now canonical 1-10 across create/edit/read surfaces, but it remains on generic entries and backend generic validation is still thinner than Weight.
 - Exercise structured workout logging is `CONTRACT_ONLY/FUTURE`.
 - Social contact interactions exist, but Social entry plus contact interaction linkage is partial.
 - Diet/Food, Books, Gaming, Media/TV, Tasks postponed state, and Savings finance semantics do not have specialized tables/services.

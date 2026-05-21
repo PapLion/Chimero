@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useTrackers, useUpdateEntryMutation, useUpdateWeightEntryMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
-import { Dialog, DialogContent } from "@packages/ui/dialog"
+import { Dialog, DialogContent, DialogTitle } from "@packages/ui/dialog"
 import { Input } from "@packages/ui/input"
 import { format } from "date-fns"
 import { PencilLine, Trash2, Camera, ImageIcon } from "lucide-react"
@@ -12,12 +12,23 @@ import { TagSelector } from "@features/tags/components/TagChips"
 import type { Entry } from "@shared/store"
 import { formatToastError, useToast } from "@shared/components/toast"
 import type { AssetWithUrls } from "@contracts/features/assets"
-import type { MeasurementUnit, WeightUnit } from "@contracts/contracts"
+import type { MeasurementUnit, Tracker, WeightUnit } from "@contracts/contracts"
+import { clampMoodScore } from "@contracts/domain"
 
 interface EditEntryDialogProps {
     entry: Entry | null
     open: boolean
     onOpenChange: (open: boolean) => void
+}
+
+export function isMoodTracker(tracker: Pick<Tracker, "name" | "icon">): boolean {
+    const nameLower = tracker.name.toLowerCase()
+    return nameLower.includes("mood") || nameLower.includes("feeling") || tracker.icon === "smile"
+}
+
+export function getRatingOptionsForEntry(tracker: Pick<Tracker, "name" | "icon" | "config">): number[] {
+    if (isMoodTracker(tracker)) return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    return [1, 2, 3, 4, 5]
 }
 
 export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogProps) {
@@ -100,7 +111,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
         // Parse value depending on tracker type
         let parsedValue: number | null = null
         if (value.trim() !== "") {
-            parsedValue = parseFloat(value)
+            parsedValue = isMoodTracker(tracker) ? clampMoodScore(value) : parseFloat(value)
             if (isNaN(parsedValue)) parsedValue = null
         }
 
@@ -195,6 +206,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     const isNumeric = tracker.type === "numeric" || tracker.type === "range" || tracker.type === "counter"
     const isText = tracker.type === "text" || tracker.type === "list"
     const isWeightTracker = tracker.icon === "scale" || tracker.name.toLowerCase().includes("weight") || tracker.name.toLowerCase().includes("peso")
+    const ratingOptions = getRatingOptionsForEntry(tracker)
     const waistUnit = getWaistUnit()
     const selectedAsset = selectedAssetId ? assets.get(selectedAssetId) : undefined
     const assetPreviewUrl = (asset: AssetWithUrls) =>
@@ -216,7 +228,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                         </div>
                         <div className="min-w-0">
                             <div className="section-kicker">Edit entry</div>
-                            <h2 className="mt-1 truncate text-lg font-semibold text-[hsl(var(--foreground))]">{tracker.name}</h2>
+                            <DialogTitle className="mt-1 truncate text-lg font-semibold text-[hsl(var(--foreground))]">{tracker.name}</DialogTitle>
                             <p className="line-clamp-2 text-xs text-[hsl(var(--muted-foreground))]">Modify entry details and past timestamp.</p>
                         </div>
                     </div>
@@ -247,7 +259,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
 
                         {tracker.type === "rating" ? (
                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                                {[1, 2, 3, 4, 5].map((rating) => (
+                                {ratingOptions.map((rating) => (
                                     <button
                                         type="button"
                                         key={rating}

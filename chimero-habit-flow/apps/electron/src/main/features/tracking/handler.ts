@@ -9,7 +9,7 @@ import type { CorrelationQueryRequest, StatsQueryRequest, TrackerInsert } from '
 export function registerTrackingHandlers(): void {
   const defaultTrackers = [
     { name: 'Weight', type: 'numeric' as const, icon: 'scale', color: '#a855f7', order: 0, config: { unit: 'kg', goal: 70 } },
-    { name: 'Mood', type: 'range' as const, icon: 'smile', color: '#f59e0b', order: 1, config: { max: 5 } },
+    { name: 'Mood', type: 'range' as const, icon: 'smile', color: '#f59e0b', order: 1, config: { max: 10 } },
     { name: 'Exercise', type: 'numeric' as const, icon: 'dumbbell', color: '#22c55e', order: 2, config: { unit: 'min', goal: 30 } },
     { name: 'Social', type: 'numeric' as const, icon: 'users', color: '#3b82f6', order: 3, config: { unit: 'interactions' } },
     { name: 'Tasks', type: 'text' as const, icon: 'check-square', color: '#ef4444', order: 4, config: {} },

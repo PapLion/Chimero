@@ -9,6 +9,7 @@ import { useTrackers, useCalendarMonth, useStats, useReminders, useEntries, useT
 import { TimelineView } from "./components/TimelineView"
 import { TagChips } from "@features/tags/components/TagChips"
 import type { CalendarDayEntry } from "@contracts/features/calendar"
+import { clampMoodScore, moodScoreToColor, moodScoreToLabel } from "@contracts/domain"
 
 const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
@@ -452,6 +453,9 @@ export function CalendarPage() {
                           {selectedDayEntries.map((entry) => {
                             const tracker = trackers.find((t) => t.id === entry.trackerId)
                             const displayUnit = entry.unit ?? (tracker?.config?.unit as string | undefined)
+                            const trackerNameLower = tracker?.name.toLowerCase() ?? ""
+                            const isMoodEntry = trackerNameLower.includes("mood") || trackerNameLower.includes("feeling") || tracker?.icon === "smile"
+                            const moodScore = isMoodEntry ? clampMoodScore(entry.value) : null
                             const entryTime = new Date(entry.timestamp).toLocaleTimeString(undefined, {
                               hour: "2-digit",
                               minute: "2-digit",
@@ -472,13 +476,18 @@ export function CalendarPage() {
                                   />
                                 </div>
                                 <p className="text-2xl font-display font-bold text-[hsl(var(--primary))]">
-                                  {entry.value ?? "—"}
-                                  {displayUnit && (
+                                  {isMoodEntry && moodScore != null ? `${moodScore}/10` : entry.value ?? "—"}
+                                  {!isMoodEntry && displayUnit && (
                                     <span className="ml-1 text-sm font-normal text-[hsl(var(--muted-foreground))]">
                                       {displayUnit}
                                     </span>
                                   )}
                                 </p>
+                                {isMoodEntry && moodScore != null && (
+                                  <p className="mt-1 text-sm" style={{ color: moodScoreToColor(moodScore) }}>
+                                    {moodScoreToLabel(moodScore)}
+                                  </p>
+                                )}
                                 {(entry as CalendarDayEntry).waist != null && (
                                   <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
                                     Waist {(entry as CalendarDayEntry).waist}

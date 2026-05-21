@@ -20,6 +20,7 @@ import { Button } from "@packages/ui/button"
 import { CyberpunkSelect } from "@features/tracking/components/CyberpunkSelect"
 import { formatToastError, useToast } from "@shared/components/toast"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Activity, Calendar, Flame, Book, Gamepad2, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, ImageIcon, X, type LucideIcon } from "lucide-react"
+import { clampMoodScore } from "@contracts/domain"
 
 const iconMap: Record<string, LucideIcon> = {
   scale: Scale,
@@ -251,6 +252,10 @@ export function QuickEntry() {
       trackerData.icon === "scale" ||
       trackerData.name.toLowerCase().includes("weight") ||
       trackerData.name.toLowerCase().includes("peso")
+    const isMoodTracker =
+      trackerData.icon === "smile" ||
+      trackerData.name.toLowerCase().includes("mood") ||
+      trackerData.name.toLowerCase().includes("feeling")
 
     setIsSubmitting(true)
 
@@ -307,7 +312,7 @@ export function QuickEntry() {
         entryValue = 1
       } else {
         if (!value) return
-        entryValue = parseFloat(value)
+        entryValue = isMoodTracker ? clampMoodScore(value) : parseFloat(value)
         entryNote = note.trim() || null
       }
 

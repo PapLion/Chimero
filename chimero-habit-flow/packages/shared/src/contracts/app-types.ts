@@ -332,6 +332,65 @@ export interface WeightHomeWidgetReadModel {
   } | null
 }
 
+export type MoodVisualState = 'low' | 'neutral' | 'high'
+
+export interface MoodEntryReadModel {
+  entryId: number
+  trackerId: number
+  moodScore: number
+  visualState: MoodVisualState
+  color: string
+  label: string
+  note: string | null
+  timestamp: number
+  dateStr: string
+  assetId?: number | null
+  tagIds?: number[]
+}
+
+export interface MoodDailyAggregate {
+  date: string
+  averageScore: number
+  highScore: number
+  lowScore: number
+  latestScore: number
+  count: number
+  visualState: MoodVisualState
+  color: string
+  label: string
+  entries: MoodEntryReadModel[]
+}
+
+export interface MoodBentoReadModel {
+  trackerId: number
+  title: string
+  selectedDateScore: number | null
+  latestScore: number | null
+  selectedDayAggregate: MoodDailyAggregate | null
+  sparkline: Array<{ date: string; value: number }>
+  visualState: MoodVisualState | null
+  color: string | null
+  label: string | null
+}
+
+export interface MoodEntriesReadModel {
+  entries: MoodEntryReadModel[]
+}
+
+export interface MoodStatisticsReadModel {
+  count: number
+  averageScore: number | null
+  highScore: number | null
+  lowScore: number | null
+  latestScore: number | null
+  chartData: Array<{ date: string; value: number; count: number }>
+}
+
+export interface MoodCalendarDayReadModel {
+  entries: MoodEntryReadModel[]
+  aggregate: MoodDailyAggregate | null
+}
+
 export interface WeightDetailResponse {
   current: WeightEntry | null
   history: WeightEntry[]

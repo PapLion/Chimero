@@ -4,7 +4,12 @@ import { useMemo, useState, type MouseEvent } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import type { AssetWithUrls } from "@contracts/features/assets"
 import type { WeightEntryHistoryItem } from "@contracts/contracts"
-import { buildWeightEntriesTabReadModel, buildWeightStatisticsReadModel } from "@contracts/domain"
+import {
+  buildMoodEntriesReadModel,
+  buildMoodStatisticsReadModel,
+  buildWeightEntriesTabReadModel,
+  buildWeightStatisticsReadModel,
+} from "@contracts/domain"
 import { useAppStore } from "@shared/store"
 import { useTrackers, useEntries, useDeleteEntryMutation, useWeightDetail, useTags } from "@shared/queries"
 import { filterEntriesByDate, cn } from "@shared/utils"
@@ -143,6 +148,12 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     (trackerNameLowerForWeight.includes("weight") ||
       trackerNameLowerForWeight.includes("peso") ||
       tracker.icon === "scale")
+  const trackerNameLowerForMood = tracker?.name.toLowerCase() ?? ""
+  const isMoodTracker =
+    !!tracker &&
+    (trackerNameLowerForMood.includes("mood") ||
+      trackerNameLowerForMood.includes("feeling") ||
+      tracker.icon === "smile")
   const { data: weightDetail } = useWeightDetail(trackerId, isWeightTracker)
   const weightEntriesReadModel = useMemo(
     () => weightDetail ? buildWeightEntriesTabReadModel(weightDetail) : { entries: [] },
@@ -157,6 +168,14 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const trackerEntries = useMemo(() => {
     return allEntries.filter((e) => e.trackerId === trackerId)
   }, [allEntries, trackerId])
+  const moodEntriesReadModel = useMemo(
+    () => buildMoodEntriesReadModel(trackerEntries),
+    [trackerEntries],
+  )
+  const moodStatisticsReadModel = useMemo(
+    () => buildMoodStatisticsReadModel(trackerEntries),
+    [trackerEntries],
+  )
 
   // Filter entries for selected date (for stats and history feed)
   const selectedDateEntries = useMemo(() => {
@@ -178,9 +197,18 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     return entries.filter((entry) => entry.dateStr === selectedDateStr)
   }, [weightEntriesReadModel.entries, selectedDate, isToday])
 
+  const moodHistoryEntries = useMemo(() => {
+    const entries = moodEntriesReadModel.entries
+    if (isToday) return entries
+    const selectedDateStr = toDateStr(selectedDate)
+    return entries.filter((entry) => entry.dateStr === selectedDateStr)
+  }, [moodEntriesReadModel.entries, selectedDate, isToday])
+
   // Calculate stats - use selectedDateEntries for "today's" stats when viewing a specific date
   const totalCount = isWeightTracker && weightStatisticsReadModel
     ? (isToday ? weightStatisticsReadModel.totalEntries : weightHistoryEntries.length)
+    : isMoodTracker
+      ? (isToday ? moodStatisticsReadModel.count : moodHistoryEntries.length)
     : isToday ? trackerEntries.length : selectedDateEntries.length
   const currentStreak = isWeightTracker && weightStatisticsReadModel
     ? weightStatisticsReadModel.streakDays
@@ -315,10 +343,13 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
       const dayEntries = datesMap[dateStr]
       const trackerNameLower = tracker.name.toLowerCase()
       const isWeightTracker = trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
+      const isMoodTracker = trackerNameLower.includes("mood") || trackerNameLower.includes("feeling") || tracker.icon === "smile"
       const isRatingType = tracker.type === "rating"
 
       let aggregatedValue: number
-      if (isWeightTracker || isRatingType) {
+      if (isMoodTracker) {
+        aggregatedValue = dayEntries.reduce((acc, e) => acc + (e.value ?? 0), 0) / dayEntries.length
+      } else if (isWeightTracker || isRatingType) {
         aggregatedValue = dayEntries[dayEntries.length - 1]?.value ?? 0
       } else {
         aggregatedValue = dayEntries.reduce((acc, e) => acc + (e.value ?? 0), 0)
@@ -389,6 +420,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     trackerNameLower.includes("media") ||
     tracker.icon === "book" || tracker.icon === "gamepad-2" || tracker.icon === "music"
   const isWeightType = isWeightTracker
+  const isMoodType = isMoodTracker
   const isTaskType = tracker.type === "list" || tracker.type === "binary" || trackerNameLower.includes("task")
   const isDietType = trackerNameLower.includes("diet") || trackerNameLower.includes("calorie") || trackerNameLower.includes("food") || trackerNameLower.includes("meal") || tracker.icon === "salad"
   const isSavingsType = trackerNameLower.includes("saving") || trackerNameLower.includes("finance") || trackerNameLower.includes("money") || trackerNameLower.includes("budget") || tracker.icon === "wallet"
@@ -498,11 +530,13 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
               </div>
               <div className={statCardBase}>
                 <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">
-                  {isWeightType ? "Weekly Average" : "Average Value"}
+                  {isWeightType ? "Weekly Average" : isMoodType ? "Average Mood" : "Average Value"}
                 </div>
                 <div className="text-3xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
                   {isWeightType
                     ? weightDetail?.weeklyAvg != null ? weightDetail.weeklyAvg.toFixed(1) : "--"
+                    : isMoodType
+                      ? moodStatisticsReadModel.averageScore != null ? `${moodStatisticsReadModel.averageScore.toFixed(1)}/10` : "--"
                     : averageValue > 0 ? averageValue.toFixed(1) : "--"}
                 </div>
               </div>
@@ -534,6 +568,27 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                       {weightStatisticsReadModel?.waistStats
                         ? `${weightStatisticsReadModel.waistStats.latest.toFixed(1)} ${weightStatisticsReadModel.waistStats.unit}`
                         : "--"}
+                    </div>
+                  </div>
+                </>
+              ) : isMoodType ? (
+                <>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">High Mood</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {moodStatisticsReadModel.highScore != null ? `${moodStatisticsReadModel.highScore}/10` : "--"}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Low Mood</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {moodStatisticsReadModel.lowScore != null ? `${moodStatisticsReadModel.lowScore}/10` : "--"}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Latest Mood</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {moodStatisticsReadModel.latestScore != null ? `${moodStatisticsReadModel.latestScore}/10` : "--"}
                     </div>
                   </div>
                 </>
@@ -820,7 +875,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
               <p className="mt-1 text-sm text-[hsl(220_12%_58%)]">Recent entries are grouped by type to keep the scan effortless.</p>
             </div>
 
-            {(isWeightType ? weightHistoryEntries.length : historyEntries.length) === 0 ? (
+            {(isWeightType ? weightHistoryEntries.length : isMoodType ? moodHistoryEntries.length : historyEntries.length) === 0 ? (
               <div className="surface-card rounded-2xl py-12 text-center text-[hsl(220_12%_58%)]">
                 <p className="text-sm">No entries for {selectedDate.toLocaleDateString()}</p>
               </div>
@@ -929,6 +984,67 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                             src={asset.thumbnailUrl || asset.assetUrl}
                             alt="Weight photo"
                             className="w-full h-auto max-h-[300px] object-contain"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : isMoodType ? (
+              <div className="space-y-4">
+                {moodHistoryEntries.map((entry) => {
+                  const asset = entry.assetId != null ? assets.get(entry.assetId) : null
+                  const entryForMutation: Entry = {
+                    id: entry.entryId,
+                    trackerId: entry.trackerId,
+                    value: entry.moodScore,
+                    note: entry.note,
+                    metadata: { trackerKind: "mood" },
+                    timestamp: entry.timestamp,
+                    dateStr: entry.dateStr,
+                    assetId: entry.assetId ?? null,
+                    tagIds: entry.tagIds ?? [],
+                  }
+                  return (
+                    <div
+                      key={entry.entryId}
+                      className={entryCardBase}
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entryForMutation) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); setEditingEntry(entryForMutation) } }}
+                    >
+                      <div className="absolute right-3 top-3 z-10 flex gap-1.5 opacity-0 translate-y-1 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+                        <button className={actionButtonBase} onClick={(e) => { e.stopPropagation(); setEditingEntry(entryForMutation) }} title="Edit entry (Shift+RightClick)">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button className={actionButtonBase} onClick={(e) => { e.stopPropagation(); setDeletingEntry(entryForMutation) }} title="Delete entry">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm text-white/60">
+                          {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                          {" · "}
+                          {new Date(entry.timestamp).toLocaleDateString()}
+                        </div>
+                        <div className="rounded-full px-2 py-1 text-xs font-medium text-white" style={{ backgroundColor: entry.color }}>
+                          {entry.label}
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold text-white mb-2">
+                        {entry.moodScore}/10
+                      </div>
+                      {entry.note && (
+                        <div className="text-sm text-white/60 mb-2">{entry.note}</div>
+                      )}
+                      {renderEntryTags(entry.tagIds)}
+                      {asset && (
+                        <div className="mt-3 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
+                          <img
+                            src={asset.thumbnailUrl || asset.assetUrl}
+                            alt=""
+                            className="w-full h-auto max-h-[300px] object-contain"
+                            title={entry.note || "Mood attachment"}
                           />
                         </div>
                       )}

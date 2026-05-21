@@ -3,7 +3,7 @@
 import { cn } from "@shared/utils"
 import { type Widget, type Tracker, type Entry } from "@shared/store"
 import { useMoodDailyAggregates, useUpdateEntryMutation, useWeightDetail } from "@shared/queries"
-import { buildWeightHomeWidgetReadModel } from "@contracts/domain"
+import { buildWeightHomeWidgetReadModel, clampMoodScore, moodScoreToColor } from "@contracts/domain"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, Salad, type LucideIcon } from "lucide-react"
@@ -122,10 +122,11 @@ function getDateValue(entries: Entry[], tracker: Tracker, selectedDate: Date): n
   // Determine aggregation strategy
   const trackerNameLower = tracker.name.toLowerCase()
   const isWeightTracker = trackerNameLower.includes("weight") || trackerNameLower.includes("peso")
+  const isMoodTracker = trackerNameLower.includes("mood") || trackerNameLower.includes("feeling") || tracker.icon === "smile"
   const isRatingType = tracker.type === "rating"
 
   // Use LAST strategy for weight or rating types
-  if (isWeightTracker || isRatingType) {
+  if (isWeightTracker || isMoodTracker || isRatingType) {
     // Return the last entry of the selected date (most recent)
     const lastEntry = dateEntries[dateEntries.length - 1]
     return lastEntry?.value ?? null
@@ -176,10 +177,10 @@ function MoodWidget({ entries, tracker, selectedDate }: { entries: Entry[]; trac
   const moodEmojis = ["🤬", "😠", "😞", "☹️", "😐", "🙂", "😊", "😄", "🤩", "😍"]
   
   // Map 1-10 to emoji index (0-9)
-  const moodValue = dateMoodValue !== null 
-    ? Math.min(Math.max(Math.round(dateMoodValue) - 1, 0), 9) 
+  const moodValue = dateMoodValue !== null
+    ? clampMoodScore(dateMoodValue) - 1
     : 4 // Default middle emoji (5/10) if no entry for selected date
-  const displayMoodValue = dateMoodValue ?? 5 // For the dots display (1-10 scale)
+  const displayMoodValue = dateMoodValue !== null ? clampMoodScore(dateMoodValue) : 5
   
   // Background tone based on mood
   const getMoodTone = (value: number | null) => {
@@ -198,6 +199,7 @@ function MoodWidget({ entries, tracker, selectedDate }: { entries: Entry[]; trac
   }))
 
   const moodTone = getMoodTone(displayMoodValue)
+  const moodColor = moodScoreToColor(displayMoodValue)
 
   return (
     <div className={cn("surface-card flex h-full flex-col rounded-2xl p-4", moodTone)}>
@@ -212,8 +214,9 @@ function MoodWidget({ entries, tracker, selectedDate }: { entries: Entry[]; trac
               key={i}
               className={cn(
                 "w-1.5 h-1.5 rounded-full transition-colors",
-                i <= displayMoodValue ? "bg-[hsl(var(--primary))]" : "bg-[hsl(var(--border)/0.45)]"
+                i <= displayMoodValue ? "" : "bg-[hsl(var(--border)/0.45)]"
               )}
+              style={i <= displayMoodValue ? { backgroundColor: moodColor } : undefined}
             />
           ))}
         </div>
@@ -288,7 +291,8 @@ function CounterWidget({
       const isRatingType = tracker.type === "rating"
       
       let aggregatedValue: number
-      if (isWeightTracker || isRatingType) {
+      const isMoodTracker = trackerNameLower.includes("mood") || trackerNameLower.includes("feeling") || tracker.icon === "smile"
+      if (isWeightTracker || isMoodTracker || isRatingType) {
         // Use last entry for weight/rating
         aggregatedValue = dayEntries[dayEntries.length - 1]?.value ?? 0
       } else {
@@ -1032,7 +1036,7 @@ export function WidgetCard({ widget, tracker, entries, assets, selectedDate }: W
     const trackerType = tracker.type
 
     // Mood Widget: rating type with smile icon
-    if (trackerType === "rating" && tracker.icon === "smile") {
+    if ((trackerNameLower.includes("mood") || trackerNameLower.includes("feeling") || tracker.icon === "smile") && (trackerType === "rating" || trackerType === "range")) {
       return <MoodWidget entries={entries} tracker={tracker} selectedDate={selectedDate} />
     }
 
