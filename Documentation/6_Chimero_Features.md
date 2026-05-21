@@ -1,31 +1,53 @@
 # Chimero Feature Inventory
 
-This inventory reflects the current source tree after the Weight contract foundation milestone. Filesystem and contracts win over older planning docs.
+This inventory reflects the current source tree and contract docs. Filesystem and shared contracts win over older planning notes. Do not mark a feature complete unless the UI, request contract, backend/service path, DB persistence, response/read model, and relevant surfaces all exist.
 
-## Active User-Facing Features
+## Status Vocabulary
 
-| Feature | Status | Current surfaces | Notes |
-| --- | --- | --- | --- |
-| Dashboard / Home | Active | `BentoGrid`, `WidgetCard`, `Header`, `Sidebar` | Home is the default shell surface. Selecting a tracker opens contextual tracker detail inside Home. |
-| Tracker Detail | Active contextual | `TrackerDetailView`, `EditEntryDialog`, `ConfirmDeleteDialog` | Shows statistics, graph/history surfaces, entry history, edit, and delete flows. |
-| Insight Lab / Stats | Active | `tracking/page.tsx` and correlation components | Still mounted as `stats`; older docs that call it obsolete are stale. |
-| Calendar | Active | `CalendarPage`, `TimelineView` | Month view and timeline view. Month entries are enriched with Weight fields when available. |
-| Custom Trackers | Active | `CustomTrackersPage`, `CreateTrackerDialog` | Manages custom trackers; default trackers are seeded separately. |
-| Assets | Active | `AssetsPage`, asset IPC, `chimero-asset://` | Local media library with upload, rename, download, and delete. |
-| Contacts | Active | `ContactProfilePage`, `ContactBubblesGrid` | Personal CRM and social tracker support. |
-| Quick Entry | Active | `QuickEntry`, floating action button, `Alt+Q` | Main write surface for entries and reminders. Weight has specialized handling. |
-| Reminders | Active | `NotificationsModal`, reminder IPC, reminder loop | CRUD, completion state, and runtime notifications. |
-| Exercises | Partial/support | `ExerciseSearch`, `ExerciseDownloadToast` | Embedded in Quick Entry; not a top-level page. |
-| Weight | Active specialized tracker | Quick Entry, Weight widget, tracker detail, calendar, backend IPC, shared domain | Reference tracker implementation with `entry_weight`, goals, deltas, weekly average, streak, waist fields, and tag IDs. |
+- `ACTIVE`: implemented and visible/usable in the current runtime.
+- `PARTIAL`: implemented, but some important contract path or surface is incomplete.
+- `CONTRACT_ONLY`: documented contract exists, but implementation is not wired.
+- `DB_ONLY`: schema exists, but no meaningful UI/service flow uses it yet.
+- `UI_ONLY`: UI exists without real backend/persistence support.
+- `PLACEHOLDER`: visible or planned shell that should not be treated as working feature.
+- `FUTURE`: explicitly not current scope.
+- `OBSOLETE`: stale reference; do not build against it.
 
-## Internal / Foundation Features
+## User-Facing Features
 
-| Feature | Status | Current surfaces | Notes |
-| --- | --- | --- | --- |
-| Tags | Backend/shared foundation active; UI pending | IPC handlers, web API routes, shared domain helpers, DB tables | `get-tags`, tag tree, relationship updates, inheritance resolution, and entry tag replacement exist. Full tag picker/chip UI remains pending. |
-| Web runtime | Active local dev/runtime mirror | `apps/web`, Vite middleware, `/api/*` routes | Web reuses the Electron renderer app through aliases and talks to a local REST-style API instead of Electron preload. |
-| Shared contracts | Active | `packages/shared/src/contracts`, `features`, `domain` | Source of truth for app-facing types and pure helpers. |
-| Database package | Active | `packages/db/src` | Owns schema and DB runtime helpers; Electron bootstrap owns migration/seeding startup. |
+| Feature | Purpose | Frontend files | Backend files | Shared contracts/domain | DB tables | Status | Tracker contract? | Main gaps |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Dashboard / Home | Default overview of trackers as draggable Bento widgets. | `BentoGrid.tsx`, `WidgetCard.tsx`, `Header.tsx`, `Sidebar.tsx` | `features/tracking/handler.ts`, `features/tracking/service.ts` | `features/dashboard`, `contracts/app-types.ts`, Weight read models where needed | `trackers`, `entries`, `settings`, `assets`, `entry_weight` | ACTIVE | Indirect via tracker files | Some widget logic still uses frontend heuristics for generic trackers. |
+| Quick Entry | Main activity/reminder capture flow. | `QuickEntry.tsx`, `entry-config.ts`, `FloatingActionButton.tsx` | `features/entry/handler.ts`, `features/weight`, `features/reminders`, `features/contacts`, `features/tags` | `BaseEntryRequest`, `CreateWeightEntryRequest`, `ReminderInsert`, contact/tag contracts | `entries`, `entry_weight`, `reminders`, `entries_to_tags`, `contacts`, `contact_interactions`, `assets` | ACTIVE/PARTIAL | Yes, per tracker | Weight is specialized; most trackers still use generic entry semantics. Social contact interaction linkage is partial. |
+| Tracker Detail | Per-tracker detail with Entries, Statistics, Graphs, Edit/Delete. | `TrackerDetailView.tsx`, `EditEntryDialog.tsx`, `ConfirmDeleteDialog.tsx`, `TagChips.tsx` | `features/entry`, `features/weight`, `features/tags` | Weight read models, `Entry`, `Tag`, `AssetWithUrls` | `entries`, `entry_weight`, `entries_to_tags`, `assets` | ACTIVE/PARTIAL | Yes | Generic stats/graphs are mostly frontend aggregation; non-Weight detail read models are not specialized. |
+| Calendar / Timeline | Month and timeline review by date. | `CalendarPage`, `TimelineView` | `features/calendar/service.ts`, `features/calendar/handler.ts` | `features/calendar`, `domain/calendar.ts` | `entries`, `entry_weight`, `entries_to_tags` | ACTIVE/PARTIAL | Yes | Calendar is Weight-enriched, but generic tracker fields, resolved tag labels, reminders/assets, and expanded selected-day details are partial. |
+| Insight Lab / Stats | Local stats and correlation/impact exploration. | `features/tracking/page.tsx`, correlation components/hooks | `features/tracking/service.ts`, `features/tracking/handler.ts` | `StatsQueryResponse`, `CorrelationResultResponse`, `features/tracking` | `entries`, `entries_to_tags`, `trackers` | ACTIVE/PARTIAL | Referenced by tracker files only where relevant | Must stay cautious; no causal claims. Tracker-specific insights mostly future. |
+| Assets | Local media library and entry/contact attachments. | `AssetsPage`, asset picker in Quick/Edit surfaces | `features/assets/handler.ts`, `features/assets/service.ts`, `main/index.ts` asset protocol | `Asset`, `AssetWithUrls`, `AssetLink` | `assets`, `asset_links`, `entries.assetId`, `contacts.avatarAssetId` | ACTIVE/PARTIAL | Mentioned in tracker files | `asset_links` is broader than current single-asset entry flows. Calendar inline asset rendering remains partial. |
+| Custom Trackers | Create/manage custom tracker definitions. | `CustomTrackersPage`, `CreateTrackerDialog` | `features/tracking/handler.ts` | `Tracker`, `TrackerConfig`, `TrackerInsert` | `trackers` | ACTIVE | Generic tracker contracts apply | Custom trackers use generic entry persistence/read behavior. |
+| Contacts / Social CRM | Personal CRM plus interaction history. | `ContactProfilePage`, `ContactBubblesGrid`, Social Quick Entry pieces | `features/contacts/handler.ts` | `Contact`, `ContactInsert`, `ContactUpdate`, `ContactInteraction` | `contacts`, `contact_interactions`, `assets`, optionally `entries` | ACTIVE/PARTIAL | `Social.md` | Interaction entry linkage and transaction safety with generic Social entry are partial. |
+| Reminders | Local notifications and completion state. | `NotificationsModal`, Quick Entry reminder mode | `features/reminders/handler.ts`, `features/reminders/service.ts` | `Reminder`, `ReminderInsert` | `reminders` | ACTIVE | Not a tracker contract | Reminder/task calendar interactions should not be invented beyond current behavior. |
+| Exercises | Search/select exercise records for logging context. | `ExerciseSearch.tsx`, `ExerciseDownloadToast.tsx`, Quick Entry exercise branch | `features/exercises/service.ts`, `features/exercises/handler.ts` | `features/exercises` | exercise cache file, generic `entries.metadata` | PARTIAL | `Exercise.md` | Exercise search exists; structured workout tables, sets/reps/load/routines/PRs are CONTRACT_ONLY/FUTURE. |
+| Tags | Explicit entry tags, tag tree, and inheritance support. | `TagChips.tsx`, tag selector in Quick/Edit surfaces | `features/tags/service.ts`, `features/tags/handler.ts`, entry/weight tag writes | `Tag`, `TagRelationship`, tag domain helpers | `tags`, `entries_to_tags`, `tag_relationships` | BACKEND ACTIVE / UI PARTIAL | Cross-cutting in tracker files | Inherited tags are not automatically displayed in every surface. Tag-based stats/widgets are future. |
+| Weight | Reference specialized tracker. | Quick Entry Weight branch, Weight widget/detail/calendar paths | `features/weight/service.ts`, `features/weight/handler.ts` | `CreateWeightEntryRequest`, `WeightDetailResponse`, `domain/weight.ts` | `entries`, `entry_weight`, `tracker_goals`, `entries_to_tags`, `assets` | ACTIVE SPECIALIZED WITH HONEST GAPS | `Weight.md` | Goal editing UI, waist stats threshold, calendar asset display, and body fat product scope remain gaps/future. |
+| Web runtime | Browser/dev runtime mirror for shared renderer app. | `apps/web/src/main.tsx`, renderer `shared/api.ts` fallback | `apps/web/server/index.ts`, `apps/web/server/routes/api.ts`, `apps/web/server/db.ts` | same shared contracts where mirrored | local web DB under `apps/web/.data` | ACTIVE/PARTIAL | No | Web route parity may lag Electron IPC; do not invent web endpoints. |
+| Generic trackers | Default/custom trackers backed by `entries`. | Quick Entry, WidgetCard, TrackerDetailView, Calendar | `features/entry`, `features/tracking`, `features/calendar` | `BaseEntryRequest`, `Entry`, `StatsQueryResponse` | `trackers`, `entries`, `entries_to_tags`, `assets` | ACTIVE/PARTIAL | Yes, per existing tracker file | Field semantics differ per tracker but persistence is generic. |
+| Specialized trackers | Trackers with extra structured backend/schema/read models. | Weight surfaces currently | `features/weight` | Weight request/response/read models | `entry_weight`, `tracker_goals` | ACTIVE for Weight only | `Weight.md` | Do not claim other trackers are specialized until schema/service/read models exist. |
+
+## Existing Tracker Contract Files
+
+- `Documentation/Contracts/Trackers/Weight.md`
+- `Documentation/Contracts/Trackers/Mood.md`
+- `Documentation/Contracts/Trackers/Hydration.md`
+- `Documentation/Contracts/Trackers/Diet-Calories.md`
+- `Documentation/Contracts/Trackers/Exercise.md`
+- `Documentation/Contracts/Trackers/Social.md`
+- `Documentation/Contracts/Trackers/Books.md`
+- `Documentation/Contracts/Trackers/Gaming.md`
+- `Documentation/Contracts/Trackers/Media-TV.md`
+- `Documentation/Contracts/Trackers/Tasks.md`
+- `Documentation/Contracts/Trackers/Savings.md`
+
+Use these files before implementing tracker-specific behavior. `Weight.md` is the strongest reference pattern.
 
 ## Main Source Areas
 
@@ -36,18 +58,38 @@ This inventory reflects the current source tree after the Weight contract founda
 - Shared contracts/domain: `chimero-habit-flow/packages/shared/src`
 - Database schema/runtime: `chimero-habit-flow/packages/db/src`
 - Shared UI package: `chimero-habit-flow/packages/ui`
+- High-level docs: `Documentation/Flow`, `Documentation/Structure`, `Documentation/Contracts`
 
 ## Known Gaps
 
-- Tags UI remains pending across Quick Entry, entry editing, calendar, and visible tag chips.
-- Weight reference tracker is implemented, but body fat remains optional/future from a product perspective.
-- Waist statistics exist in the read model when waist data exists; product threshold language should stay conservative.
+- Non-Weight trackers mostly rely on generic entry persistence and frontend read heuristics.
+- Tags UI is partial across Quick Entry, entry editing, calendar, and visible tag chips; backend foundations exist.
+- Inherited tag expansion is available as backend/domain logic but is not automatically displayed everywhere.
+- Calendar selected-day cards carry Weight fields and tag IDs, but resolved tag labels and inline asset presentation remain partial.
 - Dedicated Weight goal editing UI remains pending even though backend/web goal contracts exist.
-- Calendar selected-day cards carry Weight fields and tag IDs, but resolved tag labels and inline asset presentation still need UI work.
+- Exercise workout logging is generic metadata; structured workout schema is not implemented.
+- Diet/Food, Books, Gaming, Media/TV, Tasks, and Savings have tracker contracts but no specialized table/service.
+- Social CRM exists, but Social tracker entries and contact interactions are only partially linked.
 
-## Obsolete References To Avoid
+## Obsolete Or Out-Of-Scope References To Avoid
 
-- Auth/login/register runtime flows: not present in the current app behavior.
-- Old `ipc-handlers.ts` monolith or `main/services/*`: not present in the current source tree.
+- Auth/login/register runtime flows: not present in current app behavior.
+- Old `ipc-handlers.ts` monolith or `main/services/*`: not present in current source tree.
 - Old docs that say Insight Lab is obsolete: contradicted by the mounted `stats` page.
-- Directory trees that include `.codex`, `node_modules`, build output, or screenshots as repo documentation.
+- Enterprise billing, legal data agreements, cloud governance, external analytics, and enterprise SLA theory.
+- Directory trees that include `.codex`, `node_modules`, build output, generated `.data`, or screenshots as repo documentation.
+
+## Developer Reading Order
+
+Before implementing a tracker, read:
+
+1. `Documentation/Flow/App_Flow.md`
+2. `Documentation/Flow/Contracts_Flow.md`
+3. `Documentation/Structure/Directory_Tree.md`
+4. `Documentation/7_Contratcs.md`
+5. The specific file under `Documentation/Contracts/Trackers/`
+6. `Documentation/Contracts/Backend_IPC_Contracts.md`
+7. `Documentation/Contracts/Database_Contracts.md`
+8. `packages/shared/src/contracts/*`
+9. `packages/db/src/schema.ts`
+10. Existing implementation for the closest tracker, usually Weight for specialized tracker work.
