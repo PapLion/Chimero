@@ -184,13 +184,24 @@ function seedDefaults(database: WebDb): void {
   database.prepare('INSERT OR IGNORE INTO settings (id) VALUES (1)').run()
 
   const existingTrackers = database
-    .prepare('SELECT id, name, "order", config FROM trackers')
+    .prepare(`
+      SELECT
+        id,
+        name,
+        "order",
+        config,
+        is_custom,
+        (SELECT COUNT(*) FROM entries WHERE tracker_id = trackers.id) AS entry_count
+      FROM trackers
+    `)
     .all()
     .map((row) => ({
       id: Number(row.id),
       name: String(row.name ?? ''),
       order: Number(row.order ?? 0),
       config: typeof row.config === 'string' ? row.config : null,
+      isCustom: Boolean(row.is_custom),
+      entryCount: Number(row.entry_count ?? 0),
     }))
   const legacyTrackerIds = existingTrackers
     .filter((tracker) => {
@@ -213,8 +224,13 @@ function seedDefaults(database: WebDb): void {
       VALUES (@name, @type, @icon, @color, @order, @config, 0, 0, 0)
     `)
 
-    for (const legacyTrackerId of plan.legacyTrackerIdsToRemove) {
-      database.prepare('DELETE FROM trackers WHERE id = ?').run(legacyTrackerId)
+    const trackerIdsToRemove = [
+      ...plan.legacyTrackerIdsToRemove,
+      ...plan.unsupportedTrackerIdsToRemove,
+    ]
+
+    for (const trackerId of trackerIdsToRemove) {
+      database.prepare('DELETE FROM trackers WHERE id = ?').run(trackerId)
     }
 
     for (const tracker of plan.toInsert) {

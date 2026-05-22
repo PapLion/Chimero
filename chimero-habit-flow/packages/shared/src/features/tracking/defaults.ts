@@ -40,16 +40,24 @@ type ExistingTrackerSeedRow = Pick<Tracker, 'name'> & {
   id: number
   order?: number | null
   config?: Record<string, unknown> | string | null
+  isCustom?: boolean | null
+  entryCount?: number | null
 }
 
 export type DefaultTrackerSeedPlan = {
   toInsert: DefaultTrackerDefinition[]
   legacyAction: 'none' | 'remove-empty' | 'preserve-populated'
   legacyTrackerIdsToRemove: number[]
+  unsupportedTrackerIdsToRemove: number[]
 }
 
 function normalizeTrackerName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function isUnsupportedRemovedDefaultTracker(name: string): boolean {
+  const normalizedName = normalizeTrackerName(name)
+  return normalizedName === 'savings' || normalizedName === 'finance'
 }
 
 function readConfigIdentity(config: ExistingTrackerSeedRow['config'] | Tracker['config']): string | null {
@@ -121,11 +129,20 @@ export function planDefaultTrackerSeedActions(input: {
     }
   }
 
+  const unsupportedTrackerIdsToRemove = input.trackers
+    .filter((tracker) =>
+      isUnsupportedRemovedDefaultTracker(tracker.name) &&
+      tracker.isCustom === false &&
+      tracker.entryCount === 0
+    )
+    .map((tracker) => tracker.id)
+
   const toInsert = DEFAULT_TRACKERS.filter((tracker) => !effectiveNames.has(normalizeTrackerName(tracker.name)))
 
   return {
     toInsert,
     legacyAction,
     legacyTrackerIdsToRemove,
+    unsupportedTrackerIdsToRemove,
   }
 }

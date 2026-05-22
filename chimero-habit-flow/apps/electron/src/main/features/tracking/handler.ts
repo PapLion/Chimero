@@ -16,15 +16,19 @@ async function legacyMediaTvHasEntries(legacyTrackerIds: number[]): Promise<bool
   if (legacyTrackerIds.length === 0) return false
 
   for (const legacyTrackerId of legacyTrackerIds) {
-    const [row] = await db()
-      .select({ count: sql<number>`count(*)` })
-      .from(entries)
-      .where(eq(entries.trackerId, legacyTrackerId))
-
-    if (Number(row?.count ?? 0) > 0) return true
+    if ((await trackerEntryCount(legacyTrackerId)) > 0) return true
   }
 
   return false
+}
+
+async function trackerEntryCount(trackerId: number): Promise<number> {
+  const [row] = await db()
+    .select({ count: sql<number>`count(*)` })
+    .from(entries)
+    .where(eq(entries.trackerId, trackerId))
+
+  return Number(row?.count ?? 0)
 }
 
 export function registerTrackingHandlers(): void {
@@ -43,24 +47,30 @@ export function registerTrackingHandlers(): void {
         })
         .map((row: Record<string, unknown>) => Number(row.id))
       const plan = planDefaultTrackerSeedActions({
-        trackers: rows.map((row: Record<string, unknown>) => ({
-          id: Number(row.id),
-          name: String(row.name ?? ''),
-          order: Number(row.order ?? 0),
-          config: row.config as string | Record<string, unknown> | null,
+        trackers: await Promise.all(rows.map(async (row: Record<string, unknown>) => {
+          const trackerId = Number(row.id)
+
+          return {
+            id: trackerId,
+            name: String(row.name ?? ''),
+            order: Number(row.order ?? 0),
+            config: row.config as string | Record<string, unknown> | null,
+            isCustom: Boolean(row.isCustom),
+            entryCount: await trackerEntryCount(trackerId),
+          }
         })),
         populatedLegacyMediaTv: await legacyMediaTvHasEntries(legacyTrackerIds),
       })
       const missingDefaults = plan.toInsert
 
-      if (missingDefaults.length > 0 || plan.legacyTrackerIdsToRemove.length > 0) {
+      if (missingDefaults.length > 0 || plan.legacyTrackerIdsToRemove.length > 0 || plan.unsupportedTrackerIdsToRemove.length > 0) {
         let maxOrder = -1
         if (rows.length > 0) {
           maxOrder = Math.max(...rows.map((r: Record<string, unknown>) => (r.order as number) ?? -1))
         }
 
-        for (const legacyTrackerId of plan.legacyTrackerIdsToRemove) {
-          await db().delete(trackers).where(eq(trackers.id, legacyTrackerId))
+        for (const trackerId of [...plan.legacyTrackerIdsToRemove, ...plan.unsupportedTrackerIdsToRemove]) {
+          await db().delete(trackers).where(eq(trackers.id, trackerId))
         }
 
         const toInsert = missingDefaults.map((t, index) => ({
@@ -74,7 +84,9 @@ export function registerTrackingHandlers(): void {
           archived: false,
         }))
 
-        await db().insert(trackers).values(toInsert)
+        if (toInsert.length > 0) {
+          await db().insert(trackers).values(toInsert)
+        }
 
         rows = await db()
           .select()

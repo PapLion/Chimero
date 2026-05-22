@@ -12,7 +12,7 @@ import { existsSync, readdirSync, unlinkSync } from 'fs';
 import { initDb, getDb, getRawDb, closeDb } from '@packages/db/database';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { trackers, entries } from '@packages/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { planDefaultTrackerSeedActions } from '@contracts/features/tracking';
 
 /**
@@ -185,7 +185,7 @@ function ensureSchemaAndMaybeReset(
 
 /**
  * Seeds default trackers if they don't exist.
- * Safe operation - never overwrites existing tracker records.
+ * Safe operation - never overwrites or removes populated/custom tracker records.
  */
 function seedDefaultTrackers(): void {
   const db = getDb();
@@ -211,13 +211,21 @@ function seedDefaultTrackers(): void {
       name: String(tracker.name ?? ''),
       order: Number(tracker.order ?? 0),
       config: tracker.config as string | Record<string, unknown> | null,
+      isCustom: Boolean(tracker.isCustom),
+      entryCount: Number(
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(entries)
+          .where(eq(entries.trackerId, Number(tracker.id)))
+          .get()?.count ?? 0
+      ),
     })),
     populatedLegacyMediaTv,
   });
 
-  for (const legacyTrackerId of plan.legacyTrackerIdsToRemove) {
-    db.delete(trackers).where(eq(trackers.id, legacyTrackerId)).run();
-    console.log(`[DB] Removed empty legacy tracker: Media/TV (${legacyTrackerId})`);
+  for (const trackerId of [...plan.legacyTrackerIdsToRemove, ...plan.unsupportedTrackerIdsToRemove]) {
+    db.delete(trackers).where(eq(trackers.id, trackerId)).run();
+    console.log(`[DB] Removed empty legacy/default tracker (${trackerId})`);
   }
 
   for (const tracker of plan.toInsert) {

@@ -13,6 +13,32 @@ describe('default trackers', () => {
     expect(defaultNames).not.toContain('finance')
   })
 
+  it('removes empty unsupported default Savings or Finance rows from existing seeds', () => {
+    const plan = planDefaultTrackerSeedActions({
+      trackers: [
+        { id: 101, name: 'Savings', order: 10, isCustom: false, entryCount: 0 },
+        { id: 102, name: 'Finance', order: 11, isCustom: false, entryCount: 0 },
+      ],
+      populatedLegacyMediaTv: false,
+    })
+
+    expect(plan.unsupportedTrackerIdsToRemove).toEqual([101, 102])
+    expect(plan.toInsert.map((tracker) => tracker.name.toLowerCase())).not.toContain('savings')
+    expect(plan.toInsert.map((tracker) => tracker.name.toLowerCase())).not.toContain('finance')
+  })
+
+  it('preserves unsupported Savings rows that contain user data or were user-created', () => {
+    const plan = planDefaultTrackerSeedActions({
+      trackers: [
+        { id: 101, name: 'Savings', order: 10, isCustom: false, entryCount: 3 },
+        { id: 102, name: 'Savings', order: 11, isCustom: true, entryCount: 0 },
+      ],
+      populatedLegacyMediaTv: false,
+    })
+
+    expect(plan.unsupportedTrackerIdsToRemove).toEqual([])
+  })
+
   it('keeps supported tracker defaults available', () => {
     expect(DEFAULT_TRACKERS.map((tracker) => tracker.name)).toEqual([
       'Weight',
