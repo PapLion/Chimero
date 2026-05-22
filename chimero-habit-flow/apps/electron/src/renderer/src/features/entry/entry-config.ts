@@ -144,18 +144,6 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
     }
   }
 
-  // 💰 Finance / Savings
-  if (nameLower.includes("money") || nameLower.includes("finance") || nameLower.includes("saving") || nameLower.includes("budget") || nameLower.includes("expense") || nameLower.includes("savings") || icon === "wallet") {
-    return {
-      mainLabel: "Amount",
-      mainPlaceholder: "Amount ($)",
-      mainType: "number",
-      noteLabel: "Category / Item",
-      notePlaceholder: "e.g., Groceries, Coffee, Salary",
-      noteHint: "What was this for?",
-    }
-  }
-
   // Default fallback based on tracker type
   if (tracker.type === "rating") {
     return {

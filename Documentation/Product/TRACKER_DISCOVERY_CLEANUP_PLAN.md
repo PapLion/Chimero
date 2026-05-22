@@ -135,7 +135,6 @@ These trackers currently have contract docs under `../Contracts/Trackers/` and s
 - Gaming: useful current surface, but deep game-specific semantics remain generic/partial.
 - Media/TV: useful current surface, but structured show/movie/history semantics remain generic/partial.
 - Tasks: useful current surface, but task-specific behaviors such as postpone/defer need explicit contract and implementation evidence.
-- Savings: useful current surface, but finance/balance semantics remain generic/partial and need client confirmation.
 
 ## Candidate/Future Trackers From Discovery
 
@@ -259,7 +258,7 @@ Anything not currently proven by contract docs, Product audit evidence, or code 
 The Product audit files under `Documentation/Product/` are the bridge between historical/client context and current implementation reality:
 
 - `./ClientContext_Audit_Index.md` summarizes the audit and points to detailed files.
-- `./ClientContext_Audit_04_Trackers_Core.md` is the main tracker-by-tracker reality check for Weight, Mood, Exercise, Gaming, Diet/Meals, Social, Books, Media/TV, Tasks, Hydration, Savings, Health, Vitamins/Medications, and custom tracker boundaries.
+- `./ClientContext_Audit_04_Trackers_Core.md` is the main tracker-by-tracker reality check for Weight, Mood, Exercise, Gaming, Diet/Meals, Social, Books, Media/TV, Tasks, Hydration, Health, Vitamins/Medications, and custom tracker boundaries.
 - `./ClientContext_Audit_06_Food_Health_Tags_Vitamins.md` is required context for Diet/Food, Health, tags, Vitamins/Medications, and tag-aware correlations.
 - `./ClientContext_Audit_07_Stats_Correlations.md` is required context before claiming tracker statistics, graphs, or correlations are complete.
 - `./ClientContext_Audit_08_CustomTrackers_TechnicalDebt.md` is required context before treating generic custom trackers as substitutes for specialized default trackers.

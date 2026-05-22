@@ -94,7 +94,7 @@ function dateToDateStr(date: Date): string {
  * Calculates the daily aggregate value for a tracker based on selected date's entries.
  * 
  * Strategy:
- * - SUM: For numeric, counter, range types (e.g., Savings, Calories, Water)
+ * - SUM: For numeric, counter, range types (e.g., Calories, Water, custom amounts)
  * - LAST: For weight trackers or rating types (e.g., Mood, Weight)
  * 
  * @param entries - All entries for the tracker (already filtered by date)
@@ -1100,16 +1100,6 @@ export function WidgetCard({ widget, tracker, entries, assets, selectedDate }: W
       tracker.icon === "dumbbell"
     ) {
       return <ExerciseWidget entries={entries} tracker={tracker} size={widget.size} selectedDate={selectedDate} />
-    }
-
-    // Counter Widget: Savings, Finance, and other numeric (currency formatting via config.unit)
-    if (
-      trackerNameLower.includes("saving") ||
-      trackerNameLower.includes("finance") ||
-      trackerNameLower.includes("money") ||
-      tracker.icon === "wallet"
-    ) {
-      return <CounterWidget entries={entries} tracker={tracker} size={widget.size} selectedDate={selectedDate} />
     }
 
     // Default: Counter Widget for numeric, range, counter types

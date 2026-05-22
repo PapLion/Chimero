@@ -6,20 +6,19 @@ import { mapTracker } from '../../shared/mappers'
 import { getDashboardStats, calculateImpact, getCorrelationResult, getStats } from './service'
 import type { CorrelationQueryRequest, StatsQueryRequest, TrackerInsert } from '@contracts/contracts'
 
-export function registerTrackingHandlers(): void {
-  const defaultTrackers = [
-    { name: 'Weight', type: 'numeric' as const, icon: 'scale', color: '#a855f7', order: 0, config: { unit: 'kg', goal: 70 } },
-    { name: 'Mood', type: 'range' as const, icon: 'smile', color: '#f59e0b', order: 1, config: { max: 10 } },
-    { name: 'Exercise', type: 'numeric' as const, icon: 'dumbbell', color: '#22c55e', order: 2, config: { unit: 'min', goal: 30 } },
-    { name: 'Social', type: 'numeric' as const, icon: 'users', color: '#3b82f6', order: 3, config: { unit: 'interactions' } },
-    { name: 'Tasks', type: 'text' as const, icon: 'check-square', color: '#ef4444', order: 4, config: {} },
-    { name: 'Savings', type: 'numeric' as const, icon: 'wallet', color: '#10b981', order: 5, config: { unit: '$', goal: 10000 } },
-    { name: 'Books', type: 'text' as const, icon: 'book', color: '#8b5cf6', order: 6, config: {} },
-    { name: 'Gaming', type: 'text' as const, icon: 'gamepad-2', color: '#10b981', order: 7, config: {} },
-    { name: 'Media/TV', type: 'text' as const, icon: 'tv', color: '#0ea5e9', order: 8, config: {} },
-    { name: 'Diet / Calories', type: 'numeric' as const, icon: 'salad', color: '#22c55e', order: 9, config: { unit: 'kcal' } },
-  ]
+export const DEFAULT_TRACKERS = [
+  { name: 'Weight', type: 'numeric' as const, icon: 'scale', color: '#a855f7', order: 0, config: { unit: 'kg', goal: 70 } },
+  { name: 'Mood', type: 'range' as const, icon: 'smile', color: '#f59e0b', order: 1, config: { max: 10 } },
+  { name: 'Exercise', type: 'numeric' as const, icon: 'dumbbell', color: '#22c55e', order: 2, config: { unit: 'min', goal: 30 } },
+  { name: 'Social', type: 'numeric' as const, icon: 'users', color: '#3b82f6', order: 3, config: { unit: 'interactions' } },
+  { name: 'Tasks', type: 'text' as const, icon: 'check-square', color: '#ef4444', order: 4, config: {} },
+  { name: 'Books', type: 'text' as const, icon: 'book', color: '#8b5cf6', order: 5, config: {} },
+  { name: 'Gaming', type: 'text' as const, icon: 'gamepad-2', color: '#10b981', order: 6, config: {} },
+  { name: 'Media/TV', type: 'text' as const, icon: 'tv', color: '#0ea5e9', order: 7, config: {} },
+  { name: 'Diet / Calories', type: 'numeric' as const, icon: 'salad', color: '#22c55e', order: 8, config: { unit: 'kcal' } },
+] as const
 
+export function registerTrackingHandlers(): void {
   ipcMain.handle('get-trackers', async () => {
     try {
       let rows = await db()
@@ -29,7 +28,7 @@ export function registerTrackingHandlers(): void {
         .orderBy(asc(trackers.order))
 
       const existingTrackerNames = new Set(rows.map((row: Record<string, unknown>) => row.name as string))
-      const missingDefaults = defaultTrackers.filter((t) => !existingTrackerNames.has(t.name))
+      const missingDefaults = DEFAULT_TRACKERS.filter((t) => !existingTrackerNames.has(t.name))
 
       if (missingDefaults.length > 0) {
         let maxOrder = -1

@@ -254,7 +254,6 @@ Units must be preserved from persisted values when the tracker stores a unit and
 | Gaming | `Documentation/Contracts/Trackers/Gaming.md` | Generic media-style game session tracker. |
 | Media / TV | `Documentation/Contracts/Trackers/Media-TV.md` | Generic media-style tracker; no catalog/status schema. |
 | Tasks | `Documentation/Contracts/Trackers/Tasks.md` | Generic task-style tracker with typed postpone metadata/read models; completion inferred from value. |
-| Savings | `Documentation/Contracts/Trackers/Savings.md` | Generic numeric finance-like tracker; finance semantics need confirmation. |
 
 ## 6. What Belongs Here Vs Tracker Files
 
@@ -342,7 +341,7 @@ Do not duplicate incompatible tracker-specific shapes. Extend shared contracts d
 - Mood scale is now canonical 1-10 across create/edit/read surfaces, but it remains on generic entries and backend generic validation is still thinner than Weight.
 - Exercise structured workout logging is `CONTRACT_ONLY/FUTURE`.
 - Social contact interactions exist, but Social entry plus contact interaction linkage is partial.
-- Diet/Food, Books, Gaming, Media/TV, advanced Task semantics beyond postpone, and Savings finance semantics do not have specialized tables/services.
+- Diet/Food, Books, Gaming, Media/TV, and advanced Task semantics beyond postpone do not have specialized tables/services.
 - Multi-asset links exist at schema level, but current tracker mutations generally use a single `assetId`.
 - Calendar tag labels/assets and tag-based stats/widgets remain partial/future unless a specific implementation proves otherwise.
 

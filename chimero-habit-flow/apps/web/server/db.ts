@@ -188,11 +188,10 @@ function seedDefaults(database: WebDb): void {
     { name: 'Exercise', type: 'numeric', icon: 'dumbbell', color: '#22c55e', order: 2, config: { unit: 'min', goal: 30 } },
     { name: 'Social', type: 'numeric', icon: 'users', color: '#3b82f6', order: 3, config: { unit: 'interactions' } },
     { name: 'Tasks', type: 'text', icon: 'check-square', color: '#ef4444', order: 4, config: {} },
-    { name: 'Savings', type: 'numeric', icon: 'wallet', color: '#10b981', order: 5, config: { unit: '$', goal: 10000 } },
-    { name: 'Books', type: 'text', icon: 'book', color: '#8b5cf6', order: 6, config: {} },
-    { name: 'Gaming', type: 'text', icon: 'gamepad-2', color: '#10b981', order: 7, config: {} },
-    { name: 'Media/TV', type: 'text', icon: 'music', color: '#0ea5e9', order: 8, config: {} },
-    { name: 'Diet / Calories', type: 'numeric', icon: 'salad', color: '#22c55e', order: 9, config: { unit: 'kcal', goal: 2200 } },
+    { name: 'Books', type: 'text', icon: 'book', color: '#8b5cf6', order: 5, config: {} },
+    { name: 'Gaming', type: 'text', icon: 'gamepad-2', color: '#10b981', order: 6, config: {} },
+    { name: 'Media/TV', type: 'text', icon: 'music', color: '#0ea5e9', order: 7, config: {} },
+    { name: 'Diet / Calories', type: 'numeric', icon: 'salad', color: '#22c55e', order: 8, config: { unit: 'kcal', goal: 2200 } },
   ] as const
 
   const insertDefaults = database.transaction(() => {

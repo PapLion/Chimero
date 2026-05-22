@@ -6,11 +6,11 @@ import { useState, useEffect } from "react"
 import { cn } from "@shared/utils"
 import { type Tracker, type TrackerType, type TrackerConfig } from "@shared/store"
 import { useCreateTrackerMutation, useUpdateTrackerMutation } from "@shared/queries"
-import { Dialog, DialogContent } from "@packages/ui/dialog"
+import { Dialog, DialogContent, DialogTitle } from "@packages/ui/dialog"
 import { Input } from "@packages/ui/input"
 import { Button } from "@packages/ui/button"
 import { formatToastError, useToast } from "@shared/components/toast"
-import { X, Flame, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, Salad, LucideIcon } from "lucide-react"
+import { X, Flame, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Users, Salad, LucideIcon } from "lucide-react"
 
 interface CreateTrackerDialogProps {
   open: boolean
@@ -28,7 +28,7 @@ interface TrackerPreset {
   description: string
 }
 
-const PRESETS: TrackerPreset[] = [
+export const PRESETS: TrackerPreset[] = [
   {
     name: "Reading",
     icon: "book",
@@ -78,14 +78,6 @@ const PRESETS: TrackerPreset[] = [
     description: "Log social activities",
   },
   {
-    name: "Finance",
-    icon: "wallet",
-    color: "#22c55e",
-    type: "counter",
-    config: { unit: "$" },
-    description: "Track expenses and savings",
-  },
-  {
     name: "Weight",
     icon: "scale",
     color: "#f97316",
@@ -119,7 +111,6 @@ const availableIcons: { name: string; icon: LucideIcon }[] = [
   { name: "target", icon: Target },
   { name: "music", icon: Music },
   { name: "camera", icon: Camera },
-  { name: "wallet", icon: Wallet },
   { name: "users", icon: Users },
   { name: "salad", icon: Salad },
 ]
@@ -257,9 +248,9 @@ export function CreateTrackerDialog({ open, onOpenChange, editTracker }: CreateT
               </div>
               <div className="min-w-0">
                 <div className="section-kicker">Trackers</div>
-                <h2 className="mt-1 truncate font-display text-lg font-semibold text-[hsl(var(--foreground))]">
+                <DialogTitle className="mt-1 truncate font-display text-lg font-semibold text-[hsl(var(--foreground))]">
                   {editTracker ? "Edit Tracker" : "Create New Tracker"}
-                </h2>
+                </DialogTitle>
               </div>
             </div>
             <button

@@ -429,7 +429,6 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const isMoodType = isMoodTracker
   const isTaskType = tracker.type === "list" || tracker.type === "binary" || trackerNameLower.includes("task")
   const isDietType = trackerNameLower.includes("diet") || trackerNameLower.includes("calorie") || trackerNameLower.includes("food") || trackerNameLower.includes("meal") || tracker.icon === "salad"
-  const isSavingsType = trackerNameLower.includes("saving") || trackerNameLower.includes("finance") || trackerNameLower.includes("money") || trackerNameLower.includes("budget") || tracker.icon === "wallet"
   const isNumericType = tracker.type === "numeric" || tracker.type === "range" || tracker.type === "counter"
   const selectedDateStr = toDateStr(selectedDate)
   const taskHistoryEntries = isTaskType
@@ -1145,7 +1144,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                 })}
               </div>
             ) : isDietType ? (
-              /* The Ledger - Diet: Large inline meal photos */
+              /* History - Diet: Large inline meal photos */
               <div className="space-y-4">
                 {historyEntries.map((entry) => {
                   const value = entry.value ?? 0
@@ -1195,55 +1194,8 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                   )
                 })}
               </div>
-            ) : isSavingsType ? (
-              /* The Ledger - Savings/Finance: Large inline receipt photos */
-              <div className="space-y-4">
-                {historyEntries.map((entry) => {
-                  const value = entry.value ?? 0
-                  const unit = (tracker.config as Record<string, unknown>)?.unit as string | undefined
-                  const displayValue = unit === "$" ? `$${value.toLocaleString()}` : `${value.toFixed(1)}${unit ?? ""}`
-                  const asset = entry.assetId != null ? assets.get(entry.assetId) : null
-                  return (
-                    <div
-                      key={entry.id}
-                      className={entryCardBase}
-                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
-                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
-                    >
-                      <div className="absolute right-3 top-3 z-10 flex gap-1.5 opacity-0 translate-y-1 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
-                        <button className={actionButtonBase} onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button className={actionButtonBase} onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="text-sm text-white/60">
-                          {new Date(entry.timestamp).toLocaleDateString()}
-                        </div>
-                        <div className="text-lg font-semibold text-emerald-400">
-                          {displayValue}
-                        </div>
-                      </div>
-                      <div className="text-sm text-white/90 mb-2">{entry.note || "Category"}</div>
-                      {renderEntryTags(entry.tagIds)}
-                      {asset && (
-                        <div className="mt-3 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
-                          <img
-                            src={asset.thumbnailUrl || asset.assetUrl}
-                            alt=""
-                            className="w-full h-auto max-h-[300px] object-contain"
-                            title={entry.note || "Receipt/photo"}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
             ) : isNumericType ? (
-              /* The Ledger - Generic numeric with large inline attachments */
+              /* History - Generic numeric with large inline attachments */
               <div className="space-y-4">
                 {historyEntries.map((entry) => {
                   const value = entry.value ?? 0
