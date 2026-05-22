@@ -3,10 +3,10 @@
 import { cn } from "@shared/utils"
 import { type Widget, type Tracker, type Entry } from "@shared/store"
 import { useMoodDailyAggregates, useUpdateEntryMutation, useWeightDetail } from "@shared/queries"
-import { buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, moodScoreToColor, postponeTaskToNextDay } from "@contracts/domain"
+import { buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, moodScoreToColor, postponeTaskToNextDay, unpostponeTask } from "@contracts/domain"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, Salad, CalendarPlus, type LucideIcon } from "lucide-react"
+import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, Salad, CalendarPlus, Undo2, Square, type LucideIcon } from "lucide-react"
 import {
   LineChart,
   Line,
@@ -954,6 +954,15 @@ function TaskWidget({ entries, tracker, selectedDate }: { entries: Entry[]; trac
     updateEntryMutation.mutate({ id: entryId, updates: { value: newValue } })
   }
 
+  const handleUnpostpone = (entry: Entry) => {
+    try {
+      const metadata = unpostponeTask(entry)
+      updateEntryMutation.mutate({ id: entry.id, updates: { metadata } })
+    } catch (error) {
+      console.error('unpostpone-task error:', error)
+    }
+  }
+
   const handlePostpone = (entry: Entry) => {
     const metadata = postponeTaskToNextDay(entry, targetDateStr)
     updateEntryMutation.mutate({ id: entry.id, updates: { metadata } })
@@ -977,18 +986,25 @@ function TaskWidget({ entries, tracker, selectedDate }: { entries: Entry[]; trac
             return (
               <div key={`${task.entryId}-${task.state}`} className="flex items-center gap-3">
                 <button
-                  onClick={() => !isPostponed && handleToggle(task.entryId, entry?.value ?? null)}
-                  disabled={isPostponed}
+                  onClick={() => {
+                    if (!entry) return
+                    if (isPostponed) {
+                      handleUnpostpone(entry)
+                      return
+                    }
+                    handleToggle(task.entryId, entry.value ?? null)
+                  }}
                   className={cn(
                     "flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition-colors duration-200 cursor-pointer",
                     isPostponed
-                      ? "cursor-default border-amber-400/35 bg-amber-400/10 text-amber-300"
+                      ? "border-amber-400/35 bg-amber-400/10 text-amber-300"
                       : task.completed
                       ? "border-[hsl(var(--primary)/0.35)] bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))]"
                       : "border-[hsl(var(--border)/0.72)] bg-[hsl(var(--card)/0.84)] hover:border-[hsl(var(--border)/0.9)] hover:bg-[hsl(var(--card)/0.94)]"
                   )}
+                  title={isPostponed ? "Undo postponement" : task.completed ? "Mark incomplete" : "Mark complete"}
                 >
-                  {!isPostponed && task.completed && <CheckSquare className="w-3 h-3" />}
+                  {isPostponed ? <Undo2 className="w-3 h-3" /> : task.completed ? <Square className="w-3 h-3" /> : <CheckSquare className="w-3 h-3" />}
                 </button>
                 <div className="min-w-0 flex-1">
                   <span
@@ -1001,9 +1017,15 @@ function TaskWidget({ entries, tracker, selectedDate }: { entries: Entry[]; trac
                   >
                     {task.text}
                   </span>
-                  {isPostponed && (
-                    <span className="text-[11px] uppercase tracking-normal text-amber-300/75">Postponed</span>
-                  )}
+                  <div className="mt-0.5 flex flex-wrap gap-1">
+                    {isPostponed && <span className="text-[11px] uppercase tracking-normal text-amber-300/75">Postponed</span>}
+                    <span className={cn(
+                      "text-[11px] uppercase tracking-normal",
+                      task.completed ? "text-emerald-300/75" : "text-white/45"
+                    )}>
+                      {task.completed ? "Completed" : "Incomplete"}
+                    </span>
+                  </div>
                 </div>
                 {!isPostponed && entry && (
                   <button

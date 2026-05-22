@@ -303,8 +303,14 @@ export function QuickEntry() {
 
       let entryValue: number | null = null
       let entryNote: string | null = null
+      const taskLikeEntry =
+        (trackerData.type === "text" || trackerData.type === "list" || trackerData.type === "binary") &&
+        !getEntryConfig(trackerData).secondaryPlaceholder
 
-      if (trackerData.type === "text" || trackerData.type === "list") {
+      if (taskLikeEntry) {
+        entryNote = note.trim() || null
+        entryValue = 0
+      } else if (trackerData.type === "text" || trackerData.type === "list") {
         entryNote = note.trim() || null
         entryValue = value ? parseFloat(value) : 1
       } else if (trackerData.type === "binary" || trackerData.type === "composite") {

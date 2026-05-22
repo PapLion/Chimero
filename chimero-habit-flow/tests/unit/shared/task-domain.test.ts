@@ -7,6 +7,7 @@ import {
   isTaskPostponedOnDate,
   parseTaskStateMetadata,
   postponeTaskToNextDay,
+  unpostponeTask,
 } from '@contracts/domain'
 import type { Entry } from '@contracts/contracts'
 
@@ -29,6 +30,22 @@ describe('shared task postpone domain', () => {
     expect(getTaskStateForDate(baseTask, '2026-05-18')).toBe('actionable')
     expect(isTaskActionableOnDate(baseTask, '2026-05-18')).toBe(true)
     expect(isTaskActionableOnDate(baseTask, '2026-05-19')).toBe(false)
+
+    const day = buildTaskDayReadModel([baseTask], '2026-05-18')
+    expect(day.actionable).toHaveLength(1)
+    expect(day.actionable[0].completed).toBe(false)
+  })
+
+  it('restores a postponed task to its base date when unpostponed', () => {
+    const metadata = postponeTaskToNextDay(baseTask, '2026-05-18', 1_777_000)
+    const postponedTask = { ...baseTask, metadata }
+
+    const restored = unpostponeTask(postponedTask)
+
+    expect(restored).toEqual({
+      activeDate: '2026-05-18',
+      postponements: [],
+    })
   })
 
   it('postpones Monday to Tuesday without duplicating the entry identity', () => {

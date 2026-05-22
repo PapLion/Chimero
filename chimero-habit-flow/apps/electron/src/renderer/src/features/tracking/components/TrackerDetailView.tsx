@@ -10,16 +10,14 @@ import {
   buildTaskDayReadModel,
   buildWeightEntriesTabReadModel,
   buildWeightStatisticsReadModel,
-  getTaskActiveDate,
-  getTaskStateForDate,
-  parseTaskStateMetadata,
   postponeTaskToNextDay,
+  unpostponeTask,
 } from "@contracts/domain"
 import { useAppStore } from "@shared/store"
 import { useTrackers, useEntries, useDeleteEntryMutation, useUpdateEntryMutation, useWeightDetail, useTags } from "@shared/queries"
 import { filterEntriesByDate, cn } from "@shared/utils"
 import type { Entry } from "@shared/store"
-import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, CalendarPlus, type LucideIcon } from "lucide-react"
+import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, CalendarPlus, Undo2, Square, type LucideIcon } from "lucide-react"
 import { EditEntryDialog } from "@features/entry/modals/EditEntryDialog"
 import { TagChips } from "@features/tags/components/TagChips"
 import { ConfirmDeleteDialog } from "@shared/components/ConfirmDeleteDialog"
@@ -431,12 +429,8 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const isDietType = trackerNameLower.includes("diet") || trackerNameLower.includes("calorie") || trackerNameLower.includes("food") || trackerNameLower.includes("meal") || tracker.icon === "salad"
   const isNumericType = tracker.type === "numeric" || tracker.type === "range" || tracker.type === "counter"
   const selectedDateStr = toDateStr(selectedDate)
-  const taskHistoryEntries = isTaskType
-    ? buildTaskDayReadModel(trackerEntries, selectedDateStr).entries
-      .map((task) => trackerEntries.find((entry) => entry.id === task.entryId))
-      .filter((entry): entry is Entry => entry != null)
-      .reverse()
-    : []
+  const taskHistoryReadModel = isTaskType ? buildTaskDayReadModel(trackerEntries, selectedDateStr) : null
+  const taskHistoryEntries = taskHistoryReadModel?.entries.slice().reverse() ?? []
 
   const handlePostponeTask = async (entry: Entry) => {
     try {
@@ -446,6 +440,34 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     } catch (error) {
       toast.error(
         "We couldn't postpone that task.",
+        formatToastError(error, "Please try again in a moment."),
+      )
+    }
+  }
+
+  const handleToggleTaskCompletion = async (entry: Entry, completed: boolean) => {
+    try {
+      await updateEntryMutation.mutateAsync({
+        id: entry.id,
+        updates: { value: completed ? 1 : 0 },
+      })
+      toast.info(completed ? "Task completed." : "Task marked incomplete.", entry.note?.trim() || tracker.name)
+    } catch (error) {
+      toast.error(
+        "We couldn't update that task.",
+        formatToastError(error, "Please try again in a moment."),
+      )
+    }
+  }
+
+  const handleUnpostponeTask = async (entry: Entry) => {
+    try {
+      const metadata = unpostponeTask(entry)
+      await updateEntryMutation.mutateAsync({ id: entry.id, updates: { metadata } })
+      toast.info("Task restored.", entry.note?.trim() || tracker.name)
+    } catch (error) {
+      toast.error(
+        "We couldn't restore that task.",
         formatToastError(error, "Please try again in a moment."),
       )
     }
@@ -1080,11 +1102,11 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
             ) : isTaskType ? (
               /* The Timeline - Tasks/Journal with inline attachment */
               <div className="space-y-3">
-                {taskHistoryEntries.map((entry) => {
+                {taskHistoryEntries.map((task) => {
+                  const entry = trackerEntries.find((candidate) => candidate.id === task.entryId)
+                  if (!entry) return null
                   const asset = entry.assetId != null ? assets.get(entry.assetId) : null
-                  const taskState = getTaskStateForDate(entry, selectedDateStr)
-                  const isPostponed = taskState === "postponed"
-                  const taskMetadata = parseTaskStateMetadata(entry.metadata)
+                  const isPostponed = task.state === "postponed"
                   return (
                     <div
                       key={entry.id}
@@ -1101,12 +1123,28 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                             <CalendarPlus className="w-4 h-4" />
                           </button>
                         )}
+                        {isPostponed ? (
+                          <button className={actionButtonBase} onClick={(e) => { e.stopPropagation(); void handleUnpostponeTask(entry) }} title="Undo postponement">
+                            <Undo2 className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            className={actionButtonBase}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void handleToggleTaskCompletion(entry, !task.completed)
+                            }}
+                            title={task.completed ? "Mark incomplete" : "Mark complete"}
+                          >
+                            {task.completed ? <Square className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
+                          </button>
+                        )}
                         <button className={actionButtonBase} onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                       <div className="flex items-start gap-3">
-                        <div className={cn("w-2 h-2 rounded-full mt-2 shrink-0", isPostponed ? "bg-amber-300" : "bg-[hsl(266_73%_63%)]")} />
+                        <div className={cn("w-2 h-2 rounded-full mt-2 shrink-0", isPostponed ? "bg-amber-300" : task.completed ? "bg-emerald-400" : "bg-[hsl(266_73%_63%)]")} />
                         <div className="flex-1 min-w-0">
                           <div className="text-sm text-white/90 mb-1">{entry.note || "Task"}</div>
                           <div className="mb-2 flex flex-wrap gap-1.5">
@@ -1115,11 +1153,17 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                             ) : (
                               <span className="rounded-full border border-emerald-300/25 bg-emerald-300/10 px-2 py-0.5 text-[11px] uppercase tracking-normal text-emerald-200">Actionable</span>
                             )}
-                            {taskMetadata && (
-                              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/45">
-                                Active {getTaskActiveDate(entry)}
-                              </span>
-                            )}
+                            <span className={cn(
+                              "rounded-full px-2 py-0.5 text-[11px] uppercase tracking-normal",
+                              task.completed
+                                ? "border border-emerald-300/25 bg-emerald-300/10 text-emerald-200"
+                                : "border border-white/10 bg-white/[0.04] text-white/45"
+                            )}>
+                              {task.completed ? "Completed" : "Incomplete"}
+                            </span>
+                            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/45">
+                              Active {task.activeDate}
+                            </span>
                           </div>
                           {renderEntryTags(entry.tagIds)}
                           {asset && (
@@ -1135,7 +1179,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                             {new Date(entry.timestamp).toLocaleString()}
                           </div>
                         </div>
-                        {!isPostponed && entry.value != null && entry.value >= 1 && (
+                        {!isPostponed && task.completed && (
                           <CheckSquare className="w-5 h-5 text-emerald-400 shrink-0" />
                         )}
                       </div>

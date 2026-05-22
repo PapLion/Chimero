@@ -93,6 +93,18 @@ export function postponeTaskToNextDay(entry: Pick<Entry, 'metadata' | 'dateStr'>
   }
 }
 
+export function unpostponeTask(entry: Pick<Entry, 'metadata' | 'dateStr'>): TaskStateMetadata {
+  const currentMetadata = parseTaskStateMetadata(entry.metadata)
+  if (!currentMetadata || currentMetadata.postponements.length === 0) {
+    throw new Error('Task is not postponed')
+  }
+
+  return {
+    activeDate: entry.dateStr,
+    postponements: [],
+  }
+}
+
 export function buildTaskEntryReadModel(entry: TaskEntryInput, selectedDate: string): TaskEntryReadModel | null {
   const state = getTaskStateForDate(entry, selectedDate)
   if (state === 'hidden') return null
