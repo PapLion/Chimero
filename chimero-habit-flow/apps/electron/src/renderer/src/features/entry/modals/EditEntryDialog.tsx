@@ -14,6 +14,7 @@ import { formatToastError, useToast } from "@shared/components/toast"
 import type { AssetWithUrls } from "@contracts/features/assets"
 import type { MeasurementUnit, Tracker, WeightUnit } from "@contracts/contracts"
 import { clampMoodScore } from "@contracts/domain"
+import { getEntryConfig } from "../entry-config"
 
 interface EditEntryDialogProps {
     entry: Entry | null
@@ -206,6 +207,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     const isNumeric = tracker.type === "numeric" || tracker.type === "range" || tracker.type === "counter"
     const isText = tracker.type === "text" || tracker.type === "list"
     const isWeightTracker = tracker.icon === "scale" || tracker.name.toLowerCase().includes("weight") || tracker.name.toLowerCase().includes("peso")
+    const entryConfig = getEntryConfig(tracker)
     const ratingOptions = getRatingOptionsForEntry(tracker)
     const waistUnit = getWaistUnit()
     const selectedAsset = selectedAssetId ? assets.get(selectedAssetId) : undefined
@@ -279,10 +281,10 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                             <div className="space-y-3">
                                 {isNumeric && (
                                     <div className="space-y-1">
-                                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Value</label>
+                                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">{entryConfig.mainLabel ?? "Value"}</label>
                                         <Input
                                             type="number"
-                                            placeholder={`Enter ${tracker.config?.unit || "value"}...`}
+                                            placeholder={entryConfig.mainPlaceholder || `Enter ${tracker.config?.unit || "value"}...`}
                                             value={value}
                                             onChange={(e) => setValue(e.target.value)}
                                             className="h-11 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
@@ -311,11 +313,28 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                                     </div>
                                 )}
 
+                                {isText && entryConfig.secondaryPlaceholder && (
+                                    <div className="space-y-1">
+                                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                                            {entryConfig.noteLabel ?? "Value"} (Optional)
+                                        </label>
+                                        <Input
+                                            type="number"
+                                            placeholder={entryConfig.secondaryPlaceholder}
+                                            value={value}
+                                            onChange={(e) => setValue(e.target.value)}
+                                            className="h-11 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                                        />
+                                    </div>
+                                )}
+
                                 <div className="space-y-1">
-                                    <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Note (Optional)</label>
+                                    <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                                        {isText ? (entryConfig.mainLabel ?? "Title") : (entryConfig.noteLabel ?? "Note")} (Optional)
+                                    </label>
                                     <Input
                                         type="text"
-                                        placeholder="Add a note..."
+                                        placeholder={isText ? entryConfig.mainPlaceholder : (entryConfig.notePlaceholder ?? "Add a note...")}
                                         value={note}
                                         onChange={(e) => setNote(e.target.value)}
                                         className="h-11 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"

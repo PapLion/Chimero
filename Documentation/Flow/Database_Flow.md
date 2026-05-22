@@ -66,7 +66,7 @@ Database does not own:
 - Generic trackers usually use `entries.value`, `entries.note`, `entries.metadata`, `entries.assetId`, and `entries_to_tags`.
 - Specialized trackers use extra tables when fields must be queryable or analytically reliable.
 - Weight is the current reference specialized tracker with `entry_weight` and `tracker_goals`.
-- Exercise, Diet/Food, Books, Gaming, Media/TV, and Tasks mostly remain generic unless their tracker docs explicitly mark a future specialized table.
+- Exercise, Diet/Food, Books, Gaming, TV, Media, and Tasks mostly remain generic unless their tracker docs explicitly mark a future specialized table.
 
 ## What Can Go Wrong
 

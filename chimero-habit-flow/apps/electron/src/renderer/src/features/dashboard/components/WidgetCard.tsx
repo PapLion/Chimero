@@ -4,9 +4,10 @@ import { cn } from "@shared/utils"
 import { type Widget, type Tracker, type Entry } from "@shared/store"
 import { useMoodDailyAggregates, useUpdateEntryMutation, useWeightDetail } from "@shared/queries"
 import { buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, moodScoreToColor, postponeTaskToNextDay, unpostponeTask } from "@contracts/domain"
+import { usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, Salad, CalendarPlus, Undo2, Square, type LucideIcon } from "lucide-react"
+import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, Salad, CalendarPlus, Undo2, Square, Tv, type LucideIcon } from "lucide-react"
 import {
   LineChart,
   Line,
@@ -34,6 +35,7 @@ const iconMap: Record<string, LucideIcon> = {
   zap: Zap,
   target: Target,
   music: Music,
+  tv: Tv,
   camera: Camera,
   "gamepad-2": Gamepad2,
   salad: Salad,
@@ -1079,17 +1081,7 @@ export function WidgetCard({ widget, tracker, entries, assets, selectedDate }: W
     }
 
     // Media Widget: Books, TV, Games, Media, Apps (must be before Task so "Books" list type gets Media)
-    if (
-      trackerNameLower.includes("book") ||
-      trackerNameLower.includes("tv") ||
-      trackerNameLower.includes("movie") ||
-      trackerNameLower.includes("game") ||
-      trackerNameLower.includes("media") ||
-      trackerNameLower.includes("app") ||
-      tracker.icon === "book" ||
-      tracker.icon === "gamepad-2" ||
-      tracker.icon === "music"
-    ) {
+    if (usesMediaStyleRendering(tracker)) {
       return <MediaWidget entries={entries} tracker={tracker} assets={assets} />
     }
 

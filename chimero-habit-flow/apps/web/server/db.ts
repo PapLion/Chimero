@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { planDefaultTrackerSeedActions } from '../../../packages/shared/src/features/tracking'
 
 type SqlParam = string | number | Uint8Array | null
 type SqlParams = SqlParam[] | Record<string, SqlParam>
@@ -182,17 +183,28 @@ function runMigrations(database: WebDb): void {
 function seedDefaults(database: WebDb): void {
   database.prepare('INSERT OR IGNORE INTO settings (id) VALUES (1)').run()
 
-  const defaults = [
-    { name: 'Weight', type: 'numeric', icon: 'scale', color: '#a855f7', order: 0, config: { unit: 'kg', goal: 70 } },
-    { name: 'Mood', type: 'range', icon: 'smile', color: '#f59e0b', order: 1, config: { max: 10 } },
-    { name: 'Exercise', type: 'numeric', icon: 'dumbbell', color: '#22c55e', order: 2, config: { unit: 'min', goal: 30 } },
-    { name: 'Social', type: 'numeric', icon: 'users', color: '#3b82f6', order: 3, config: { unit: 'interactions' } },
-    { name: 'Tasks', type: 'text', icon: 'check-square', color: '#ef4444', order: 4, config: {} },
-    { name: 'Books', type: 'text', icon: 'book', color: '#8b5cf6', order: 5, config: {} },
-    { name: 'Gaming', type: 'text', icon: 'gamepad-2', color: '#10b981', order: 6, config: {} },
-    { name: 'Media/TV', type: 'text', icon: 'music', color: '#0ea5e9', order: 7, config: {} },
-    { name: 'Diet / Calories', type: 'numeric', icon: 'salad', color: '#22c55e', order: 8, config: { unit: 'kcal', goal: 2200 } },
-  ] as const
+  const existingTrackers = database
+    .prepare('SELECT id, name, "order", config FROM trackers')
+    .all()
+    .map((row) => ({
+      id: Number(row.id),
+      name: String(row.name ?? ''),
+      order: Number(row.order ?? 0),
+      config: typeof row.config === 'string' ? row.config : null,
+    }))
+  const legacyTrackerIds = existingTrackers
+    .filter((tracker) => {
+      const name = tracker.name.trim().toLowerCase()
+      return name === 'media/tv' || name === 'media / tv'
+    })
+    .map((tracker) => tracker.id)
+  const populatedLegacyMediaTv = legacyTrackerIds.some((trackerId) =>
+    !!database.prepare('SELECT id FROM entries WHERE tracker_id = ? LIMIT 1').get(trackerId),
+  )
+  const plan = planDefaultTrackerSeedActions({
+    trackers: existingTrackers,
+    populatedLegacyMediaTv,
+  })
 
   const insertDefaults = database.transaction(() => {
     const getTracker = database.prepare('SELECT id FROM trackers WHERE name = ?')
@@ -201,7 +213,11 @@ function seedDefaults(database: WebDb): void {
       VALUES (@name, @type, @icon, @color, @order, @config, 0, 0, 0)
     `)
 
-    for (const tracker of defaults) {
+    for (const legacyTrackerId of plan.legacyTrackerIdsToRemove) {
+      database.prepare('DELETE FROM trackers WHERE id = ?').run(legacyTrackerId)
+    }
+
+    for (const tracker of plan.toInsert) {
       if (getTracker.get(tracker.name)) continue
       insertTracker.run({ ...tracker, config: JSON.stringify(tracker.config) })
     }

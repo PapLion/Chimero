@@ -67,7 +67,7 @@ Use these files before implementing tracker-specific behavior. `Weight.md` is th
 - Calendar selected-day cards carry Weight fields and tag IDs, but resolved tag labels and inline asset presentation remain partial.
 - Dedicated Weight goal editing UI remains pending even though backend/web goal contracts exist.
 - Exercise workout logging is generic metadata; structured workout schema is not implemented.
-- Diet/Food, Books, Gaming, Media/TV, and Tasks have tracker contracts but no specialized table/service.
+- Diet/Food, Books, Gaming, TV, Media, and Tasks have tracker contracts but no specialized table/service.
 - Social CRM exists, but Social tracker entries and contact interactions are only partially linked.
 
 ## Obsolete Or Out-Of-Scope References To Avoid

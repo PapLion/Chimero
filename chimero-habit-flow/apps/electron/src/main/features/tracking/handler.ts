@@ -5,18 +5,27 @@ import { getDb as db } from '@packages/db/database'
 import { mapTracker } from '../../shared/mappers'
 import { getDashboardStats, calculateImpact, getCorrelationResult, getStats } from './service'
 import type { CorrelationQueryRequest, StatsQueryRequest, TrackerInsert } from '@contracts/contracts'
+import {
+  DEFAULT_TRACKERS,
+  planDefaultTrackerSeedActions,
+} from '@contracts/features/tracking'
 
-export const DEFAULT_TRACKERS = [
-  { name: 'Weight', type: 'numeric' as const, icon: 'scale', color: '#a855f7', order: 0, config: { unit: 'kg', goal: 70 } },
-  { name: 'Mood', type: 'range' as const, icon: 'smile', color: '#f59e0b', order: 1, config: { max: 10 } },
-  { name: 'Exercise', type: 'numeric' as const, icon: 'dumbbell', color: '#22c55e', order: 2, config: { unit: 'min', goal: 30 } },
-  { name: 'Social', type: 'numeric' as const, icon: 'users', color: '#3b82f6', order: 3, config: { unit: 'interactions' } },
-  { name: 'Tasks', type: 'text' as const, icon: 'check-square', color: '#ef4444', order: 4, config: {} },
-  { name: 'Books', type: 'text' as const, icon: 'book', color: '#8b5cf6', order: 5, config: {} },
-  { name: 'Gaming', type: 'text' as const, icon: 'gamepad-2', color: '#10b981', order: 6, config: {} },
-  { name: 'Media/TV', type: 'text' as const, icon: 'tv', color: '#0ea5e9', order: 7, config: {} },
-  { name: 'Diet / Calories', type: 'numeric' as const, icon: 'salad', color: '#22c55e', order: 8, config: { unit: 'kcal' } },
-] as const
+export { DEFAULT_TRACKERS, planDefaultTrackerSeedActions }
+
+async function legacyMediaTvHasEntries(legacyTrackerIds: number[]): Promise<boolean> {
+  if (legacyTrackerIds.length === 0) return false
+
+  for (const legacyTrackerId of legacyTrackerIds) {
+    const [row] = await db()
+      .select({ count: sql<number>`count(*)` })
+      .from(entries)
+      .where(eq(entries.trackerId, legacyTrackerId))
+
+    if (Number(row?.count ?? 0) > 0) return true
+  }
+
+  return false
+}
 
 export function registerTrackingHandlers(): void {
   ipcMain.handle('get-trackers', async () => {
@@ -27,13 +36,31 @@ export function registerTrackingHandlers(): void {
         .where(eq(trackers.archived, false))
         .orderBy(asc(trackers.order))
 
-      const existingTrackerNames = new Set(rows.map((row: Record<string, unknown>) => row.name as string))
-      const missingDefaults = DEFAULT_TRACKERS.filter((t) => !existingTrackerNames.has(t.name))
+      const legacyTrackerIds = rows
+        .filter((row: Record<string, unknown>) => {
+          const name = String(row.name ?? '').trim().toLowerCase()
+          return name === 'media/tv' || name === 'media / tv'
+        })
+        .map((row: Record<string, unknown>) => Number(row.id))
+      const plan = planDefaultTrackerSeedActions({
+        trackers: rows.map((row: Record<string, unknown>) => ({
+          id: Number(row.id),
+          name: String(row.name ?? ''),
+          order: Number(row.order ?? 0),
+          config: row.config as string | Record<string, unknown> | null,
+        })),
+        populatedLegacyMediaTv: await legacyMediaTvHasEntries(legacyTrackerIds),
+      })
+      const missingDefaults = plan.toInsert
 
-      if (missingDefaults.length > 0) {
+      if (missingDefaults.length > 0 || plan.legacyTrackerIdsToRemove.length > 0) {
         let maxOrder = -1
         if (rows.length > 0) {
           maxOrder = Math.max(...rows.map((r: Record<string, unknown>) => (r.order as number) ?? -1))
+        }
+
+        for (const legacyTrackerId of plan.legacyTrackerIdsToRemove) {
+          await db().delete(trackers).where(eq(trackers.id, legacyTrackerId))
         }
 
         const toInsert = missingDefaults.map((t, index) => ({

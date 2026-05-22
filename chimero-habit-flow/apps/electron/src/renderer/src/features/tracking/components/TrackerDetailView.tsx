@@ -13,11 +13,12 @@ import {
   postponeTaskToNextDay,
   unpostponeTask,
 } from "@contracts/domain"
+import { usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useAppStore } from "@shared/store"
 import { useTrackers, useEntries, useDeleteEntryMutation, useUpdateEntryMutation, useWeightDetail, useTags } from "@shared/queries"
 import { filterEntriesByDate, cn } from "@shared/utils"
 import type { Entry } from "@shared/store"
-import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, CalendarPlus, Undo2, Square, type LucideIcon } from "lucide-react"
+import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, CalendarPlus, Undo2, Square, Tv, type LucideIcon } from "lucide-react"
 import { EditEntryDialog } from "@features/entry/modals/EditEntryDialog"
 import { TagChips } from "@features/tags/components/TagChips"
 import { ConfirmDeleteDialog } from "@shared/components/ConfirmDeleteDialog"
@@ -53,6 +54,7 @@ const iconMap: Record<string, LucideIcon> = {
   zap: Zap,
   target: Target,
   music: Music,
+  tv: Tv,
   camera: Camera,
   salad: Salad,
 }
@@ -419,10 +421,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
 
   // Render based on tracker type
   const trackerNameLower = tracker.name.toLowerCase()
-  const isMediaType = trackerNameLower.includes("book") || trackerNameLower.includes("tv") ||
-    trackerNameLower.includes("movie") || trackerNameLower.includes("game") ||
-    trackerNameLower.includes("media") ||
-    tracker.icon === "book" || tracker.icon === "gamepad-2" || tracker.icon === "music"
+  const isMediaType = usesMediaStyleRendering(tracker)
   const isWeightType = isWeightTracker
   const isMoodType = isMoodTracker
   const isTaskType = tracker.type === "list" || tracker.type === "binary" || trackerNameLower.includes("task")

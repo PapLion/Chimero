@@ -8,7 +8,7 @@ import { CreateTrackerDialog } from "./modals/CreateTrackerDialog"
 import { Button } from "@packages/ui/button"
 import { ConfirmDeleteDialog } from "@shared/components/ConfirmDeleteDialog"
 import { formatToastError, useToast } from "@shared/components/toast"
-import { Plus, Pencil, Trash2, Flame, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, Sparkles, LucideIcon } from "lucide-react"
+import { Plus, Pencil, Trash2, Flame, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, Sparkles, Tv, LucideIcon } from "lucide-react"
 
 // Icon mapping for dynamic rendering
 const iconMap: Record<string, LucideIcon> = {
@@ -25,6 +25,7 @@ const iconMap: Record<string, LucideIcon> = {
   zap: Zap,
   target: Target,
   music: Music,
+  tv: Tv,
   camera: Camera,
   wallet: Wallet,
   users: Users,

@@ -11,8 +11,9 @@ import { join, resolve, isAbsolute } from 'path';
 import { existsSync, readdirSync, unlinkSync } from 'fs';
 import { initDb, getDb, getRawDb, closeDb } from '@packages/db/database';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { trackers } from '@packages/db/schema';
+import { trackers, entries } from '@packages/db/schema';
 import { eq } from 'drizzle-orm';
+import { planDefaultTrackerSeedActions } from '@contracts/features/tracking';
 
 /**
  * Resolves the path to the Drizzle migrations folder.
@@ -183,26 +184,51 @@ function ensureSchemaAndMaybeReset(
 }
 
 /**
- * Seeds default trackers for Books, Gaming, Media, and Diet if they don't exist.
+ * Seeds default trackers if they don't exist.
  * Safe operation - never overwrites existing tracker records.
  */
 function seedDefaultTrackers(): void {
   const db = getDb();
 
-  const defaultTrackers = [
-    { name: "Books", type: "text" as const, icon: "book" },
-    { name: "Gaming", type: "text" as const, icon: "gamepad-2" },
-    { name: "Media", type: "text" as const, icon: "music" },
-    { name: "Diet", type: "numeric" as const, icon: "salad", config: { unit: "kcal" } },
-  ];
+  const existing = db.select().from(trackers).all();
+  const legacyTrackerIds = existing
+    .filter((tracker) => {
+      const name = String(tracker.name ?? '').trim().toLowerCase();
+      return name === 'media/tv' || name === 'media / tv';
+    })
+    .map((tracker) => Number(tracker.id));
+  const populatedLegacyMediaTv = legacyTrackerIds.some((trackerId) => {
+    const row = db
+      .select()
+      .from(entries)
+      .where(eq(entries.trackerId, trackerId))
+      .get();
+    return !!row;
+  });
+  const plan = planDefaultTrackerSeedActions({
+    trackers: existing.map((tracker) => ({
+      id: Number(tracker.id),
+      name: String(tracker.name ?? ''),
+      order: Number(tracker.order ?? 0),
+      config: tracker.config as string | Record<string, unknown> | null,
+    })),
+    populatedLegacyMediaTv,
+  });
 
-  for (const tracker of defaultTrackers) {
+  for (const legacyTrackerId of plan.legacyTrackerIdsToRemove) {
+    db.delete(trackers).where(eq(trackers.id, legacyTrackerId)).run();
+    console.log(`[DB] Removed empty legacy tracker: Media/TV (${legacyTrackerId})`);
+  }
+
+  for (const tracker of plan.toInsert) {
     const existing = db.select().from(trackers).where(eq(trackers.name, tracker.name)).get();
     if (!existing) {
       db.insert(trackers).values({
         name: tracker.name,
         type: tracker.type,
         icon: tracker.icon,
+        color: tracker.color,
+        order: tracker.order,
         config: tracker.config ? JSON.stringify(tracker.config) : undefined,
       }).run();
       console.log(`[DB] Seeded default tracker: ${tracker.name}`);

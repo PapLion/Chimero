@@ -14,6 +14,7 @@ export interface TrackerConfig {
   goal?: number
   step?: number
   options?: string[]
+  identity?: string
   isCustom?: boolean
 }
 

@@ -19,7 +19,7 @@ import { Input } from "@packages/ui/input"
 import { Button } from "@packages/ui/button"
 import { CyberpunkSelect } from "@features/tracking/components/CyberpunkSelect"
 import { formatToastError, useToast } from "@shared/components/toast"
-import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Activity, Calendar, Flame, Book, Gamepad2, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, ImageIcon, X, type LucideIcon } from "lucide-react"
+import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Activity, Calendar, Flame, Book, Gamepad2, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, ImageIcon, X, Tv, type LucideIcon } from "lucide-react"
 import { clampMoodScore } from "@contracts/domain"
 
 const iconMap: Record<string, LucideIcon> = {
@@ -39,6 +39,7 @@ const iconMap: Record<string, LucideIcon> = {
   zap: Zap,
   target: Target,
   music: Music,
+  tv: Tv,
   camera: Camera,
 }
 

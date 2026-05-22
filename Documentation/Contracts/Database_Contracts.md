@@ -89,7 +89,7 @@ Specialized tables belong in DB when tracker semantics require structure. Curren
 - `entry_weight` stores Weight value/unit/waist/unit/body-fat column support linked one-to-one to `entries`.
 - `tracker_goals` stores goal data currently consumed by Weight.
 
-Non-Weight trackers are mostly generic today. Do not add specialized tables for Exercise, Diet/Food, Books, Gaming, Media/TV, or Tasks without confirmed contract/product scope.
+Non-Weight trackers are mostly generic today. Do not add specialized tables for Exercise, Diet/Food, Books, Gaming, TV, Media, or Tasks without confirmed contract/product scope.
 
 ## Junction And Relation Tables
 

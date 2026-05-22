@@ -4,6 +4,7 @@
  */
 
 import type { Tracker } from "@shared/store"
+import { getTrackerIdentity } from "@contracts/features/tracking"
 
 export interface EntryConfig {
   mainLabel?: string
@@ -18,10 +19,10 @@ export interface EntryConfig {
 
 export function getEntryConfig(tracker: Tracker): EntryConfig {
   const nameLower = tracker.name.toLowerCase()
-  const icon = tracker.icon?.toLowerCase() || ""
+  const identity = getTrackerIdentity(tracker)
 
   // 📚 Books
-  if (nameLower.includes("book") || nameLower.includes("reading") || icon === "book") {
+  if (identity === "books") {
     return {
       mainLabel: "Book Title",
       mainPlaceholder: "What book are you reading?",
@@ -32,11 +33,22 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
     }
   }
 
-  // 📺 TV / Movies
-  if (nameLower.includes("tv") || nameLower.includes("show") || nameLower.includes("movie") || nameLower.includes("series") || icon === "music") {
+  // 📺 TV
+  if (identity === "tv") {
     return {
-      mainLabel: "Show / Movie",
-      mainPlaceholder: "Show or Movie Title",
+      mainLabel: "TV Title",
+      mainPlaceholder: "What did you watch?",
+      mainType: "text",
+      noteLabel: "Episode / Rating",
+      secondaryPlaceholder: "Episode or Rating",
+      notePlaceholder: "e.g., S01E03, 4.5 stars",
+    }
+  }
+
+  if (identity === "legacy-media-tv") {
+    return {
+      mainLabel: "Media / TV Title",
+      mainPlaceholder: "What did you watch or log?",
       mainType: "text",
       noteLabel: "Episode / Rating",
       secondaryPlaceholder: "Episode or Rating",
@@ -45,7 +57,7 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
   }
 
   // 🎮 Gaming
-  if (nameLower.includes("game") || nameLower.includes("gaming") || icon === "gamepad-2") {
+  if (identity === "gaming") {
     return {
       mainLabel: "Game Name",
       mainPlaceholder: "What game did you play?",
@@ -57,10 +69,10 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
   }
 
   // 📱 Media (generic - apps, etc.)
-  if (nameLower.includes("media") || nameLower.includes("app")) {
+  if (identity === "media") {
     return {
-      mainLabel: "Title",
-      mainPlaceholder: "Show, Book, or App name...",
+      mainLabel: "Media Title",
+      mainPlaceholder: "What media did you log?",
       mainType: "text",
       noteLabel: "Rating / Progress",
       secondaryPlaceholder: "Rating or hours",
@@ -69,7 +81,7 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
   }
 
   // 🏋️‍♀️ Exercise
-  if (nameLower.includes("exercise") || nameLower.includes("workout") || nameLower.includes("fitness") || icon === "dumbbell") {
+  if (identity === "exercise") {
     return {
       mainPlaceholder: "Duration (minutes) or Calories",
       mainType: "number",
@@ -80,7 +92,7 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
   }
 
   // ⚖️ Weight
-  if (nameLower.includes("weight") || nameLower.includes("peso") || icon === "scale") {
+  if (identity === "weight") {
     return {
       mainPlaceholder: "Current Weight",
       mainType: "number",
@@ -91,7 +103,7 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
   }
 
   // 👥 Social
-  if (nameLower.includes("social") || nameLower.includes("friends") || nameLower.includes("people") || icon === "users") {
+  if (identity === "social" || nameLower.includes("friends") || nameLower.includes("people")) {
     return {
       mainPlaceholder: "Satisfaction Level (1-10) or Hours",
       mainType: "number",
@@ -102,7 +114,7 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
   }
 
   // 🥑 Diet
-  if (nameLower.includes("diet") || nameLower.includes("food") || nameLower.includes("meal") || nameLower.includes("calorie") || nameLower.includes("nutrition") || icon === "salad") {
+  if (identity === "diet" || nameLower.includes("nutrition")) {
     return {
       mainLabel: "Calories",
       mainPlaceholder: "Calories (e.g., 450)",
@@ -114,7 +126,7 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
   }
 
   // 💧 Water / Hydration
-  if (nameLower.includes("water") || nameLower.includes("hydration") || nameLower.includes("drink") || icon === "coffee") {
+  if (nameLower.includes("water") || nameLower.includes("hydration") || nameLower.includes("drink") || tracker.icon === "coffee") {
     return {
       mainPlaceholder: "Amount (ml or cups)",
       mainType: "number",
@@ -125,7 +137,7 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
   }
 
   // 🧠 Mood
-  if (nameLower.includes("mood") || nameLower.includes("feeling") || icon === "smile") {
+  if (identity === "mood") {
     return {
       mainPlaceholder: "How are you feeling?",
       mainType: "rating",
@@ -136,7 +148,7 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
   }
 
   // ✅ Tasks
-  if (nameLower.includes("task") || nameLower.includes("todo") || nameLower.includes("checklist") || tracker.type === "list" || tracker.type === "binary") {
+  if (identity === "tasks" || nameLower.includes("checklist") || tracker.type === "list" || tracker.type === "binary") {
     return {
       mainPlaceholder: "Task Description",
       mainType: "text",
