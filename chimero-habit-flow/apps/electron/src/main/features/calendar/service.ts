@@ -1,9 +1,28 @@
 import { getDb } from '@packages/db/database'
-import { entries, entryWeight } from '@packages/db'
-import { and, eq, gte, lte } from 'drizzle-orm'
-import { buildCalendarDayEntry } from '@contracts/domain'
+import { entries, entryWeight, trackers } from '@packages/db'
+import { eq } from 'drizzle-orm'
+import {
+  buildCalendarDayEntry,
+  getTaskActiveDate,
+  getTaskStateForDate,
+  isTaskTrackerLike,
+  parseTaskStateMetadata,
+} from '@contracts/domain'
 import type { CalendarDayEntry, CalendarMonthData } from '@contracts/features/calendar'
+import type { Entry, Tracker } from '@contracts/contracts'
 import { getEntryTagIds } from '../tags/service'
+
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  if (!value) return {}
+  if (typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
+  if (typeof value !== 'string') return {}
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
 
 export async function getCalendarMonth(year: number, month: number): Promise<CalendarMonthData> {
   const db = getDb()
@@ -16,9 +35,13 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
       trackerId: entries.trackerId,
       value: entries.value,
       note: entries.note,
+      metadata: entries.metadata,
       timestamp: entries.timestamp,
       dateStr: entries.dateStr,
       assetId: entries.assetId,
+      trackerName: trackers.name,
+      trackerType: trackers.type,
+      trackerIcon: trackers.icon,
       weightValue: entryWeight.weightValue,
       weightUnit: entryWeight.weightUnit,
       waistValue: entryWeight.waistValue,
@@ -26,7 +49,7 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
     })
     .from(entries)
     .leftJoin(entryWeight, eq(entryWeight.entryId, entries.id))
-    .where(and(gte(entries.dateStr, monthStart), lte(entries.dateStr, monthEnd)))
+    .leftJoin(trackers, eq(trackers.id, entries.trackerId))
     .orderBy(entries.timestamp)
 
   const entriesByDate: Record<string, CalendarDayEntry[]> = {}
@@ -34,11 +57,40 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
   const tagIdsByEntry = await getEntryTagIds(rows.map((row) => Number(row.id)))
 
   for (const r of rows) {
-    const dateStr = r.dateStr
+    const entry: Entry = {
+      id: r.id,
+      trackerId: r.trackerId,
+      value: r.value,
+      note: r.note,
+      metadata: parseJsonObject(r.metadata),
+      timestamp: r.timestamp,
+      dateStr: r.dateStr,
+      assetId: r.assetId,
+      tagIds: tagIdsByEntry.get(r.id) ?? [],
+    }
+    const tracker: Pick<Tracker, 'name' | 'type' | 'icon'> = {
+      name: r.trackerName ?? '',
+      type: r.trackerType === 'binary' ? 'binary' : r.trackerType === 'text' || r.trackerType === 'composite' ? 'list' : r.trackerType ?? 'numeric',
+      icon: r.trackerIcon,
+    }
+    const displayDates = new Set<string>()
+    if (r.dateStr >= monthStart && r.dateStr <= monthEnd) displayDates.add(r.dateStr)
+    if (isTaskTrackerLike(tracker)) {
+      const metadata = parseTaskStateMetadata(entry.metadata)
+      if (metadata) {
+        displayDates.add(getTaskActiveDate(entry))
+        for (const postponement of metadata.postponements) displayDates.add(postponement.fromDate)
+      }
+    }
+
+    for (const dateStr of displayDates) {
+      if (dateStr < monthStart || dateStr > monthEnd) continue
     const day = parseInt(dateStr.slice(8, 10), 10)
     if (Number.isNaN(day) || day < 1 || day > 31) continue
     activeDaysSet.add(day)
     if (!entriesByDate[dateStr]) entriesByDate[dateStr] = []
+      const taskState = isTaskTrackerLike(tracker) ? getTaskStateForDate(entry, dateStr) : 'hidden'
+      const taskMetadata = parseTaskStateMetadata(entry.metadata)
     entriesByDate[dateStr].push(buildCalendarDayEntry({
       id: r.id,
       trackerId: r.trackerId,
@@ -48,6 +100,15 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
       dateStr,
       assetId: r.assetId,
       tagIds: tagIdsByEntry.get(r.id) ?? [],
+        task: taskState === 'hidden' || !taskMetadata
+          ? null
+          : {
+              state: taskState,
+              baseDate: r.dateStr,
+              activeDate: taskMetadata.activeDate,
+              completed: (r.value ?? 0) >= 1,
+              postponements: taskMetadata.postponements,
+            },
       weight: r.weightValue != null
         ? {
             weight: r.weightValue,
@@ -57,6 +118,7 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
           }
         : null,
     }))
+    }
   }
 
   return {

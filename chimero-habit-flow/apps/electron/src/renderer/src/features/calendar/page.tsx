@@ -455,6 +455,7 @@ export function CalendarPage() {
                             const displayUnit = entry.unit ?? (tracker?.config?.unit as string | undefined)
                             const trackerNameLower = tracker?.name.toLowerCase() ?? ""
                             const isMoodEntry = trackerNameLower.includes("mood") || trackerNameLower.includes("feeling") || tracker?.icon === "smile"
+                            const isTaskEntry = !!entry.taskState
                             const moodScore = isMoodEntry ? clampMoodScore(entry.value) : null
                             const entryTime = new Date(entry.timestamp).toLocaleTimeString(undefined, {
                               hour: "2-digit",
@@ -476,13 +477,30 @@ export function CalendarPage() {
                                   />
                                 </div>
                                 <p className="text-2xl font-display font-bold text-[hsl(var(--primary))]">
-                                  {isMoodEntry && moodScore != null ? `${moodScore}/10` : entry.value ?? "—"}
-                                  {!isMoodEntry && displayUnit && (
+                                  {isTaskEntry ? (entry.taskState === "postponed" ? "Postponed" : "Task") : isMoodEntry && moodScore != null ? `${moodScore}/10` : entry.value ?? "—"}
+                                  {!isTaskEntry && !isMoodEntry && displayUnit && (
                                     <span className="ml-1 text-sm font-normal text-[hsl(var(--muted-foreground))]">
                                       {displayUnit}
                                     </span>
                                   )}
                                 </p>
+                                {isTaskEntry && (
+                                  <div className="mt-1 flex flex-wrap gap-1.5">
+                                    <span className={cn(
+                                      "rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-normal",
+                                      entry.taskState === "postponed"
+                                        ? "border-amber-300/30 bg-amber-300/10 text-amber-300"
+                                        : "border-emerald-300/25 bg-emerald-300/10 text-emerald-300"
+                                    )}>
+                                      {entry.taskState === "postponed" ? "Postponed" : "Actionable"}
+                                    </span>
+                                    {entry.taskActiveDate && entry.taskState === "postponed" && (
+                                      <span className="rounded-full border border-[hsl(var(--border)/0.5)] px-2 py-0.5 text-[11px] text-[hsl(var(--muted-foreground))]">
+                                        Active {entry.taskActiveDate}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                                 {isMoodEntry && moodScore != null && (
                                   <p className="mt-1 text-sm" style={{ color: moodScoreToColor(moodScore) }}>
                                     {moodScoreToLabel(moodScore)}

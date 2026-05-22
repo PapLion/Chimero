@@ -43,6 +43,15 @@ export interface Entry {
   tagIds?: number[]
 }
 
+export type EntryUpdateRequest = {
+  value?: number | null
+  note?: string | null
+  metadata?: Record<string, unknown>
+  timestamp?: number
+  assetId?: number | null
+  tagIds?: number[]
+}
+
 export interface BaseEntryRequest {
   trackerId: number
   value?: number | null
@@ -51,6 +60,53 @@ export interface BaseEntryRequest {
   timestamp: number
   assetId?: number | null
   tagIds?: number[]
+}
+
+export type TaskPostponement = {
+  fromDate: string
+  toDate: string
+  timestamp: number
+}
+
+export type TaskStateMetadata = {
+  activeDate: string
+  postponements: TaskPostponement[]
+}
+
+export type TaskDayState = 'actionable' | 'postponed' | 'hidden'
+
+export interface TaskEntryReadModel {
+  entryId: number
+  trackerId: number
+  text: string
+  completed: boolean
+  state: Exclude<TaskDayState, 'hidden'>
+  selectedDate: string
+  dateStr: string
+  activeDate: string
+  postponements: TaskPostponement[]
+  timestamp: number
+  assetId?: number | null
+  tagIds?: number[]
+}
+
+export interface TaskDayReadModel {
+  dateStr: string
+  entries: TaskEntryReadModel[]
+  actionable: TaskEntryReadModel[]
+  postponed: TaskEntryReadModel[]
+}
+
+export interface PostponeTaskRequest {
+  entryId: number
+  fromDate: string
+  toDate: string
+  timestamp: number
+}
+
+export interface PostponeTaskResponse {
+  entry: Entry
+  task: TaskEntryReadModel
 }
 
 export interface EntryInsert extends BaseEntryRequest {

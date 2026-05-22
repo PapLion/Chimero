@@ -1,4 +1,5 @@
 import type { CalendarDayEntry } from '../features/calendar'
+import type { TaskDayState, TaskPostponement } from '../contracts/app-types'
 
 type CalendarDayEntryInput = {
   id: number
@@ -9,6 +10,13 @@ type CalendarDayEntryInput = {
   dateStr: string
   assetId?: number | null
   tagIds?: number[]
+  task?: {
+    state: Exclude<TaskDayState, 'hidden'>
+    baseDate: string
+    activeDate: string
+    completed: boolean
+    postponements: TaskPostponement[]
+  } | null
   weight?: {
     weight: number
     weightUnit: 'kg' | 'lb'
@@ -30,5 +38,10 @@ export function buildCalendarDayEntry(input: CalendarDayEntryInput): CalendarDay
     dateStr: input.dateStr,
     assetId: input.assetId ?? null,
     tagIds: input.tagIds ?? [],
+    taskState: input.task?.state,
+    taskBaseDate: input.task?.baseDate,
+    taskActiveDate: input.task?.activeDate,
+    taskCompleted: input.task?.completed,
+    taskPostponements: input.task?.postponements,
   }
 }

@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type { Tracker, Entry } from './store'
-import type { BaseEntryRequest, CreateWeightEntryRequest, SetTrackerGoalRequest, TrackerConfig, UpdateWeightEntryRequest } from '@contracts/contracts'
+import type { BaseEntryRequest, CreateWeightEntryRequest, EntryUpdateRequest, SetTrackerGoalRequest, TrackerConfig, UpdateWeightEntryRequest } from '@contracts/contracts'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
 export const queryKeys = {
@@ -397,7 +397,7 @@ export function useUncompleteReminderMutation() {
 export function useUpdateEntryMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, updates }: { id: number; updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null; tagIds?: number[] } }) =>
+    mutationFn: ({ id, updates }: { id: number; updates: EntryUpdateRequest }) =>
       api.updateEntry(id, updates),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })

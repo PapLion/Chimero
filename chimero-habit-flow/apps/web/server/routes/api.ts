@@ -3,7 +3,13 @@ import { createReadStream, existsSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import { getWebDb, getAssetsRoot, getWebDbPath, type WebDb } from '../db'
 import { buildTagTree, resolveInheritedTagIds } from '../../../../packages/shared/src/domain/tags'
-import { buildCalendarDayEntry } from '../../../../packages/shared/src/domain/calendar'
+import {
+  buildCalendarDayEntry,
+  getTaskActiveDate,
+  getTaskStateForDate,
+  isTaskTrackerLike,
+  parseTaskStateMetadata,
+} from '../../../../packages/shared/src/domain'
 import { calculateWeightDetail } from '../../../../packages/shared/src/domain/weight'
 import { computeBestStreak, computeCurrentStreak } from '../../../../packages/shared/src/domain/streak'
 import type {
@@ -16,6 +22,7 @@ import type {
   CorrelationQueryRequest,
   CreateWeightEntryRequest,
   Entry,
+  EntryUpdateRequest,
   Reminder,
   ReminderInsert,
   SetTrackerGoalRequest,
@@ -363,7 +370,7 @@ function addEntry(data: BaseEntryRequest): Entry | null {
   return row ? withTagIds([mapEntry(row as JsonRecord)])[0] : null
 }
 
-function updateEntry(id: number, updates: JsonRecord): Entry | null {
+function updateEntry(id: number, updates: EntryUpdateRequest): Entry | null {
   const set: string[] = []
   const params: JsonRecord = { id }
   if ('value' in updates) {
@@ -373,6 +380,10 @@ function updateEntry(id: number, updates: JsonRecord): Entry | null {
   if ('note' in updates) {
     set.push('note = @note')
     params.note = updates.note ?? null
+  }
+  if ('metadata' in updates) {
+    set.push('metadata = @metadata')
+    params.metadata = JSON.stringify(updates.metadata ?? {})
   }
   if ('assetId' in updates) {
     set.push('asset_id = @assetId')
@@ -963,43 +974,75 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
       .prepare(`
         SELECT
           e.*,
+          t.name AS tracker_name,
+          t.type AS tracker_type,
+          t.icon AS tracker_icon,
           ew.weight_value,
           ew.weight_unit,
           ew.waist_value,
           ew.waist_unit
         FROM entries e
+        LEFT JOIN trackers t ON t.id = e.tracker_id
         LEFT JOIN entry_weight ew ON ew.entry_id = e.id
-        WHERE e.date_str >= ? AND e.date_str <= ?
         ORDER BY e.timestamp ASC
       `)
-      .all(monthStart, monthEnd)
+      .all()
     const tagIdsByEntry = getEntryTagIds(data.map((row) => Number((row as JsonRecord).id)))
     const entriesByDate: Record<string, ReturnType<typeof buildCalendarDayEntry>[]> = {}
     const activeDays = new Set<number>()
     for (const row of data) {
       const entry = mapEntry(row as JsonRecord)
-      const day = Number(entry.dateStr.slice(8, 10))
-      activeDays.add(day)
-      entriesByDate[entry.dateStr] ??= []
       const record = row as JsonRecord
-      entriesByDate[entry.dateStr].push(buildCalendarDayEntry({
+      const tracker = {
+        name: String(record.tracker_name ?? ''),
+        type: schemaTypeToUI(String(record.tracker_type ?? 'numeric'), {}),
+        icon: record.tracker_icon == null ? null : String(record.tracker_icon),
+      }
+      const displayDates = new Set<string>()
+      if (entry.dateStr >= monthStart && entry.dateStr <= monthEnd) displayDates.add(entry.dateStr)
+      if (isTaskTrackerLike(tracker)) {
+        const metadata = parseTaskStateMetadata(entry.metadata)
+        if (metadata) {
+          displayDates.add(getTaskActiveDate(entry))
+          for (const postponement of metadata.postponements) displayDates.add(postponement.fromDate)
+        }
+      }
+
+      for (const dateStr of displayDates) {
+        if (dateStr < monthStart || dateStr > monthEnd) continue
+        const day = Number(dateStr.slice(8, 10))
+        activeDays.add(day)
+        entriesByDate[dateStr] ??= []
+        const taskState = isTaskTrackerLike(tracker) ? getTaskStateForDate(entry, dateStr) : 'hidden'
+        const taskMetadata = parseTaskStateMetadata(entry.metadata)
+        entriesByDate[dateStr].push(buildCalendarDayEntry({
         id: entry.id,
         trackerId: entry.trackerId,
         value: entry.value,
         note: entry.note,
         timestamp: entry.timestamp,
-        dateStr: entry.dateStr,
+        dateStr,
         assetId: entry.assetId ?? null,
         tagIds: tagIdsByEntry.get(entry.id) ?? [],
+        task: taskState === 'hidden' || !taskMetadata
+          ? null
+          : {
+              state: taskState,
+              baseDate: entry.dateStr,
+              activeDate: taskMetadata.activeDate,
+              completed: (entry.value ?? 0) >= 1,
+              postponements: taskMetadata.postponements,
+            },
         weight: record.weight_value != null
           ? {
               weight: Number(record.weight_value),
               weightUnit: record.weight_unit === 'lb' ? 'lb' : 'kg',
               waist: record.waist_value == null ? null : Number(record.waist_value),
               waistUnit: record.waist_unit === 'in' ? 'in' : record.waist_unit === 'cm' ? 'cm' : null,
-            }
+          }
           : null,
-      }))
+        }))
+      }
     }
     json(res, 200, { year, month, entriesByDate, activeDays: Array.from(activeDays).sort((a, b) => a - b) })
     return

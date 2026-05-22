@@ -10,6 +10,7 @@ import type {
   CorrelationResultResponse,
   CreateWeightEntryRequest,
   Entry,
+  EntryUpdateRequest,
   Reminder,
   ReminderInsert,
   QuickEntryContextResponse,
@@ -39,7 +40,7 @@ export interface ElectronApi {
   deleteTracker: (id: number) => Promise<boolean>
   getEntries: (options?: { limit?: number; trackerId?: number }) => Promise<Entry[]>
   addEntry: (data: BaseEntryRequest) => Promise<Entry | null>
-  updateEntry: (id: number, updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null; tagIds?: number[] }) => Promise<Entry | null>
+  updateEntry: (id: number, updates: EntryUpdateRequest) => Promise<Entry | null>
   deleteEntry: (id: number) => Promise<boolean>
   getQuickEntryContext: () => Promise<QuickEntryContextResponse>
   getRecentTrackers: (limit?: number) => Promise<Tracker[]>

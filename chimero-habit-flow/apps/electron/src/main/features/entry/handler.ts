@@ -3,7 +3,7 @@ import { desc, eq, sql } from 'drizzle-orm'
 import { entries, entriesToTags, entryWeight, trackers } from '@packages/db'
 import { getDb as db } from '@packages/db/database'
 import { mapEntry, mapTracker } from '../../shared/mappers'
-import type { BaseEntryRequest, QuickEntryContextResponse } from '@contracts/contracts'
+import type { BaseEntryRequest, EntryUpdateRequest, QuickEntryContextResponse } from '@contracts/contracts'
 import { getEntryTagIds, getTags, replaceEntryTags } from '../tags/service'
 
 function formatDateStr(timestamp: number): string {
@@ -62,11 +62,12 @@ export function registerEntryHandlers(): void {
     }
   })
 
-  ipcMain.handle('update-entry', async (_, id: number, updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null; tagIds?: number[] }) => {
+  ipcMain.handle('update-entry', async (_, id: number, updates: EntryUpdateRequest) => {
     try {
       const set: Record<string, unknown> = {}
       if (updates.value !== undefined) set.value = updates.value
       if (updates.note !== undefined) set.note = updates.note
+      if (updates.metadata !== undefined) set.metadata = JSON.stringify(updates.metadata)
       if (updates.assetId !== undefined) set.assetId = updates.assetId
       if (updates.timestamp !== undefined) {
         set.timestamp = updates.timestamp

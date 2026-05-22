@@ -53,6 +53,9 @@ function createQueryDb() {
     bodyFatPercentage: null,
   }
 
+  const updateSetMock = vi.fn(() => ({
+    where: vi.fn(() => undefined),
+  }))
   const db = {
     transaction: vi.fn(async (callback: (tx: unknown) => unknown) => callback(tx)),
     insert: vi.fn(() => ({
@@ -61,9 +64,7 @@ function createQueryDb() {
       })),
     })),
     update: vi.fn(() => ({
-      set: vi.fn(() => ({
-        where: vi.fn(() => undefined),
-      })),
+      set: updateSetMock,
     })),
     delete: vi.fn(() => ({
       where: vi.fn(() => undefined),
@@ -88,7 +89,7 @@ function createQueryDb() {
     select: db.select,
   }
 
-  return { db, tx }
+  return { db, tx, updateSetMock }
 }
 
 function getRegisteredHandler(channel: string): IpcHandler {
@@ -137,6 +138,28 @@ describe('entry and weight tag mutations', () => {
 
     expect(db.transaction).toHaveBeenCalledTimes(1)
     expect(mocks.replaceEntryTagsMock).toHaveBeenCalledWith(101, [7], tx)
+  })
+
+  it('updates entry metadata through the generic update-entry path without requiring tag changes', async () => {
+    const { db, updateSetMock } = createQueryDb()
+    mocks.getDbMock.mockReturnValue(db)
+    registerEntryHandlers()
+
+    const updateEntry = getRegisteredHandler('update-entry')
+    await updateEntry(null, 101, {
+      metadata: {
+        activeDate: '2026-05-19',
+        postponements: [{ fromDate: '2026-05-18', toDate: '2026-05-19', timestamp: 1_777_000 }],
+      },
+    })
+
+    expect(updateSetMock).toHaveBeenCalledWith({
+      metadata: JSON.stringify({
+        activeDate: '2026-05-19',
+        postponements: [{ fromDate: '2026-05-18', toDate: '2026-05-19', timestamp: 1_777_000 }],
+      }),
+    })
+    expect(mocks.replaceEntryTagsMock).toHaveBeenCalledWith(101, undefined, expect.anything())
   })
 
   it('uses one transaction for delete-entry cleanup', async () => {

@@ -3,10 +3,10 @@
 import { cn } from "@shared/utils"
 import { type Widget, type Tracker, type Entry } from "@shared/store"
 import { useMoodDailyAggregates, useUpdateEntryMutation, useWeightDetail } from "@shared/queries"
-import { buildWeightHomeWidgetReadModel, clampMoodScore, moodScoreToColor } from "@contracts/domain"
+import { buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, moodScoreToColor, postponeTaskToNextDay } from "@contracts/domain"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, Salad, type LucideIcon } from "lucide-react"
+import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, Salad, CalendarPlus, type LucideIcon } from "lucide-react"
 import {
   LineChart,
   Line,
@@ -944,28 +944,19 @@ function SocialWidget({ entries, tracker, selectedDate }: { entries: Entry[]; tr
 function TaskWidget({ entries, tracker, selectedDate }: { entries: Entry[]; tracker: Tracker; selectedDate: Date }) {
   const targetDateStr = dateToDateStr(selectedDate)
   const updateEntryMutation = useUpdateEntryMutation()
-  
-  // Filter tasks to show only those for selected date
-  const dateTasks = entries
-    .filter((e) => {
-      // Prefer dateStr if available (more efficient)
-      if (e.dateStr) {
-        return e.dateStr === targetDateStr
-      }
-      // Fallback to timestamp comparison
-      return isSameDay(e.timestamp, selectedDate.getTime())
-    })
-    .map((e) => ({
-      id: e.id,
-      text: e.note ?? "Task",
-      done: (e.value ?? 0) >= 1,
-    }))
-  
-  const completed = dateTasks.filter((t) => t.done).length
+
+  const taskDay = buildTaskDayReadModel(entries, targetDateStr)
+  const dateTasks = taskDay.entries
+  const completed = taskDay.actionable.filter((t) => t.completed).length
 
   const handleToggle = (entryId: number, currentValue: number | null) => {
     const newValue = (currentValue ?? 0) >= 1 ? 0 : 1
     updateEntryMutation.mutate({ id: entryId, updates: { value: newValue } })
+  }
+
+  const handlePostpone = (entry: Entry) => {
+    const metadata = postponeTaskToNextDay(entry, targetDateStr)
+    updateEntryMutation.mutate({ id: entry.id, updates: { metadata } })
   }
 
   return (
@@ -981,35 +972,55 @@ function TaskWidget({ entries, tracker, selectedDate }: { entries: Entry[]; trac
           <p className="text-sm text-[hsl(var(--muted-foreground))]">No tasks for this date</p>
         ) : (
           dateTasks.slice(0, 8).map((task) => {
-            const entry = entries.find((e) => e.id === task.id)
+            const entry = entries.find((e) => e.id === task.entryId)
+            const isPostponed = task.state === "postponed"
             return (
-              <div key={task.id} className="flex items-center gap-3">
+              <div key={`${task.entryId}-${task.state}`} className="flex items-center gap-3">
                 <button
-                  onClick={() => handleToggle(task.id, entry?.value ?? null)}
+                  onClick={() => !isPostponed && handleToggle(task.entryId, entry?.value ?? null)}
+                  disabled={isPostponed}
                   className={cn(
                     "flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition-colors duration-200 cursor-pointer",
-                    task.done
+                    isPostponed
+                      ? "cursor-default border-amber-400/35 bg-amber-400/10 text-amber-300"
+                      : task.completed
                       ? "border-[hsl(var(--primary)/0.35)] bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))]"
                       : "border-[hsl(var(--border)/0.72)] bg-[hsl(var(--card)/0.84)] hover:border-[hsl(var(--border)/0.9)] hover:bg-[hsl(var(--card)/0.94)]"
                   )}
                 >
-                  {task.done && <CheckSquare className="w-3 h-3" />}
+                  {!isPostponed && task.completed && <CheckSquare className="w-3 h-3" />}
                 </button>
-                <span
-                  className={cn(
-                    "text-sm transition-colors duration-200 truncate",
-                    task.done ? "text-[hsl(var(--muted-foreground))] line-through" : "text-[hsl(var(--foreground))]"
+                <div className="min-w-0 flex-1">
+                  <span
+                    className={cn(
+                      "block truncate text-sm transition-colors duration-200",
+                      isPostponed
+                        ? "text-amber-300"
+                        : task.completed ? "text-[hsl(var(--muted-foreground))] line-through" : "text-[hsl(var(--foreground))]"
+                    )}
+                  >
+                    {task.text}
+                  </span>
+                  {isPostponed && (
+                    <span className="text-[11px] uppercase tracking-normal text-amber-300/75">Postponed</span>
                   )}
-                >
-                  {task.text}
-                </span>
+                </div>
+                {!isPostponed && entry && (
+                  <button
+                    onClick={() => handlePostpone(entry)}
+                    className="rounded-md border border-[hsl(var(--border)/0.5)] p-1 text-[hsl(var(--muted-foreground))] transition-colors hover:border-amber-300/60 hover:text-amber-300"
+                    title="Postpone to next day"
+                  >
+                    <CalendarPlus className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             )
           })
         )}
       </div>
       <div className="text-xs text-[hsl(var(--muted-foreground))] mt-3">
-        {completed}/{dateTasks.length} completed
+        {completed}/{taskDay.actionable.length} completed
       </div>
     </div>
   )

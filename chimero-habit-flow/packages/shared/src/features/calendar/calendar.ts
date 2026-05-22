@@ -1,3 +1,5 @@
+import type { TaskDayState, TaskPostponement } from '../../contracts/app-types'
+
 export interface CalendarDayEntry {
   id: number
   trackerId: number
@@ -10,6 +12,11 @@ export interface CalendarDayEntry {
   dateStr: string
   assetId?: number | null
   tagIds?: number[]
+  taskState?: Exclude<TaskDayState, 'hidden'>
+  taskBaseDate?: string
+  taskActiveDate?: string
+  taskCompleted?: boolean
+  taskPostponements?: TaskPostponement[]
 }
 
 export interface WeightCalendarDayEntry extends CalendarDayEntry {

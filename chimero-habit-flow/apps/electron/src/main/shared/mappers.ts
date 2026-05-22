@@ -12,6 +12,18 @@ import type {
 } from '@contracts/contracts'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  if (!value) return {}
+  if (typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
+  if (typeof value !== 'string') return {}
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
 export function schemaTypeToUI(type: string, config: Record<string, unknown>): string {
   if (type === 'numeric') return 'counter'
   if (type === 'range' && (config?.max === 5 || config?.max === 10)) return 'rating'
@@ -45,7 +57,7 @@ export function mapEntry(row: Record<string, unknown>): Entry {
     trackerId: (row.trackerId ?? row.tracker_id) as number,
     value: (row.value as number) ?? null,
     note: (row.note as string) ?? null,
-    metadata: (row.metadata as Record<string, unknown>) || {},
+    metadata: parseJsonObject(row.metadata),
     timestamp: row.timestamp as number,
     dateStr: (row.dateStr ?? row.date_str) as string,
     assetId: (row.assetId ?? row.asset_id) as number | null,

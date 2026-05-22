@@ -10,7 +10,7 @@ const api: ElectronApi = {
     ipcRenderer.invoke('get-entries', options),
   addEntry: (data: { trackerId: number; value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp: number; assetId?: number | null; tagIds?: number[] }) =>
     ipcRenderer.invoke('add-entry', data),
-  updateEntry: (id: number, updates: { value?: number | null; note?: string | null; timestamp?: number; assetId?: number | null; tagIds?: number[] }) =>
+  updateEntry: (id: number, updates: { value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp?: number; assetId?: number | null; tagIds?: number[] }) =>
     ipcRenderer.invoke('update-entry', id, updates),
   deleteEntry: (id: number) => ipcRenderer.invoke('delete-entry', id),
   getQuickEntryContext: () => ipcRenderer.invoke('get-quick-entry-context'),
