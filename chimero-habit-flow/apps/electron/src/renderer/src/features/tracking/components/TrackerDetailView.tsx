@@ -14,13 +14,15 @@ import {
   postponeTaskToNextDay,
   unpostponeTask,
 } from "@contracts/domain"
-import { getTrackerIdentity, usesMediaStyleRendering } from "@contracts/features/tracking"
+import { buildBooksTrackerReadModel, getBookActionLabel, getBookLifecycleRecord } from "@contracts/features/books"
+import { getTrackerIdentity, isBooksTracker, usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useAppStore } from "@shared/store"
 import { useTrackers, useEntries, useDeleteEntryMutation, useUpdateEntryMutation, useWeightDetail, useTags } from "@shared/queries"
 import { filterEntriesByDate, cn } from "@shared/utils"
 import type { Entry } from "@shared/store"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, CalendarPlus, Undo2, Square, Tv, type LucideIcon } from "lucide-react"
 import { EditEntryDialog } from "@features/entry/modals/EditEntryDialog"
+import { BookEntryDialog } from "@features/books/components/BookEntryDialog"
 import { TagChips } from "@features/tags/components/TagChips"
 import { ConfirmDeleteDialog } from "@shared/components/ConfirmDeleteDialog"
 import { formatToastError, useToast } from "@shared/components/toast"
@@ -129,11 +131,18 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const [deletingEntry, setDeletingEntry] = useState<Entry | null>(null)
 
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null)
+  const [editingBookEntry, setEditingBookEntry] = useState<Entry | null>(null)
 
   const handleEditEntry = (e: MouseEvent, entry: Entry) => {
     e.stopPropagation()
     e.preventDefault()
     setEditingEntry(entry)
+  }
+
+  const handleEditBookEntry = (e: MouseEvent, entry: Entry) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setEditingBookEntry(entry)
   }
 
   const renderEntryTags = (tagIds?: number[], className = "mb-2 mt-2") => (
@@ -161,6 +170,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     (trackerNameLowerForMood.includes("mood") ||
       trackerNameLowerForMood.includes("feeling") ||
       tracker.icon === "smile")
+  const isBooksTrackerType = !!tracker && isBooksTracker(tracker)
   const isGamingTracker = !!tracker && getTrackerIdentity(tracker) === "gaming"
   const { data: weightDetail } = useWeightDetail(trackerId, isWeightTracker)
   const weightEntriesReadModel = useMemo(
@@ -192,6 +202,10 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     () => trackerEntries.filter((entry) => entry.gaming?.structured),
     [trackerEntries],
   )
+  const booksReadModel = useMemo(
+    () => (isBooksTrackerType ? buildBooksTrackerReadModel(trackerEntries, selectedDate) : null),
+    [isBooksTrackerType, trackerEntries, selectedDate],
+  )
 
   // Filter entries for selected date (for stats and history feed)
   const selectedDateEntries = useMemo(() => {
@@ -205,6 +219,10 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     }
     return selectedDateEntries.slice().reverse() // Show only selected date when viewing past/future
   }, [trackerEntries, selectedDateEntries, isToday])
+  const bookHistoryEntries = useMemo(
+    () => historyEntries.map((entry) => getBookLifecycleRecord(entry)),
+    [historyEntries],
+  )
 
   const weightHistoryEntries = useMemo(() => {
     const entries = weightEntriesReadModel.entries
@@ -408,7 +426,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
         fullDate: dateStr,
       }
     })
-  }, [trackerEntries, tracker, chartTimeFilter, selectedDate, isWeightTracker, weightDetail?.chartData])
+  }, [trackerEntries, tracker, chartTimeFilter, selectedDate, isWeightTracker, isGamingTracker, gamingStatisticsReadModel.chartData, weightDetail?.chartData])
 
   // Heatmap data: "Year in Pixels"
   const heatmapData = useMemo(() => {
@@ -479,7 +497,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     })
 
     return { daysArray, intensityMap, maxIntensity }
-  }, [trackerEntries, selectedDate])
+  }, [trackerEntries, selectedDate, gamingStructuredEntries, isGamingTracker])
 
   if (!tracker) return null
 
@@ -536,6 +554,85 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
         formatToastError(error, "Please try again in a moment."),
       )
     }
+  }
+
+  const renderBookEntryCard = (bookEntry: ReturnType<typeof getBookLifecycleRecord>, legacySection = false) => {
+    const rawEntry = trackerEntries.find((entry) => entry.id === bookEntry.entryId)
+    if (!rawEntry) return null
+
+    return (
+      <div
+        key={bookEntry.entryId}
+        className="surface-card rounded-2xl p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-[hsl(var(--border)/0.82)] hover:shadow-[0_12px_24px_rgba(2,6,23,0.12)]"
+      >
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-[hsl(var(--muted-foreground))]">
+              {legacySection ? "Legacy / unstructured" : getBookActionLabel(bookEntry.action)}
+            </div>
+            <div className="mt-1 truncate text-sm font-medium text-[hsl(var(--foreground))]">
+              {bookEntry.title}
+            </div>
+          </div>
+          <div className="text-xs text-[hsl(var(--muted-foreground))]">
+            {new Date(bookEntry.timestamp).toLocaleDateString()}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {bookEntry.rating != null && (
+            <span className="rounded-full border border-[hsl(var(--border)/0.62)] bg-white/[0.03] px-2 py-0.5 text-[11px] text-[hsl(var(--foreground))]">
+              {bookEntry.rating.toFixed(1)}/5
+            </span>
+          )}
+          {!legacySection && !bookEntry.editable && (
+            <span className="rounded-full border border-[hsl(var(--border)/0.62)] bg-white/[0.03] px-2 py-0.5 text-[11px] text-[hsl(var(--muted-foreground))]">
+              History only
+            </span>
+          )}
+          {legacySection && (
+            <span className="rounded-full border border-[hsl(var(--border)/0.62)] bg-white/[0.03] px-2 py-0.5 text-[11px] text-[hsl(var(--muted-foreground))]">
+              Unstructured
+            </span>
+          )}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {legacySection ? (
+            <button
+              className={actionButtonBase}
+              onClick={(e) => {
+                e.stopPropagation()
+                setEditingEntry(rawEntry)
+              }}
+              title="Edit legacy book entry"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          ) : bookEntry.editable ? (
+            <>
+              <button
+                className={actionButtonBase}
+                onClick={(e) => handleEditBookEntry(e, rawEntry)}
+                title="Edit book entry"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+              <button
+                className={actionButtonBase}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setDeletingEntry(rawEntry)
+                }}
+                title="Delete book entry"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </>
+          ) : null}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -724,6 +821,46 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                     <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Top Game</div>
                     <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
                       {gamingStatisticsReadModel.perGameHours[0]?.gameTitle ?? "--"}
+                    </div>
+                  </div>
+                </>
+              ) : isBooksTrackerType ? (
+                <>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Want to Read</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {booksReadModel?.shelfCounts.want ?? 0}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Reading</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {booksReadModel?.shelfCounts.reading ?? 0}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Finished</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {booksReadModel?.shelfCounts.finished ?? 0}
+                    </div>
+                  </div>
+
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Reading Streak</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {booksReadModel?.readingStreakDays ?? 0}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Finished This Month</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {booksReadModel?.finishedThisMonth ?? 0}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Days Since Last Event</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {booksReadModel?.daysSinceLastEvent ?? "--"}
                     </div>
                   </div>
                 </>
@@ -1007,12 +1144,55 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
               <h2 className="text-lg font-semibold tracking-tight text-[hsl(210_28%_97%)]">
               {isToday ? "History" : `History for ${selectedDate.toLocaleDateString()}`}
               </h2>
-              <p className="mt-1 text-sm text-[hsl(220_12%_58%)]">Recent entries are grouped by type to keep the scan effortless.</p>
+              <p className="mt-1 text-sm text-[hsl(220_12%_58%)]">
+                {isBooksTrackerType
+                  ? "Recent book events are grouped by lifecycle to keep the scan effortless."
+                  : "Recent entries are grouped by type to keep the scan effortless."}
+              </p>
             </div>
 
             {(isWeightType ? weightHistoryEntries.length : isMoodType ? moodHistoryEntries.length : isTaskType ? taskHistoryEntries.length : historyEntries.length) === 0 ? (
               <div className="surface-card rounded-2xl py-12 text-center text-[hsl(220_12%_58%)]">
                 <p className="text-sm">No entries for {selectedDate.toLocaleDateString()}</p>
+              </div>
+            ) : isBooksTrackerType ? (
+              <div className="space-y-5">
+                {([
+                  ["Want to Read", "want"],
+                  ["Started", "started"],
+                  ["Read", "read"],
+                  ["Finished", "finished"],
+                ] as const).map(([label, action]) => {
+                  const records = bookHistoryEntries.filter((entry) => entry.action === action)
+                  if (records.length === 0) return null
+                  return (
+                    <div key={label} className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="section-kicker">{label}</h3>
+                        <span className="text-xs text-[hsl(var(--muted-foreground))]">{records.length}</span>
+                      </div>
+                      <div className="space-y-3">
+                        {records.map((bookEntry) => renderBookEntryCard(bookEntry))}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {bookHistoryEntries.some((entry) => entry.action === "legacy") && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="section-kicker">Legacy / unstructured</h3>
+                      <span className="text-xs text-[hsl(var(--muted-foreground))]">
+                        {bookHistoryEntries.filter((entry) => entry.action === "legacy").length}
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      {bookHistoryEntries
+                        .filter((entry) => entry.action === "legacy")
+                        .map((bookEntry) => renderBookEntryCard(bookEntry, true))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : isMediaType ? (
               /* The Shelf - Media Grid: Asset as hero, fallback placeholder */
@@ -1435,6 +1615,12 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
       </AnimatePresence>
         </motion.div>
       </AnimatePresence>
+
+      <BookEntryDialog
+        entry={editingBookEntry}
+        open={editingBookEntry !== null}
+        onOpenChange={(open) => !open && setEditingBookEntry(null)}
+      />
 
       <EditEntryDialog
         entry={editingEntry}

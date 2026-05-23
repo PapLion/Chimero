@@ -10,8 +10,15 @@ import type {
   CorrelationResultResponse,
   CreateWeightEntryRequest,
   CreateGamingEntryRequest,
+  CreateBookRequest,
+  CreateBookActivityRequest,
   Entry,
   EntryUpdateRequest,
+  BookActivityResponse,
+  BookHistoryItem,
+  BookResponse,
+  BookSelectedDaySummaryReadModel,
+  BookStatisticsReadModel,
   Reminder,
   ReminderInsert,
   QuickEntryContextResponse,
@@ -27,6 +34,8 @@ import type {
   TrackerGoalResponse,
   UpdateWeightEntryRequest,
   UpdateGamingEntryRequest,
+  UpdateBookActivityRequest,
+  UpdateBookRequest,
   WeightDetailResponse,
   WeightEntryResponse,
   GamingDetailResponse,
@@ -92,6 +101,17 @@ export interface ElectronApi {
   addGamingEntry: (data: CreateGamingEntryRequest) => Promise<GamingEntryResponse | null>
   updateGamingEntry: (entryId: number, updates: UpdateGamingEntryRequest) => Promise<GamingEntryResponse | null>
   getGamingDetail: (trackerId: number, options?: { limit?: number }) => Promise<GamingDetailResponse>
+  getBook: (bookId: number) => Promise<BookResponse | null>
+  createBook: (data: CreateBookRequest) => Promise<BookResponse | null>
+  startBook: (data: CreateBookActivityRequest) => Promise<BookActivityResponse | null>
+  readBook: (data: CreateBookActivityRequest) => Promise<BookActivityResponse | null>
+  finishBook: (data: CreateBookActivityRequest) => Promise<BookActivityResponse | null>
+  updateBook: (bookId: number, updates: UpdateBookRequest) => Promise<BookResponse | null>
+  updateBookReadActivity: (entryId: number, updates: UpdateBookActivityRequest) => Promise<BookActivityResponse | null>
+  deleteBookReadActivity: (entryId: number) => Promise<boolean>
+  getBookHistory: (trackerId: number, options?: { limit?: number }) => Promise<BookHistoryItem[]>
+  getBookStats: (trackerId: number, options?: { limit?: number }) => Promise<BookStatisticsReadModel>
+  getBookSelectedDaySummary: (trackerId: number, selectedDate: string, options?: { limit?: number }) => Promise<BookSelectedDaySummaryReadModel>
   getContacts: () => Promise<Contact[]>
   getContact: (id: number) => Promise<Contact | null>
   createContact: (data: ContactInsert) => Promise<Contact | null>

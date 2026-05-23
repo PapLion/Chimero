@@ -48,6 +48,13 @@ export interface Entry {
     gameKey: string
     estimatedHours: number
   }
+  book?: {
+    structured: true
+    bookId: number
+    title: string
+    titleKey: string
+    activityType: BookActivityType
+  }
 }
 
 export type EntryUpdateRequest = {
@@ -146,6 +153,109 @@ export interface GamingHomeWidgetReadModel {
   totalHours: number
   legacyEntryCount: number
   sparkline: Array<{ date: string; value: number }>
+}
+
+export type BookShelf = 'tbr' | 'reading' | 'finished' | 'paused' | 'dropped'
+export type BookStatus = 'planned' | 'active' | 'completed' | 'paused' | 'dropped'
+export type BookActivityType = 'started' | 'read' | 'finished'
+
+export interface Book {
+  id: number
+  title: string
+  titleKey: string
+  shelf: BookShelf
+  status: BookStatus
+  startedDate: string | null
+  finishedDate: string | null
+  ratingTenths: number | null
+  createdAt: number | null
+  updatedAt: number | null
+}
+
+export interface BookEntryReadModel {
+  entryId: number
+  trackerId: number
+  bookId: number
+  title: string
+  titleKey: string
+  activityType: BookActivityType
+  timestamp: number
+  dateStr: string
+  assetId?: number | null
+  tagIds?: number[]
+  structured: true
+}
+
+export interface LegacyBookEntryReadModel {
+  entryId: number
+  trackerId: number
+  legacyText: string | null
+  timestamp: number
+  dateStr: string
+  assetId?: number | null
+  tagIds?: number[]
+  structured: false
+}
+
+export type BookHistoryItem = BookEntryReadModel | LegacyBookEntryReadModel
+
+export interface BookStatisticsReadModel {
+  entryCount: number
+  structuredEntryCount: number
+  legacyEntryCount: number
+  uniqueBookCount: number
+  startedCount: number
+  readCount: number
+  finishedCount: number
+  chartData: Array<{ date: string; value: number; count: number }>
+}
+
+export interface BookSelectedDaySummaryReadModel {
+  trackerId: number
+  title: string
+  currentBookTitle: string | null
+  currentActivityType: BookActivityType | null
+  selectedDayBookTitle: string | null
+  selectedDayActivityType: BookActivityType | null
+  uniqueBookCount: number
+  structuredEntryCount: number
+  legacyEntryCount: number
+  sparkline: Array<{ date: string; value: number }>
+}
+
+export interface BookResponse {
+  book: Book
+}
+
+export interface BookActivityResponse {
+  entry: BookEntryReadModel
+  book: Book
+  tags: Tag[]
+}
+
+export interface CreateBookRequest {
+  title: string
+  shelf?: BookShelf
+  status?: BookStatus
+  ratingTenths?: number | null
+  startedDate?: string | null
+  finishedDate?: string | null
+}
+
+export interface UpdateBookRequest extends Partial<CreateBookRequest> {}
+
+export interface CreateBookActivityRequest {
+  trackerId: number
+  bookId: number
+  timestamp: number
+  assetId?: number | null
+  tagIds?: number[]
+}
+
+export interface UpdateBookActivityRequest {
+  timestamp?: number
+  assetId?: number | null
+  tagIds?: number[]
 }
 
 export type TaskPostponement = {

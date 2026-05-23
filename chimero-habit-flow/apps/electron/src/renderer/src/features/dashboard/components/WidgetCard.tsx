@@ -4,7 +4,8 @@ import { cn } from "@shared/utils"
 import { type Widget, type Tracker, type Entry } from "@shared/store"
 import { useMoodDailyAggregates, useUpdateEntryMutation, useWeightDetail } from "@shared/queries"
 import { buildGamingHomeWidgetReadModel, buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, moodScoreToColor, postponeTaskToNextDay, unpostponeTask } from "@contracts/domain"
-import { getTrackerIdentity, usesMediaStyleRendering } from "@contracts/features/tracking"
+import { buildBooksTrackerReadModel, getBookActionLabel } from "@contracts/features/books"
+import { getTrackerIdentity, isBooksTracker, usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, Salad, CalendarPlus, Undo2, Square, Tv, type LucideIcon } from "lucide-react"
@@ -145,6 +146,121 @@ function getTrend(entries: Entry[]): "up" | "down" | "neutral" {
   if (recent > previous) return "up"
   if (recent < previous) return "down"
   return "neutral"
+}
+
+function BooksWidget({
+  entries,
+  tracker,
+  assets,
+  selectedDate,
+}: {
+  entries: Entry[]
+  tracker: Tracker
+  assets: Map<number, Asset>
+  selectedDate: Date
+}) {
+  const booksHome = buildBooksTrackerReadModel(entries, selectedDate)
+  const iconKey = (tracker.icon ?? "").trim() || "book"
+  const Icon = iconMap[iconKey] || Book
+  const selectedDay = booksHome.selectedDay
+  const hasStructuredBooks = booksHome.structured.length > 0
+  const hasLegacyBooks = booksHome.legacy.length > 0
+
+  if (!hasStructuredBooks && !hasLegacyBooks) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="surface-chip p-2">
+            <Icon className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />
+          </div>
+          <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">{tracker.name}</span>
+        </div>
+        <p className="text-sm text-[hsl(var(--muted-foreground))]">No structured book events yet</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="mb-3 flex items-center gap-3">
+        <div className="surface-chip p-2">
+          <Icon className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />
+        </div>
+        <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">{tracker.name}</span>
+      </div>
+
+      <div className="mb-3 grid grid-cols-3 gap-2">
+        <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Want</div>
+          <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{booksHome.shelfCounts.want}</div>
+        </div>
+        <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Reading</div>
+          <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{booksHome.shelfCounts.reading}</div>
+        </div>
+        <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Finished</div>
+          <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{booksHome.shelfCounts.finished}</div>
+        </div>
+      </div>
+
+      {selectedDay && selectedDay.action !== "legacy" && (
+        <div className="mb-3 rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[hsl(var(--muted-foreground))]">
+                {selectedDay.dateStr === `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`
+                  ? "Selected day"
+                  : "Latest structured"}
+              </div>
+              <div className="mt-1 truncate text-sm font-medium text-[hsl(var(--foreground))]">{selectedDay.title}</div>
+            </div>
+            <div className="text-xs font-medium text-[hsl(var(--foreground))]">{getBookActionLabel(selectedDay.action)}</div>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <div className="text-xs text-[hsl(var(--muted-foreground))]">
+              {new Date(selectedDay.timestamp).toLocaleDateString()}
+            </div>
+            {selectedDay.rating != null && (
+              <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedDay.rating.toFixed(1)}/5</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {booksHome.recentFinished.slice(0, 2).map((entry) => {
+          const asset = entry.assetId != null ? assets.get(entry.assetId) : null
+          return (
+            <div key={entry.entryId} className="flex items-center gap-3 rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2.5">
+              <div className="h-10 w-10 overflow-hidden rounded-lg border border-[hsl(var(--border)/0.62)] bg-white/[0.04]">
+                {asset ? (
+                  <img
+                    src={asset.thumbnailUrl || asset.assetUrl}
+                    alt={entry.title}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <Book className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-[hsl(var(--foreground))]">{entry.title}</div>
+                <div className="text-xs text-[hsl(var(--muted-foreground))]">{getBookActionLabel(entry.action)} · {new Date(entry.timestamp).toLocaleDateString()}</div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="mt-auto pt-3 text-xs text-[hsl(var(--muted-foreground))]">
+        {booksHome.readingStreakDays} day streak · {booksHome.finishedThisMonth} finished this month
+        {hasLegacyBooks ? ` · ${booksHome.legacy.length} legacy` : ""}
+      </div>
+    </div>
+  )
 }
 
 // Recharts Tooltip content props
@@ -1129,7 +1245,12 @@ export function WidgetCard({ widget, tracker, entries, assets, selectedDate }: W
       return <WeightWidget entries={entries} tracker={tracker} assets={assets} selectedDate={selectedDate} />
     }
 
-    // Media Widget: Books, TV, Games, Media, Apps (must be before Task so "Books" list type gets Media)
+    // Books widget has its own structured lifecycle view.
+    if (isBooksTracker(tracker)) {
+      return <BooksWidget entries={entries} tracker={tracker} assets={assets} selectedDate={selectedDate} />
+    }
+
+    // Media Widget: TV, Games, Media, Apps
     if (usesMediaStyleRendering(tracker)) {
       return <MediaWidget entries={entries} tracker={tracker} assets={assets} selectedDate={selectedDate} />
     }

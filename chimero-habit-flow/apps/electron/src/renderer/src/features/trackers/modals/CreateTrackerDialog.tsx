@@ -35,7 +35,7 @@ export const PRESETS: TrackerPreset[] = [
     color: "#3b82f6",
     type: "text",
     config: { unit: "pages" },
-    description: "Track books and pages read",
+    description: "Track books and reading milestones",
   },
   {
     name: "Fitness",

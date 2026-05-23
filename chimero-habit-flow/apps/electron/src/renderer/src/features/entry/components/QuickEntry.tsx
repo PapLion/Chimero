@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useRecentTrackers, useFavoriteTrackers, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
+import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
 import { cn } from "@shared/utils"
 import { getEntryConfig } from "../entry-config"
-import type { Tracker } from "@shared/store"
+import type { Entry, Tracker } from "@shared/store"
 import { ContactBubblesGrid, type ContactMoodSelection } from "@features/contacts/components/ContactBubblesGrid"
 import { ExerciseSearch, type SelectedExercise } from "@features/exercises/components/ExerciseSearch"
 import { TagSelector } from "@features/tags/components/TagChips"
@@ -19,9 +19,9 @@ import { Input } from "@packages/ui/input"
 import { Button } from "@packages/ui/button"
 import { CyberpunkSelect } from "@features/tracking/components/CyberpunkSelect"
 import { formatToastError, useToast } from "@shared/components/toast"
-import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Activity, Calendar, Flame, Book, Gamepad2, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, ImageIcon, X, Tv, type LucideIcon } from "lucide-react"
+import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Activity, Calendar, Flame, Book, Gamepad2, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, ImageIcon, X, Tv, BookmarkPlus, BookOpen, BookMarked, CheckCheck, type LucideIcon } from "lucide-react"
 import { clampMoodScore } from "@contracts/domain"
-import { getTrackerIdentity } from "@contracts/features/tracking"
+import { getTrackerIdentity, isBooksTracker } from "@contracts/features/tracking"
 
 const iconMap: Record<string, LucideIcon> = {
   scale: Scale,
@@ -70,6 +70,10 @@ export function QuickEntry() {
   const addEntryMutation = useAddEntryMutation()
   const addWeightEntryMutation = useAddWeightEntryMutation()
   const addGamingEntryMutation = useAddGamingEntryMutation()
+  const createBookMutation = useCreateBookMutation()
+  const startBookMutation = useStartBookMutation()
+  const readBookMutation = useReadBookMutation()
+  const finishBookMutation = useFinishBookMutation()
   const createTagMutation = useCreateTagMutation()
   const createContactInteractionMutation = useCreateContactInteractionMutation()
   const toast = useToast()
@@ -97,12 +101,34 @@ export function QuickEntry() {
   const [reminderDate, setReminderDate] = useState("")
   const [reminderTime, setReminderTime] = useState("")
   const [linkedTrackerId, setLinkedTrackerId] = useState<number | undefined>(undefined)
+  const bookIdCacheRef = useRef(new Map<string, number>())
+
+  const { data: selectedTrackerEntries = [] } = useEntries(selectedTracker ? { trackerId: selectedTracker } : undefined)
 
   // Assets for picker
   const { data: assetsData } = useAssets({ limit: 50 })
   const assets = (assetsData ?? []) as Array<{ id: number; thumbnailUrl: string; assetUrl: string; originalName?: string | null }>
   const selectedAsset = assets.find((a) => a.id === selectedAssetId)
   const assetPickerRef = useRef<HTMLDivElement>(null)
+
+  const normalizeBookKey = useCallback((title: string) => title.trim().toLowerCase().replace(/\s+/g, " "), [])
+
+  const selectedTrackerBookIdsByTitle = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const entry of selectedTrackerEntries as Entry[]) {
+      if (entry.book?.structured) {
+        map.set(normalizeBookKey(entry.book.title), entry.book.bookId)
+      }
+    }
+    for (const [key, value] of bookIdCacheRef.current.entries()) {
+      if (!map.has(key)) {
+        map.set(key, value)
+      }
+    }
+    return map
+  }, [normalizeBookKey, selectedTrackerEntries])
+
+  const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
 
   // Autocomplete: Favorites + Recents (deduped) + All trackers filtered by search
   const searchLower = search.toLowerCase().trim()
@@ -232,6 +258,27 @@ export function QuickEntry() {
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [commandBarOpen, setQuickEntryOpen])
+
+  const getBookIdForTitle = useCallback(async (title: string, action: "want" | "started" | "read" | "finished") => {
+    const key = normalizeBookKey(title)
+    const existingBookId = selectedTrackerBookIdsByTitle.get(key)
+    if (existingBookId != null) {
+      return existingBookId
+    }
+
+    const createdBook = await createBookMutation.mutateAsync({
+      title,
+      shelf: action === "finished" ? "finished" : action === "want" ? "tbr" : "reading",
+      status: action === "finished" ? "completed" : action === "want" ? "planned" : "active",
+    })
+    const bookId = createdBook?.book.id
+    if (bookId == null) {
+      throw new Error("We couldn't create that book.")
+    }
+
+    bookIdCacheRef.current.set(key, bookId)
+    return bookId
+  }, [createBookMutation, normalizeBookKey, selectedTrackerBookIdsByTitle])
 
   const handleSubmit = useCallback(async () => {
     if (isSubmitting || !selectedTracker) return
@@ -398,6 +445,7 @@ export function QuickEntry() {
   }, [
     addEntryMutation,
     addWeightEntryMutation,
+    addGamingEntryMutation,
     createContactInteractionMutation,
     isSubmitting,
     note,
@@ -411,6 +459,64 @@ export function QuickEntry() {
     trackers,
     value,
     waist,
+  ])
+
+  const handleBookSubmit = useCallback(async (action: "want" | "started" | "read" | "finished") => {
+    if (isSubmitting || !selectedTrackerData || !note.trim()) return
+
+    setIsSubmitting(true)
+
+    try {
+      const title = note.trim()
+      if (action === "want") {
+        await getBookIdForTitle(title, action)
+      } else {
+        const bookId = await getBookIdForTitle(title, action)
+        const activityPayload = {
+          trackerId: selectedTrackerData.id,
+          bookId,
+          timestamp: Date.now(),
+          assetId: selectedAssetId,
+          tagIds: selectedTagIds,
+        }
+
+        if (action === "started") {
+          await startBookMutation.mutateAsync(activityPayload)
+        } else if (action === "read") {
+          await readBookMutation.mutateAsync(activityPayload)
+        } else {
+          await finishBookMutation.mutateAsync(activityPayload)
+        }
+      }
+
+      const actionLabel =
+        action === "want" ? "Want to Read" :
+        action === "started" ? "Started" :
+        action === "read" ? "Read today" :
+        "Finished"
+
+      toast.success(`${actionLabel} saved.`, selectedTrackerData.name)
+      setQuickEntryOpen(false)
+    } catch (error) {
+      toast.error(
+        "We couldn't save that book event.",
+        formatToastError(error, "Please try again in a moment."),
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
+  }, [
+    isSubmitting,
+    getBookIdForTitle,
+    note,
+    selectedAssetId,
+    selectedTagIds,
+    selectedTrackerData,
+    startBookMutation,
+    readBookMutation,
+    finishBookMutation,
+    setQuickEntryOpen,
+    toast,
   ])
 
   const handleReminderSubmit = useCallback(async () => {
@@ -450,8 +556,6 @@ export function QuickEntry() {
     upsertReminderMutation,
   ])
 
-  const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
-
   // Get human-centric entry config for the selected tracker
   const entryConfig = selectedTrackerData ? getEntryConfig(selectedTrackerData) : null
 
@@ -476,6 +580,7 @@ export function QuickEntry() {
       selectedTrackerData.name.toLowerCase().includes("weight") ||
       selectedTrackerData.name.toLowerCase().includes("peso")
     : false
+  const isBooksTrackerSelected = selectedTrackerData ? isBooksTracker(selectedTrackerData) : false
 
   const renderTrackerList = (trackerList: typeof trackers, title: string) => {
     if (trackerList.length === 0) return null
@@ -639,7 +744,7 @@ export function QuickEntry() {
                           {selectedTrackerData.name}
                         </div>
                         <div className="line-clamp-2 text-xs text-[hsl(var(--muted-foreground))]">
-                          Enter new value
+                          {isBooksTrackerSelected ? "Log a book event" : "Enter new value"}
                         </div>
                       </div>
                     </>
@@ -647,7 +752,88 @@ export function QuickEntry() {
                 </div>
 
                 {/* Social Tracker: ContactBubblesGrid */}
-                {isSocialTracker ? (
+                {isBooksTrackerSelected ? (
+                  <div className="mb-4 space-y-3">
+                    <div>
+                      <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                        Book Title
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder={entryConfig?.mainPlaceholder ?? "What book are you logging?"}
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            void handleBookSubmit("read")
+                          }
+                        }}
+                        className="h-12 text-lg bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <button
+                        type="button"
+                        onClick={() => void handleBookSubmit("want")}
+                        disabled={!note.trim() || isSubmitting}
+                        className={cn(
+                          "flex min-w-0 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-medium transition-all duration-200 ease-out",
+                          !note.trim() || isSubmitting
+                            ? "cursor-not-allowed border-[hsl(var(--border)/0.5)] bg-white/5 text-[hsl(var(--muted-foreground))] opacity-60"
+                            : "border-[hsl(var(--border)/0.7)] bg-white/5 text-[hsl(var(--foreground))] hover:border-[hsl(var(--border)/0.95)] hover:bg-white/8"
+                        )}
+                      >
+                        <BookmarkPlus className="h-4 w-4" />
+                        Want to Read
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleBookSubmit("started")}
+                        disabled={!note.trim() || isSubmitting}
+                        className={cn(
+                          "flex min-w-0 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-medium transition-all duration-200 ease-out",
+                          !note.trim() || isSubmitting
+                            ? "cursor-not-allowed border-[hsl(var(--border)/0.5)] bg-white/5 text-[hsl(var(--muted-foreground))] opacity-60"
+                            : "border-[hsl(var(--border)/0.7)] bg-white/5 text-[hsl(var(--foreground))] hover:border-[hsl(var(--border)/0.95)] hover:bg-white/8"
+                        )}
+                      >
+                        <BookOpen className="h-4 w-4" />
+                        Start Reading
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleBookSubmit("read")}
+                        disabled={!note.trim() || isSubmitting}
+                        className={cn(
+                          "flex min-w-0 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-medium transition-all duration-200 ease-out",
+                          !note.trim() || isSubmitting
+                            ? "cursor-not-allowed border-[hsl(var(--border)/0.5)] bg-white/5 text-[hsl(var(--muted-foreground))] opacity-60"
+                            : "border-[hsl(var(--border)/0.7)] bg-white/5 text-[hsl(var(--foreground))] hover:border-[hsl(var(--border)/0.95)] hover:bg-white/8"
+                        )}
+                      >
+                        <BookMarked className="h-4 w-4" />
+                        Read today
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleBookSubmit("finished")}
+                        disabled={!note.trim() || isSubmitting}
+                        className={cn(
+                          "flex min-w-0 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-medium transition-all duration-200 ease-out",
+                          !note.trim() || isSubmitting
+                            ? "cursor-not-allowed border-[hsl(var(--border)/0.5)] bg-white/5 text-[hsl(var(--muted-foreground))] opacity-60"
+                            : "border-[hsl(var(--border)/0.7)] bg-white/5 text-[hsl(var(--foreground))] hover:border-[hsl(var(--border)/0.95)] hover:bg-white/8"
+                        )}
+                      >
+                        <CheckCheck className="h-4 w-4" />
+                        Finish
+                      </button>
+                    </div>
+                  </div>
+                ) : isSocialTracker ? (
                   <div className="mb-4">
                     <ContactBubblesGrid
                       onSelectionChange={(selected) => setSelectedContacts(selected)}
@@ -942,25 +1128,27 @@ export function QuickEntry() {
                   >
                     Cancel
                   </Button>
-                  <Button
-                    type="submit"
-                    className="flex-1 rounded-xl"
-                    disabled={
-                      isExerciseTracker
-                        ? selectedExercises.length === 0 // Exercise trackers need at least one exercise selected
-                        : isSocialTracker
-                          ? selectedContacts.length === 0 // Social trackers need at least one contact selected
-                          : selectedTrackerData?.type === "text" || selectedTrackerData?.type === "list"
-                            ? !note.trim() && !value
-                            : selectedTrackerData?.type === "binary" || selectedTrackerData?.type === "composite"
-                              ? !note.trim()
-                            : !value
-                    }
-                    loading={isSubmitting}
-                    loadingText="Saving entry..."
-                  >
-                    Save Entry
-                  </Button>
+                  {!isBooksTrackerSelected && (
+                    <Button
+                      type="submit"
+                      className="flex-1 rounded-xl"
+                      disabled={
+                        isExerciseTracker
+                          ? selectedExercises.length === 0 // Exercise trackers need at least one exercise selected
+                          : isSocialTracker
+                            ? selectedContacts.length === 0 // Social trackers need at least one contact selected
+                            : selectedTrackerData?.type === "text" || selectedTrackerData?.type === "list"
+                              ? !note.trim() && !value
+                              : selectedTrackerData?.type === "binary" || selectedTrackerData?.type === "composite"
+                                ? !note.trim()
+                              : !value
+                      }
+                      loading={isSubmitting}
+                      loadingText="Saving entry..."
+                    >
+                      Save Entry
+                    </Button>
+                  )}
                 </div>
               </form>
             </>

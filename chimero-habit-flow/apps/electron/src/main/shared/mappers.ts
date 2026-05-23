@@ -56,6 +56,11 @@ export function mapEntry(row: Record<string, unknown>): Entry {
   const gameTitle = row.gameTitle ?? row.game_title
   const gameKey = row.gameKey ?? row.game_key
   const estimatedHours = row.estimatedHours ?? row.estimated_hours
+  const bookStructured = row.bookStructured ?? row.book_structured
+  const bookId = row.bookId ?? row.book_id
+  const bookTitle = row.bookTitle ?? row.book_title
+  const bookTitleKey = row.bookTitleKey ?? row.book_title_key
+  const bookActivityType = row.bookActivityType ?? row.book_activity_type
   return {
     id: row.id as number,
     trackerId: (row.trackerId ?? row.tracker_id) as number,
@@ -72,6 +77,16 @@ export function mapEntry(row: Record<string, unknown>): Entry {
             gameTitle: (gameTitle as string) ?? '',
             gameKey: (gameKey as string) ?? '',
             estimatedHours: (estimatedHours as number) ?? 0,
+          }
+        : undefined,
+    book:
+      bookStructured
+        ? {
+            structured: true,
+            bookId: Number(bookId),
+            title: (bookTitle as string) ?? '',
+            titleKey: (bookTitleKey as string) ?? '',
+            activityType: bookActivityType as 'started' | 'read' | 'finished',
           }
         : undefined,
   }

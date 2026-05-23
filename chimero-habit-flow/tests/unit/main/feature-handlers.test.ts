@@ -102,6 +102,23 @@ const featureCases = [
     ],
   },
   {
+    name: 'books',
+    modulePath: '../../../apps/electron/src/main/features/books/handler',
+    exportName: 'registerBooksHandlers',
+    channels: [
+      'create-book',
+      'start-book',
+      'read-book',
+      'finish-book',
+      'update-book',
+      'update-book-read-activity',
+      'delete-book-read-activity',
+      'get-book-history',
+      'get-book-stats',
+      'get-book-selected-day-summary',
+    ],
+  },
+  {
     name: 'reminders',
     modulePath: '../../../apps/electron/src/main/features/reminders/handler',
     exportName: 'registerReminderHandlers',

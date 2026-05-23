@@ -2,209 +2,240 @@
 
 ## 1. Purpose
 
-Books tracks reading activity without adding friction. The contract documents title/progress/status-style data as current note/value conventions and avoids forcing pages-per-session as a required field.
+Books is a structured lifecycle tracker for books. The durable source of truth is the Book entity plus linked reading activity rows. Legacy generic Books entries remain readable for continuity, but structured analytics must only trust the structured lifecycle data.
 
 ## 2. Current Implementation Status
 
-- Status: GENERIC_MEDIA_STYLE_IMPLEMENTED.
-- Books is seeded/default and Reading is a create-tracker preset alias.
-- Quick Entry is text-first with optional numeric secondary value.
-- BentoGrid uses the Media widget for book-like trackers.
-- Tracker Detail uses media-style generic rendering.
-- No book catalog, shelf table, read-day table, rating field, or started/finished date schema exists today.
+- Status: STRUCTURED_BOOK_LIFECYCLE_APPROVED_WITH_LEGACY_READS.
+- Books is entity-based, not a generic note/value tracker.
+- Structured model: Book entity plus linked reading activity rows.
+- Lifecycle states are Want to Read, Reading, and Finished.
+- Legacy generic Books entries remain readable, but they are excluded from structured analytics, streaks, and finish counts.
+- `ratingTenths` lives on the Book entity as integer tenths from 10 to 50, displayed as 1.0 to 5.0.
+- Deferred or rejected for this contract: pages/progress, author, genre, reviews, catalog browsing, Mood correlations, and rereads.
 
 ## 3. Surface Contract / Frontend
 
 ### 3.1 Quick Entry / Edit Entry Input
 
-- Quick Entry captures book title in note/text.
-- Quick Entry may capture optional progress/pages/chapter/rating as generic `value` or note text.
-- Started date, finished date, shelves, and decimal/tenth ratings are Future unless product/client explicitly approves a structured book schema.
-- Pages per session must not be required.
-- Edit Entry updates generic value, note/title, timestamp, tags, and asset reference.
-- Delete uses generic delete behavior.
+- Create or add to Want to Read creates or updates the Book entity only; it does not create a reading activity.
+- Start book, read day, and finish book are separate actions.
+- Read-day logging creates one explicit read activity for the selected book on the selected day.
+- The UI must not create two read-day markers for the same book on the same day.
+- Quick Entry and edit may capture title and optional `ratingTenths`; start and finish timestamps come from the explicit lifecycle actions.
+- `ratingTenths` is stored as an integer tenths value from 10 to 50 and rendered as 1.0 to 5.0.
+- Pages, progress, author, genre, reviews, and catalog fields are not part of the required surface.
 
 ### 3.2 BentoGrid / Home Widget Read Model
 
-- Shows recent book entries from notes.
-- Shows cover/photo asset if attached.
-- May show generic value as rating/progress if present.
-- Does not require page counts.
+- Shows current shelf/status and recent explicit activity.
+- May show the latest read day and the current reading state.
+- May show finished-book signals from structured finish data.
+- Does not depend on pages or progress totals.
+- Legacy generic entries may appear only as a fallback/readability layer and must not inflate structured counts.
 
 ### 3.3 Tracker Detail / Entries Tab Read Model
 
-- Shows book entries in media/shelf style: title/note, optional value, date, tags, asset/cover, edit, and delete.
-- Does not require author, pages, shelf, or status fields.
+- Shows the Book entity list plus linked reading activity history.
+- Shows start, read-day, and finish events separately.
+- Legacy generic entries can be shown in a clearly labeled legacy section.
+- Does not require pages, author, genre, review, or catalog fields.
 
 ### 3.4 Tracker Detail / Statistics Tab Read Model
 
-- May show total entries, items this week/year, reading streak, days since last item, books per week/month/year if the data can be derived from generic entries.
-- Started/finished-based completion stats are Future until status dates are structured.
+- Uses explicit read activities for reading streaks.
+- Uses structured finish data for finished-book counts.
+- May show Want to Read, Reading, and Finished counts.
+- Does not derive streaks from generic legacy entries.
+- Pages/progress stats are deferred.
 
 ### 3.5 Tracker Detail / Graphs Tab Read Model
 
-- Relevant only for generic entry frequency/value graphs.
-- Not applicable for page progress unless pages are consistently captured as `value` by the user.
+- Relevant only for structured read-day and finish counts.
+- No page-progress graph is required.
+- Legacy generic values must not be used as structured graph input.
 
 ### 3.6 Calendar Selected-Day Summary Read Model
 
-- Shows selected-day reading entry title/note, optional value, timestamp, tags, and asset reference.
+- Shows explicit read-day markers for the selected day.
+- Start and finish events remain visible as separate lifecycle markers.
+- The same book can have at most one read-day marker per calendar day.
+- Legacy generic entries may still be shown, but they must be labeled unstructured.
 
 ### 3.7 Insights / Correlations Read Model
 
-- Generic correlations can use Books values/counts by tracker ID.
-- Correlations with mood or habits are Future unless explicitly requested.
+- Mood correlations are deferred.
+- Reread and catalog-style correlations are deferred.
+- Structured book counts and finish counts may be reused by other surfaces only if they come from explicit book lifecycle data.
 
 ## 4. Deep Contract / Backend-Service
 
 ### 1. Backend Entry Point
 
-- Status: GENERIC_ENTRY_ONLY.
-- Implemented generic IPC/API methods: `add-entry`, `update-entry`, `delete-entry`, `get-entries`, `get-stats`, `get-correlation-result`, `get-calendar-month`.
-- There is no Books-specific service, book catalog endpoint, shelf endpoint, read-day endpoint, rating endpoint, or started/finished date service today.
-- Media-style display is a frontend/read convention over generic entries.
+- Status: STRUCTURED_BOOK_LIFECYCLE_APPROVED.
+- Structured book mutations operate on the Book entity and linked reading activity rows.
+- Generic entry APIs remain available for legacy reads, but they are not the source of structured analytics.
+- There is no pages/progress/catalog/reviews service today.
 
 ### 2. Request Validation
 
-- Current fields: `trackerId`, text/title in `note`, optional numeric `value`, `timestamp`, optional `assetId`, optional `tagIds`.
-- Current backend does not require non-empty book title, validate rating precision, enforce started/finished date formats, enforce shelf/status enums, or validate pages/progress semantics.
-- Pages-per-session is explicitly not required.
-- Invalid generic writes return `null` or `false`.
+- Create and update must validate a non-empty book title.
+- Lifecycle fields must validate against the allowed shelf/status values.
+- `ratingTenths`, when present, must be an integer from 10 to 50.
+- A read-day request must identify one book and one calendar day.
+- The backend must enforce one read-day marker per book/day.
+- Starting a book, finishing a book, and logging a read day are distinct actions.
+- Create or add to Want to Read does not create an activity row.
+- Pages/progress/author/genre/review/catalog fields are rejected or deferred, not inferred from free text.
+- Invalid structured writes should return a safe failure or empty response.
 
 ### 3. Normalization
 
-- Backend computes `dateStr` from `timestamp`.
-- `note` defaults to `null` if omitted; surface should avoid pretending that a missing title is a catalog record.
-- `value` remains a generic number and is not normalized into pages, rating, or percent.
-- `metadata` defaults to `{}`; future book catalog fields should not be treated as reliable while only ad hoc metadata.
-- Entry reads sort newest-first; calendar reads by timestamp within date.
+- Backend computes `dateStr` from `timestamp` for read activities.
+- Title is trimmed for storage and display.
+- Lifecycle transitions update the Book entity, not a fake read-day activity.
+- `ratingTenths` stays an integer tenths value.
+- Legacy generic `entries.note` and `entries.value` remain readable, but they are not normalized into structured book state.
 
 ### 4. Persistence Plan
 
 Write flow:
 
-1. Insert/update base entry in `entries`.
-2. Insert/update specialized tracker table if needed: none exists for Books.
-3. Insert/update junction rows in `entries_to_tags` when `tagIds` is provided.
-4. Update related entity state if needed: none today.
-5. Return mapped generic `Entry` contract.
+1. Insert/update the Book entity row.
+2. Insert/update a linked reading activity row when the action is a read-day marker.
+3. Update `entries_to_tags` when `tagIds` is provided, if tags remain part of the surface.
+4. Return mapped Book responses and activity read models.
 
-- Generic entry/tag writes are transactional.
-- Delete removes the entry and tag joins; cover/photo assets are not deleted.
-- Structural future analytics such as shelves/status/started/finished dates should get columns/tables before backend stats depend on them.
+- Create or add to Want to Read writes the Book entity only.
+- Start and finish mutate the Book entity lifecycle fields.
+- Read-day markers are one row per book/day.
+- Legacy generic entries are read-only for structured analytics and are not backfilled into the structured tables.
 
 ### 5. Read / Query Plan
 
-- BentoGrid: reads generic entries and renders recent book titles from `note`, optional `value`, and attached asset.
-- Entries tab: reads entries by tracker newest-first with note/title, value, tags, assets.
-- Statistics tab: generic stats can compute total entries, active days, items this week/month/year, and reading streak from logged days.
-- Graphs: generic frequency/value graphs only; page progress graphs require consistent captured `value` or future structure.
-- Calendar selected-day: month query returns each reading entry with title/note, value, asset, tags.
-- Edit Entry prefill: generic entry response with note/value/timestamp/asset/tags.
-- Correlation/Insight: generic correlation can use count/value; mood/habit reading insights are FUTURE.
-- Empty state: no entries returns empty arrays and neutral counts.
+- BentoGrid: reads the current structured Book entity and recent activities.
+- Entries tab: reads structured entities plus linked activity history and optionally a labeled legacy section.
+- Statistics tab: computes streaks from explicit read activities and finished-book counts from structured finish data.
+- Graphs: based on read-day and finish counts only.
+- Calendar selected-day: reads explicit read-day markers and lifecycle events.
+- Edit Entry prefill: returns the structured entity state plus recent activity context.
+- Correlations/insights: only structured counts if used; Mood and reread correlations are deferred.
 
 ### 6. Computed Metrics
 
-- Implemented/generic: entry count, active days, items per period, generic streak/count style calculations, generic correlation caveat.
-- Future/contract-only: started date, finished date, shelf/status, rating decimals/tenths as a typed field, books per week/month/year from completion records.
-- No pages-per-session metric is required.
-- Metrics are computed on read, not cached/denormalized.
+- Implemented/approved: active shelf counts, explicit read-day streak, days since last explicit read day, finished-book counts, and structured completion counts.
+- `ratingTenths` display formatting is frontend-owned.
+- Deferred: pages-progress metrics, catalog stats, author/genre aggregates, review sentiment, reread analytics, and Mood correlation.
+- Metrics must come from structured lifecycle data, not legacy generic entries.
 
 ### 7. Response Mapping
 
-- Flow: `entries` DB rows -> `mapEntry` -> shared `Entry` -> Books media-style surface response.
+- Flow: Book entity rows plus linked reading activity rows -> shared Book read models -> UI surfaces.
 - Raw DB rows never return to the renderer.
-- Missing title/value/asset/tags return `null` or `[]`.
-- Unit/display formatting is frontend-owned unless a future Books shared read model adds structured fields.
+- Legacy generic entries map to a separate fallback legacy read model.
+- Missing optional fields return `null` or empty arrays as appropriate.
 
 ### 8. Error Handling
 
-- Invalid generic entry/DB failure returns `null` or `false`.
-- Missing tracker/entry/tag/asset uses generic null/empty fallback.
-- Empty dataset returns empty arrays.
-- Unsupported shelf/catalog/status/rating requests should be marked Future, not inferred from note text.
+- Invalid structured writes return `null`, `false`, or a typed empty response, consistent with the surrounding runtime.
+- Missing book or activity data returns empty states, not fabricated analytics.
+- Duplicate same-day read markers must not produce duplicate structured rows.
+- Unsupported pages/progress/author/genre/review/catalog/Mood/reread requests stay deferred or rejected.
 
 ### 9. Transaction Rules
 
-- Generic add/update/delete are transactional for `entries` and `entries_to_tags`.
-- No specialized Books related rows exist today.
-- Current status: transaction safety is IMPLEMENTED for generic entry/tag writes.
+- Book create/update/finish/start/delete should be transactional across the Book entity and any linked read activity rows.
+- Read-day writes should be transactional and enforce the one-marker-per-day rule.
+- Legacy generic entry reads remain separate from structured writes.
+- Current status: transaction safety is required for the structured Book paths.
 
 ### 10. Data Ownership Rules
 
 Frontend owns: capture, display, UI state, visual formatting.
 Backend owns: validation, normalization, derived metrics, relation resolution, persistence orchestration, response mapping.
 Database owns: durable storage, relational integrity, queryable structure.
-Shared contracts own: request/response shapes, app-facing types, pure domain helpers when reusable.
+Shared contracts own: request/response shapes, app-facing types, and pure domain helpers when reusable.
 
 ### 11. Deep Contract Status
 
-- Status: GENERIC_ENTRY_ONLY.
-- Implemented: low-friction generic reading entries, media-style surfaces, assets/tags through generic contracts, calendar/generic stats/correlation compatibility.
-- Gaps: book catalog, started/finished dates, shelf/status, typed rating precision, completion-based books-per-period stats.
+- Status: STRUCTURED_BOOK_LIFECYCLE_APPROVED_WITH_LEGACY_READS.
+- Implemented/approved: Book entity, linked reading activities, explicit read-day lifecycle, finish counts, `ratingTenths`, and legacy read fallback.
+- Gaps: pages/progress, author, genre, reviews, catalog browsing, Mood correlations, rereads, and any non-explicit progress model.
 
 ## 5. Persistence and Schema / Database
 
-- `trackers`: Books/Reading uses text/book-style config.
-- `entries.note`: title/progress/free text.
-- `entries.value`: optional generic numeric value such as rating or progress.
-- `entries.timestamp` and `entries.date_str`: reading event date/time.
-- `entries.metadata`: generic/empty today.
-- `entries.asset_id`: optional cover/photo asset.
-- `entries_to_tags`: explicit tags.
+- Book entity storage is the structured source of truth.
+- Reading activity rows store explicit start/read/finish events.
+- `entries` remain as legacy compatibility rows for readable fallback surfaces.
+- `entries_to_tags` remains available if tags are still attached to the Book surfaces.
 
 ## 6. Input / Output Contracts
 
 ```ts
-type CreateBookEntryRequest = BaseEntryRequest & {
+type BookStatus = "want_to_read" | "reading" | "finished"
+
+type CreateBookRequest = {
   trackerId: number
-  note: string | null
-  value?: number | null
-  timestamp: number
-  assetId?: number | null
+  title: string
   tagIds?: number[]
-  metadata?: {
-    startedDate?: Future<string>
-    finishedDate?: Future<string>
-    shelf?: Future<string>
-    rating?: Future<number>
-  }
 }
 
-type UpdateBookEntryRequest = Partial<Omit<CreateBookEntryRequest, "trackerId">>
+type UpdateBookRequest = Partial<CreateBookRequest> & {
+  trackerId?: number
+  ratingTenths?: number | null
+}
 
-type BookEntryResponse = BaseEntryResponse
+type LogBookReadDayRequest = {
+  bookId: number
+  timestamp: number
+}
+
+type StartBookRequest = {
+  bookId: number
+  timestamp: number
+}
+
+type FinishBookRequest = {
+  bookId: number
+  timestamp: number
+  ratingTenths?: number | null
+}
+
+type BookResponse = {
+  bookId: number
+  title: string
+  status: BookStatus
+  startedAt?: number | null
+  finishedAt?: number | null
+  ratingTenths?: number | null
+}
+
+type BookReadActivityResponse = {
+  bookId: number
+  timestamp: number
+  dateStr: string
+  kind: "start" | "read_day" | "finish"
+}
 
 type BookDetailResponse = {
-  entries: BaseEntryResponse["entry"][]
-}
-
-type BookBentoWidgetResponse = {
-  trackerId: number
-  recentItems: Array<{ entryId: number; title: string; value?: number | null; asset?: AssetSummary | null }>
-}
-
-type BookEntriesTabResponse = {
-  entries: Array<BaseEntryResponse["entry"] & { tags?: TagSummary[]; assets?: AssetSummary[] }>
+  book: BookResponse | null
+  activities: BookReadActivityResponse[]
+  legacyEntries?: BaseEntryResponse["entry"][]
 }
 
 type BookStatisticsResponse = {
-  totalEntries: number
+  wantToReadCount: number
+  readingCount: number
+  finishedCount: number
   readingStreak?: number
-  itemsThisWeek?: number
-  itemsThisMonth?: number
-  itemsThisYear?: number
-  daysSinceLastEntry?: number | null
+  daysSinceLastReadDay?: number | null
 }
 
 type BookCalendarDayResponse = TimelineEvent & {
-  entryId: number
-  trackerId: number
-  title?: string | null
-  value?: number | null
-  tagIds?: number[]
-  assets?: AssetSummary[]
+  bookId: number
+  title: string
+  kind: "start" | "read_day" | "finish"
+  ratingTenths?: number | null
 }
 ```
 
@@ -212,14 +243,16 @@ type BookCalendarDayResponse = TimelineEvent & {
 
 | Field | Quick Entry | Edit Entry | DB | Backend Computed | BentoGrid | Entries Tab | Statistics Tab | Graphs Tab | Calendar | Insights/Correlations |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| book title | Yes | Yes | Yes | No | Yes | Yes | Optional | No | Yes | Optional |
-| pages/progress | Optional | Optional | Optional | Optional | Optional | Optional | Optional | Optional | Optional | Optional |
-| pages per session | No | No | No | No | No | No | No | No | No | No |
-| started date | Future | Future | Future | Future | Future | Future | Future | Future | Future | Future |
-| finished date | Future | Future | Future | Future | Future | Future | Future | Future | Future | Future |
-| shelves/status | Future | Future | Future | Future | Future | Future | Future | Future | Future | Future |
-| rating decimals/tenths | Future | Future | Future | Future | Optional | Optional | Future | Future | Optional | Future |
-| reading streak/counts | No | No | No | Computed | Optional | No | Optional | Optional | No | Optional |
+| title | Yes | Yes | Yes | No | Yes | Yes | Yes | No | Yes | Optional |
+| shelf/status | Yes | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes | Optional |
+| start date | Optional | Optional | Yes | Yes | Optional | Yes | Optional | No | Yes | Future |
+| finish date | Optional | Optional | Yes | Yes | Optional | Yes | Yes | Yes | Yes | Future |
+| read-day marker | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | No |
+| ratingTenths | Optional | Optional | Yes | Yes | Optional | Yes | Optional | No | Optional | Future |
+| pages/progress | No | No | No | No | No | No | No | No | No | No |
+| author/genre/review/catalog | No | No | No | No | No | No | No | No | No | No |
+| reading streak/counts | No | No | No | Computed | Optional | No | Yes | Optional | No | Optional |
+| legacy generic entries | No | No | Yes | No | Optional | Yes | No | No | Optional | No |
 | tagIds | Optional | Optional | Yes | Optional | No | Yes | Future | Future | Optional | Future |
 | assets | Optional | Optional | Optional | Optional | Optional | Yes | No | No | Optional | Future |
 
@@ -235,19 +268,19 @@ type BookCalendarDayResponse = TimelineEvent & {
 - [x] Graphs tab relevance is documented.
 - [x] Calendar selected-day summary is documented.
 - [x] Edit/Delete behavior is documented.
-- [x] Future Insights/Correlations are limited to explicit/generic scope.
+- [x] Future Insights/Correlations are limited to explicit/structured scope.
 
 ## 9. Deep Contract Checklist
 
 - [x] Does backend have a clear entry point?
-- [ ] Does backend validate all request fields? Book-specific fields are not validated.
+- [x] Does backend validate all request fields that are now structural?
 - [x] Does backend normalize timestamp/dateStr/defaults?
 - [x] Does backend know which tables to write?
 - [x] Does backend write related rows transactionally?
 - [x] Does backend know which tables to read for each surface?
-- [ ] Does backend compute metrics instead of frontend? Only generic stats are available.
+- [x] Does backend compute metrics instead of frontend?
 - [x] Does backend map DB rows into shared contracts?
 - [x] Does backend handle empty/insufficient data?
-- [ ] Does backend return clear errors/warnings? Current path uses generic fallbacks.
+- [x] Does backend return clear errors/warnings for rejected/deferred fields?
 - [x] Does delete/update affect related rows safely?
 - [x] Is current implementation status honest?

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { sqliteTable, text, integer, real, index, primaryKey } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // --- 1. CONFIGURACIÓN & USUARIO ---
 // Guardamos preferencias globales (Dark mode, Start of week, etc.)
@@ -98,6 +98,36 @@ export const assets = sqliteTable("assets", {
   thumbnailPath: text("thumbnail_path"),
   createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
 });
+
+// --- 6B. BOOKS (Entidad estructurada de lectura) ---
+export const books = sqliteTable("books", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  titleKey: text("title_key").notNull(),
+  shelf: text("shelf", { enum: ["tbr", "reading", "finished", "paused", "dropped"] }).notNull().default("tbr"),
+  status: text("status", { enum: ["planned", "active", "completed", "paused", "dropped"] }).notNull().default("planned"),
+  startedDate: text("started_date"),
+  finishedDate: text("finished_date"),
+  ratingTenths: integer("rating_tenths"),
+  createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
+  updatedAt: integer("updated_at").default(sql`(strftime('%s', 'now') * 1000)`),
+}, (t) => ({
+  titleKeyIdx: index("books_title_key_idx").on(t.titleKey),
+  shelfIdx: index("books_shelf_idx").on(t.shelf),
+  statusIdx: index("books_status_idx").on(t.status),
+}));
+
+export const bookActivities = sqliteTable("book_activities", {
+  entryId: integer("entry_id").primaryKey().references(() => entries.id, { onDelete: "cascade" }),
+  bookId: integer("book_id").references(() => books.id, { onDelete: "cascade" }).notNull(),
+  activityType: text("activity_type", { enum: ["started", "read", "finished"] }).notNull(),
+  dateStr: text("date_str").notNull(),
+}, (t) => ({
+  bookIdx: index("book_activities_book_idx").on(t.bookId),
+  typeIdx: index("book_activities_type_idx").on(t.activityType),
+  dateIdx: index("book_activities_date_idx").on(t.dateStr),
+  readDayUnique: uniqueIndex("book_activities_read_date_unique").on(t.bookId, t.dateStr).where(sql`${t.activityType} = 'read'`),
+}));
 
 // --- 6. TAGS (Categorización transversal) ---
 export const tags = sqliteTable("tags", {

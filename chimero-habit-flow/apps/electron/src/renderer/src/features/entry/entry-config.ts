@@ -25,11 +25,8 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
   if (identity === "books") {
     return {
       mainLabel: "Book Title",
-      mainPlaceholder: "What book are you reading?",
+      mainPlaceholder: "What book are you logging?",
       mainType: "text",
-      noteLabel: "Pages Read",
-      secondaryPlaceholder: "Pages or Chapter",
-      notePlaceholder: "e.g., 250 pages, Chapter 5",
     }
   }
 

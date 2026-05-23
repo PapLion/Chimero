@@ -78,4 +78,21 @@ describe('database migration transition', () => {
     expect(migration).not.toMatch(/UPDATE `?entries`?/i)
     expect(migration).not.toMatch(/DELETE FROM `?entries`?/i)
   })
+
+  it('adds the books entity and activity migration without backfilling legacy entries', () => {
+    const migration = readFileSync(
+      resolve(process.cwd(), 'packages/db/drizzle/0004_books_entity_and_activity.sql'),
+      'utf-8',
+    )
+
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS `books`')
+    expect(migration).toContain('`rating_tenths` integer')
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS `book_activities`')
+    expect(migration).toContain('`activity_type` text NOT NULL')
+    expect(migration).toContain('CREATE UNIQUE INDEX IF NOT EXISTS `book_activities_read_date_unique`')
+    expect(migration).toContain("WHERE `activity_type` = 'read'")
+    expect(migration).not.toMatch(/INSERT INTO `?entries`?/i)
+    expect(migration).not.toMatch(/UPDATE `?entries`?/i)
+    expect(migration).not.toMatch(/DELETE FROM `?entries`?/i)
+  })
 })

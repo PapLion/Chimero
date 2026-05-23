@@ -250,7 +250,7 @@ Units must be preserved from persisted values when the tracker stores a unit and
 | Diet / Calories | `Documentation/Contracts/Trackers/Diet-Calories.md` | Generic numeric tracker; broader Food/Diet intent documented without inventing schema. |
 | Exercise | `Documentation/Contracts/Trackers/Exercise.md` | Exercise search implemented; workout logging is generic metadata. |
 | Social | `Documentation/Contracts/Trackers/Social.md` | Generic Social entries plus contact interactions; entry/contact join is partial. |
-| Books | `Documentation/Contracts/Trackers/Books.md` | Generic media-style reading tracker; no forced pages-per-session. |
+| Books | `Documentation/Contracts/Trackers/Books.md` | Structured Books lifecycle tracker with linked reading activities; legacy generic entries remain readable. |
 | Gaming | `Documentation/Contracts/Trackers/Gaming.md` | Structured game session tracker with additive `entry_gaming` rows; legacy reads preserved, outcomes deferred. |
 | TV / Media | `Documentation/Contracts/Trackers/Media-TV.md` | Separate TV and Media tracker identities sharing generic media-style entry infrastructure; no catalog/status schema. |
 | Tasks | `Documentation/Contracts/Trackers/Tasks.md` | Generic task-style tracker with typed postpone metadata/read models; completion inferred from value. |
@@ -342,7 +342,7 @@ Do not duplicate incompatible tracker-specific shapes. Extend shared contracts d
 - Mood scale is now canonical 1-10 across create/edit/read surfaces, but it remains on generic entries and backend generic validation is still thinner than Weight.
 - Exercise structured workout logging is `CONTRACT_ONLY/FUTURE`.
 - Social contact interactions exist, but Social entry plus contact interaction linkage is partial.
-- Diet/Food, Books, TV, Media, and advanced Task semantics beyond postpone do not have specialized tables/services.
+- Diet/Food, TV, Media, and advanced Task semantics beyond postpone do not have specialized tables/services. Books has a structured lifecycle contract with linked reading activities; pages/progress, author, genre, reviews, catalog browsing, Mood correlations, and rereads remain deferred or rejected.
 - Multi-asset links exist at schema level, but current tracker mutations generally use a single `assetId`.
 - Calendar tag labels/assets and tag-based stats/widgets remain partial/future unless a specific implementation proves otherwise.
 

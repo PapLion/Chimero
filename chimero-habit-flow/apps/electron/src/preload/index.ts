@@ -70,6 +70,18 @@ const api: ElectronApi = {
   addGamingEntry: (data) => ipcRenderer.invoke('add-gaming-entry', data),
   updateGamingEntry: (entryId, updates) => ipcRenderer.invoke('update-gaming-entry', entryId, updates),
   getGamingDetail: (trackerId, options) => ipcRenderer.invoke('get-gaming-detail', trackerId, options),
+  getBook: (bookId: number) => ipcRenderer.invoke('get-book', bookId),
+  createBook: (data) => ipcRenderer.invoke('create-book', data),
+  startBook: (data) => ipcRenderer.invoke('start-book', data),
+  readBook: (data) => ipcRenderer.invoke('read-book', data),
+  finishBook: (data) => ipcRenderer.invoke('finish-book', data),
+  updateBook: (bookId, updates) => ipcRenderer.invoke('update-book', bookId, updates),
+  updateBookReadActivity: (entryId, updates) => ipcRenderer.invoke('update-book-read-activity', entryId, updates),
+  deleteBookReadActivity: (entryId) => ipcRenderer.invoke('delete-book-read-activity', entryId),
+  getBookHistory: (trackerId, options) => ipcRenderer.invoke('get-book-history', trackerId, options),
+  getBookStats: (trackerId, options) => ipcRenderer.invoke('get-book-stats', trackerId, options),
+  getBookSelectedDaySummary: (trackerId, selectedDate, options) =>
+    ipcRenderer.invoke('get-book-selected-day-summary', trackerId, selectedDate, options),
   // Contacts (Personal CRM)
   getContacts: () => ipcRenderer.invoke('get-contacts'),
   getContact: (id: number) => ipcRenderer.invoke('get-contact', id),

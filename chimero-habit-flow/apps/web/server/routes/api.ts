@@ -2,19 +2,28 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createReadStream, existsSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import { getWebDb, getAssetsRoot, getWebDbPath, type WebDb } from '../db'
+import { books, bookActivities } from '../../../../packages/db/src/schema'
 import { buildTagTree, resolveInheritedTagIds } from '../../../../packages/shared/src/domain/tags'
 import {
   buildCalendarDayEntry,
+  buildBookHistoryReadModel,
+  buildBookSelectedDayReadModel,
+  buildBookStatisticsReadModel,
   buildGamingDetailReadModel,
+  entryToBookHistoryItem,
   entryToGamingReadModel,
   getTaskActiveDate,
   getTaskStateForDate,
   normalizeGameKey,
   normalizeGamingTitle,
+  normalizeBookTitle,
+  normalizeBookTitleKey,
   validateEstimatedHours,
+  validateBookRatingTenths,
   isTaskTrackerLike,
   parseTaskStateMetadata,
 } from '../../../../packages/shared/src/domain'
+import { getBookLifecycleRecord } from '../../../../packages/shared/src/features/books'
 import { calculateWeightDetail } from '../../../../packages/shared/src/domain/weight'
 import { computeBestStreak, computeCurrentStreak } from '../../../../packages/shared/src/domain/streak'
 import type {
@@ -25,10 +34,19 @@ import type {
   ContactInsert,
   ContactUpdate,
   CorrelationQueryRequest,
+  Book,
+  BookActivityResponse,
+  BookHistoryItem,
+  BookResponse,
+  BookSelectedDaySummaryReadModel,
+  BookStatisticsReadModel,
+  CreateBookActivityRequest,
+  CreateBookRequest,
   CreateWeightEntryRequest,
   CreateGamingEntryRequest,
   Entry,
   EntryUpdateRequest,
+  BookActivityType,
   GamingDetailResponse,
   GamingEntryResponse,
   Reminder,
@@ -39,6 +57,8 @@ import type {
   TagRelationship,
   Tracker,
   TrackerGoal,
+  UpdateBookActivityRequest,
+  UpdateBookRequest,
   UpdateWeightEntryRequest,
   UpdateGamingEntryRequest,
   WeightEntry,
@@ -157,6 +177,11 @@ function mapEntry(row: JsonRecord): Entry {
   const gameTitle = row.game_title ?? row.gameTitle
   const gameKey = row.game_key ?? row.gameKey
   const estimatedHours = row.estimated_hours ?? row.estimatedHours
+  const bookStructured = row.book_structured ?? row.bookStructured
+  const bookId = row.book_id ?? row.bookId
+  const bookTitle = row.book_title ?? row.bookTitle
+  const bookTitleKey = row.book_title_key ?? row.bookTitleKey
+  const bookActivityType = row.book_activity_type ?? row.bookActivityType
   return {
     id: Number(row.id),
     trackerId: Number(row.tracker_id ?? row.trackerId),
@@ -167,11 +192,22 @@ function mapEntry(row: JsonRecord): Entry {
     dateStr: String(row.date_str ?? row.dateStr),
     assetId: row.asset_id == null ? null : Number(row.asset_id),
     gaming: gamingStructured
+        ? {
+            structured: true,
+            gameTitle: String(gameTitle ?? ''),
+            gameKey: String(gameKey ?? ''),
+            estimatedHours: Number(estimatedHours ?? 0),
+          }
+        : undefined,
+    book: bookStructured
       ? {
           structured: true,
-          gameTitle: String(gameTitle ?? ''),
-          gameKey: String(gameKey ?? ''),
-          estimatedHours: Number(estimatedHours ?? 0),
+          bookId: Number(bookId),
+          title: String(bookTitle ?? ''),
+          titleKey: String(bookTitleKey ?? ''),
+          activityType: (['started', 'read', 'finished'].includes(String(bookActivityType))
+            ? (bookActivityType as BookActivityType)
+            : 'read'),
         }
       : undefined,
   }
@@ -362,9 +398,16 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
           eg.entry_id AS gaming_structured,
           eg.game_title,
           eg.game_key,
-          eg.estimated_hours
+          eg.estimated_hours,
+          ba.entry_id AS book_structured,
+          ba.book_id,
+          b.title AS book_title,
+          b.title_key AS book_title_key,
+          ba.activity_type AS book_activity_type
         FROM entries e
         LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+        LEFT JOIN book_activities ba ON ba.entry_id = e.id
+        LEFT JOIN books b ON b.id = ba.book_id
         WHERE e.tracker_id = ?
         ORDER BY e.timestamp DESC
         LIMIT ?
@@ -377,9 +420,16 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
           eg.entry_id AS gaming_structured,
           eg.game_title,
           eg.game_key,
-          eg.estimated_hours
+          eg.estimated_hours,
+          ba.entry_id AS book_structured,
+          ba.book_id,
+          b.title AS book_title,
+          b.title_key AS book_title_key,
+          ba.activity_type AS book_activity_type
         FROM entries e
         LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+        LEFT JOIN book_activities ba ON ba.entry_id = e.id
+        LEFT JOIN books b ON b.id = ba.book_id
         ORDER BY e.timestamp DESC
         LIMIT ?
       `)
@@ -392,7 +442,53 @@ function addEntry(data: BaseEntryRequest): Entry | null {
   if (!Number.isFinite(data.timestamp)) throw new Error('Invalid timestamp')
   if (isGamingTracker(data.trackerId)) throw new Error('Use add-gaming-entry for Gaming entries')
   const dateStr = formatDateStr(data.timestamp)
+  const candidateEntry = mapEntry({
+    id: 0,
+    tracker_id: data.trackerId,
+    value: data.value ?? null,
+    note: data.note ?? null,
+    metadata: data.metadata ?? {},
+    timestamp: data.timestamp,
+    date_str: dateStr,
+    asset_id: data.assetId ?? null,
+  } as JsonRecord)
+  const candidateBook = getBookLifecycleRecord(candidateEntry)
   const insert = getDb().transaction(() => {
+    if (candidateBook.action === 'read' && !candidateBook.legacy) {
+      const rows = getDb()
+        .prepare(`
+          SELECT
+            e.*,
+            eg.entry_id AS gaming_structured,
+            eg.game_title,
+            eg.game_key,
+            eg.estimated_hours,
+            ba.entry_id AS book_structured,
+            ba.book_id,
+            b.title AS book_title,
+            b.title_key AS book_title_key,
+            ba.activity_type AS book_activity_type
+          FROM entries e
+          LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+          LEFT JOIN book_activities ba ON ba.entry_id = e.id
+          LEFT JOIN books b ON b.id = ba.book_id
+          WHERE e.tracker_id = ? AND e.date_str = ?
+          ORDER BY e.timestamp DESC
+        `)
+        .all(data.trackerId, dateStr)
+
+      const existing = rows
+        .map((row) => mapEntry(row as JsonRecord))
+        .find((entry) => {
+          const existingBook = getBookLifecycleRecord(entry)
+          return existingBook.action === 'read' && !existingBook.legacy && existingBook.title === candidateBook.title
+        })
+
+      if (existing) {
+        return existing.id
+      }
+    }
+
     const result = getDb()
       .prepare(`
         INSERT INTO entries (tracker_id, value, note, metadata, asset_id, timestamp, date_str)
@@ -411,8 +507,8 @@ function addEntry(data: BaseEntryRequest): Entry | null {
     replaceEntryTags(id, data.tagIds)
     return id
   })
-  const id = insert()
-  const row = getDb().prepare('SELECT * FROM entries WHERE id = ?').get(id)
+  if (insert == null) return null
+  const row = getDb().prepare('SELECT * FROM entries WHERE id = ?').get(insert)
   return row ? withTagIds([mapEntry(row as JsonRecord)])[0] : null
 }
 
@@ -421,15 +517,20 @@ function updateEntry(id: number, updates: EntryUpdateRequest): Entry | null {
     .prepare(`
       SELECT
         e.tracker_id,
-        eg.entry_id AS gaming_structured
+        eg.entry_id AS gaming_structured,
+        ba.entry_id AS book_structured
       FROM entries e
       LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+      LEFT JOIN book_activities ba ON ba.entry_id = e.id
       WHERE e.id = ?
       LIMIT 1
     `)
     .get(id) as JsonRecord | undefined
   if (existing?.gaming_structured && isGamingTracker(Number(existing.tracker_id))) {
     throw new Error('Use update-gaming-entry for structured Gaming entries')
+  }
+  if (existing?.book_structured && isBooksTracker(Number(existing.tracker_id))) {
+    throw new Error('Use the Books flow for structured Books entries')
   }
 
   const set: string[] = []
@@ -471,9 +572,30 @@ function updateEntry(id: number, updates: EntryUpdateRequest): Entry | null {
 }
 
 function deleteEntry(id: number): boolean {
+  const existing = getDb()
+    .prepare(`
+      SELECT
+        e.tracker_id,
+        eg.entry_id AS gaming_structured,
+        ba.entry_id AS book_structured
+      FROM entries e
+      LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+      LEFT JOIN book_activities ba ON ba.entry_id = e.id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(id) as JsonRecord | undefined
+  if (existing?.gaming_structured && isGamingTracker(Number(existing.tracker_id))) {
+    throw new Error('Use delete-gaming-entry logic for structured Gaming entries')
+  }
+  if (existing?.book_structured && isBooksTracker(Number(existing.tracker_id))) {
+    throw new Error('Use the Books flow for structured Books entries')
+  }
+
   getDb().transaction(() => {
     getDb().prepare('DELETE FROM entries_to_tags WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM entry_gaming WHERE entry_id = ?').run(id)
+    getDb().prepare('DELETE FROM book_activities WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM entry_weight WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM entries WHERE id = ?').run(id)
   })()
@@ -838,6 +960,12 @@ function isGamingTracker(trackerId: number): boolean {
   return getTrackerIdentity(mapTracker(row as JsonRecord)) === 'gaming'
 }
 
+function isBooksTracker(trackerId: number): boolean {
+  const row = getDb().prepare('SELECT * FROM trackers WHERE id = ? LIMIT 1').get(trackerId)
+  if (!row) return false
+  return getTrackerIdentity(mapTracker(row as JsonRecord)) === 'books'
+}
+
 function getGamingEntryById(entryId: number): GamingEntryResponse | null {
   const row = getDb()
     .prepare(`
@@ -971,6 +1099,362 @@ function updateGamingEntry(entryId: number, updates: UpdateGamingEntryRequest): 
 function getGamingDetail(trackerId: number, options: { limit?: number } = {}): GamingDetailResponse {
   const entries = getEntries({ trackerId, limit: options.limit ?? 365 })
   return buildGamingDetailReadModel(entries)
+}
+
+function assertFiniteNumber(value: number, label: string): void {
+  if (!Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite number`)
+  }
+}
+
+function assertDateString(value: string, label: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(`${label} must be an ISO date string in YYYY-MM-DD format`)
+  }
+  return value
+}
+
+function validateShelf(value: unknown): Book['shelf'] {
+  const allowed: Book['shelf'][] = ['tbr', 'reading', 'finished', 'paused', 'dropped']
+  if (value === undefined || value === null) return 'tbr'
+  const text = String(value)
+  if (!allowed.includes(text as Book['shelf'])) {
+    throw new Error(`Shelf must be one of: ${allowed.join(', ')}`)
+  }
+  return text as Book['shelf']
+}
+
+function validateStatus(value: unknown): Book['status'] {
+  const allowed: Book['status'][] = ['planned', 'active', 'completed', 'paused', 'dropped']
+  if (value === undefined || value === null) return 'planned'
+  const text = String(value)
+  if (!allowed.includes(text as Book['status'])) {
+    throw new Error(`Status must be one of: ${allowed.join(', ')}`)
+  }
+  return text as Book['status']
+}
+
+function mapBookRow(row: JsonRecord): Book {
+  return {
+    id: Number(row.id),
+    title: String(row.title ?? ''),
+    titleKey: String(row.title_key ?? row.titleKey ?? ''),
+    shelf: (row.shelf as Book['shelf']) ?? 'tbr',
+    status: (row.status as Book['status']) ?? 'planned',
+    startedDate: (row.started_date ?? row.startedDate ?? null) as string | null,
+    finishedDate: (row.finished_date ?? row.finishedDate ?? null) as string | null,
+    ratingTenths: row.rating_tenths == null ? (row.ratingTenths == null ? null : Number(row.ratingTenths)) : Number(row.rating_tenths),
+    createdAt: row.created_at == null ? (row.createdAt == null ? null : Number(row.createdAt)) : Number(row.created_at),
+    updatedAt: row.updated_at == null ? (row.updatedAt == null ? null : Number(row.updatedAt)) : Number(row.updated_at),
+  }
+}
+
+function getBookById(bookId: number): Book | null {
+  const row = getDb().prepare('SELECT * FROM books WHERE id = ? LIMIT 1').get(bookId)
+  return row ? mapBookRow(row as JsonRecord) : null
+}
+
+function getBookEntryById(entryId: number): BookActivityResponse | null {
+  const row = getDb()
+    .prepare(`
+      SELECT
+        e.id,
+        e.tracker_id,
+        e.timestamp,
+        e.date_str,
+        e.asset_id,
+        ba.entry_id AS book_structured,
+        ba.book_id,
+        b.title AS book_title,
+        b.title_key AS book_title_key,
+        ba.activity_type AS book_activity_type
+      FROM entries e
+      LEFT JOIN book_activities ba ON ba.entry_id = e.id
+      LEFT JOIN books b ON b.id = ba.book_id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+
+  if (!row) return null
+  const entry = mapEntry(row)
+  if (!entry.book?.structured) return null
+  const book = getBookById(entry.book.bookId)
+  if (!book) return null
+  return {
+    entry: entryToBookHistoryItem(entry) as BookActivityResponse['entry'],
+    book,
+    tags: tagsForEntry(entryId),
+  }
+}
+
+function getBook(bookId: number): BookResponse | null {
+  const row = getDb().prepare('SELECT * FROM books WHERE id = ? LIMIT 1').get(bookId)
+  return row ? { book: mapBookRow(row as JsonRecord) } : null
+}
+
+function getBookEntries(trackerId: number, limit = 365): Entry[] {
+  return getEntries({ trackerId, limit })
+}
+
+function applyBookActivityState(book: Book, activityType: BookActivityType, dateStr: string): Partial<Book> {
+  const next: Partial<Book> = { updatedAt: Date.now() }
+  if (activityType === 'started') {
+    next.shelf = 'reading'
+    next.status = 'active'
+    next.startedDate = book.startedDate ?? dateStr
+  }
+  if (activityType === 'read') {
+    next.shelf = book.status === 'completed' || book.status === 'dropped' ? book.shelf : 'reading'
+    next.status = book.status === 'completed' || book.status === 'dropped' ? book.status : 'active'
+    next.startedDate = book.startedDate ?? dateStr
+  }
+  if (activityType === 'finished') {
+    next.shelf = 'finished'
+    next.status = 'completed'
+    next.startedDate = book.startedDate ?? dateStr
+    next.finishedDate = dateStr
+  }
+  return next
+}
+
+function createBookActivity(
+  activityType: BookActivityType,
+  data: CreateBookActivityRequest,
+): BookActivityResponse | null {
+  if (!isBooksTracker(data.trackerId)) {
+    throw new Error('Book activities can only be created for the Books tracker')
+  }
+
+  assertFiniteNumber(data.timestamp, 'Timestamp')
+  const dateStr = formatDateStr(data.timestamp)
+  const book = getBookById(data.bookId)
+  if (!book) throw new Error('Book not found')
+
+  const inserted = getDb().transaction(() => {
+    if (activityType === 'read') {
+      const existing = getDb()
+        .prepare('SELECT entry_id AS entryId FROM book_activities WHERE book_id = ? AND date_str = ? AND activity_type = ? LIMIT 1')
+        .get(data.bookId, dateStr, 'read') as { entryId?: number } | undefined
+      if (existing?.entryId != null) {
+        return Number(existing.entryId)
+      }
+    }
+
+    const result = getDb()
+      .prepare(`
+        INSERT INTO entries (tracker_id, value, note, metadata, asset_id, timestamp, date_str)
+        VALUES (@trackerId, @value, @note, @metadata, @assetId, @timestamp, @dateStr)
+      `)
+      .run({
+        trackerId: data.trackerId,
+        value: null,
+        note: book.title,
+        metadata: JSON.stringify({ trackerKind: 'books', bookId: book.id, activityType }),
+        assetId: data.assetId ?? null,
+        timestamp: data.timestamp,
+        dateStr,
+      })
+    const entryId = Number(result.lastInsertRowid)
+    getDb()
+      .prepare('INSERT INTO book_activities (entry_id, book_id, activity_type, date_str) VALUES (?, ?, ?, ?)')
+      .run(entryId, data.bookId, activityType, dateStr)
+    replaceEntryTags(entryId, data.tagIds)
+
+    const bookUpdates = applyBookActivityState(book, activityType, dateStr)
+    if (Object.keys(bookUpdates).length > 0) {
+      const set: string[] = []
+      const params: JsonRecord = { id: book.id }
+      if (bookUpdates.updatedAt !== undefined) {
+        set.push('updated_at = @updatedAt')
+        params.updatedAt = bookUpdates.updatedAt
+      }
+      if (bookUpdates.shelf !== undefined) {
+        set.push('shelf = @shelf')
+        params.shelf = bookUpdates.shelf
+      }
+      if (bookUpdates.status !== undefined) {
+        set.push('status = @status')
+        params.status = bookUpdates.status
+      }
+      if (bookUpdates.startedDate !== undefined) {
+        set.push('started_date = @startedDate')
+        params.startedDate = bookUpdates.startedDate
+      }
+      if (bookUpdates.finishedDate !== undefined) {
+        set.push('finished_date = @finishedDate')
+        params.finishedDate = bookUpdates.finishedDate
+      }
+      if (set.length > 0) {
+        getDb().prepare(`UPDATE books SET ${set.join(', ')} WHERE id = @id`).run(params)
+      }
+    }
+
+    return entryId
+  })()
+
+  if (inserted == null) return null
+  return getBookEntryById(inserted)
+}
+
+function createBook(data: CreateBookRequest): BookResponse | null {
+  const title = normalizeBookTitle(data.title)
+  if (!title) throw new Error('Book title is required')
+  const result = getDb()
+    .prepare(`
+      INSERT INTO books (title, title_key, shelf, status, started_date, finished_date, rating_tenths, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .run(
+      title,
+      normalizeBookTitleKey(title),
+      validateShelf(data.shelf),
+      validateStatus(data.status),
+      data.startedDate == null ? null : assertDateString(data.startedDate, 'Started date'),
+      data.finishedDate == null ? null : assertDateString(data.finishedDate, 'Finished date'),
+      data.ratingTenths == null ? null : validateBookRatingTenths(data.ratingTenths),
+      Date.now(),
+      Date.now(),
+    )
+  const row = getDb().prepare('SELECT * FROM books WHERE id = ?').get(result.lastInsertRowid)
+  return row ? { book: mapBookRow(row as JsonRecord) } : null
+}
+
+function updateBook(bookId: number, updates: UpdateBookRequest): BookResponse | null {
+  const existing = getBookById(bookId)
+  if (!existing) return null
+
+  const set: string[] = ['updated_at = ?']
+  const params: Array<unknown> = [Date.now()]
+  if (updates.title !== undefined) {
+    const title = normalizeBookTitle(updates.title)
+    if (!title) throw new Error('Book title is required')
+    set.push('title = ?')
+    set.push('title_key = ?')
+    params.push(title, normalizeBookTitleKey(title))
+  }
+  if (updates.shelf !== undefined) {
+    set.push('shelf = ?')
+    params.push(validateShelf(updates.shelf))
+  }
+  if (updates.status !== undefined) {
+    set.push('status = ?')
+    params.push(validateStatus(updates.status))
+  }
+  if (updates.startedDate !== undefined) {
+    set.push('started_date = ?')
+    params.push(updates.startedDate == null ? null : assertDateString(updates.startedDate, 'Started date'))
+  }
+  if (updates.finishedDate !== undefined) {
+    set.push('finished_date = ?')
+    params.push(updates.finishedDate == null ? null : assertDateString(updates.finishedDate, 'Finished date'))
+  }
+  if (updates.ratingTenths !== undefined) {
+    set.push('rating_tenths = ?')
+    params.push(updates.ratingTenths == null ? null : validateBookRatingTenths(updates.ratingTenths))
+  }
+
+  params.push(bookId)
+  getDb().prepare(`UPDATE books SET ${set.join(', ')} WHERE id = ?`).run(...params)
+  const updated = getBookById(bookId)
+  return updated ? { book: updated } : null
+}
+
+function updateBookReadActivity(entryId: number, updates: UpdateBookActivityRequest): BookActivityResponse | null {
+  const existing = getDb()
+    .prepare(`
+      SELECT
+        e.tracker_id,
+        ba.entry_id AS book_structured,
+        ba.book_id AS book_id,
+        ba.activity_type AS activity_type
+      FROM entries e
+      LEFT JOIN book_activities ba ON ba.entry_id = e.id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+
+  if (!existing?.book_structured || !isBooksTracker(Number(existing.tracker_id)) || String(existing.activity_type) !== 'read') {
+    throw new Error('Structured book read activities can only be updated through the Books flow')
+  }
+  if (existing.book_id == null) {
+    throw new Error('Structured book read activities must reference a book')
+  }
+
+  const entrySet: Record<string, unknown> = {}
+  if (updates.timestamp !== undefined) {
+    assertFiniteNumber(updates.timestamp, 'Timestamp')
+    const dateStr = formatDateStr(updates.timestamp)
+
+    const duplicate = getDb()
+      .prepare('SELECT entry_id FROM book_activities WHERE book_id = ? AND date_str = ? AND activity_type = ? AND entry_id != ? LIMIT 1')
+      .all(existing.book_id, dateStr, 'read', entryId)
+    if (duplicate.length > 0) {
+      throw new Error('One read activity per book and date is allowed')
+    }
+    entrySet.timestamp = updates.timestamp
+    entrySet.dateStr = dateStr
+  }
+  if (updates.assetId !== undefined) entrySet.assetId = updates.assetId
+
+  getDb().transaction(() => {
+    if (entrySet.timestamp !== undefined) {
+      getDb().prepare('UPDATE entries SET timestamp = ? WHERE id = ?').run(entrySet.timestamp, entryId)
+    }
+    if (entrySet.dateStr !== undefined) {
+      getDb().prepare('UPDATE entries SET date_str = ? WHERE id = ?').run(entrySet.dateStr, entryId)
+      getDb().prepare('UPDATE book_activities SET date_str = ? WHERE entry_id = ?').run(entrySet.dateStr, entryId)
+    }
+    if (entrySet.assetId !== undefined) {
+      getDb().prepare('UPDATE entries SET asset_id = ? WHERE id = ?').run(entrySet.assetId ?? null, entryId)
+    }
+    replaceEntryTags(entryId, updates.tagIds)
+  })()
+
+  return getBookEntryById(entryId)
+}
+
+function deleteBookReadActivity(entryId: number): boolean {
+  const existing = getDb()
+    .prepare(`
+      SELECT
+        e.tracker_id,
+        ba.entry_id AS book_structured,
+        ba.activity_type AS activity_type
+      FROM entries e
+      LEFT JOIN book_activities ba ON ba.entry_id = e.id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+
+  if (!existing?.book_structured || !isBooksTracker(Number(existing.tracker_id)) || String(existing.activity_type) !== 'read') {
+    throw new Error('Structured book read activities can only be deleted through the Books flow')
+  }
+
+  getDb().transaction(() => {
+    getDb().prepare('DELETE FROM entries_to_tags WHERE entry_id = ?').run(entryId)
+    getDb().prepare('DELETE FROM book_activities WHERE entry_id = ?').run(entryId)
+    getDb().prepare('DELETE FROM entries WHERE id = ?').run(entryId)
+  })()
+  return true
+}
+
+function getBookHistory(trackerId: number, limit = 365): BookHistoryItem[] {
+  return buildBookHistoryReadModel(getBookEntries(trackerId, limit)).entries
+}
+
+function getBookStats(trackerId: number, limit = 365): BookStatisticsReadModel {
+  return buildBookStatisticsReadModel(getBookEntries(trackerId, limit))
+}
+
+function getBookSelectedDaySummary(trackerId: number, selectedDate: string, limit = 365): BookSelectedDaySummaryReadModel {
+  return buildBookSelectedDayReadModel(getBookEntries(trackerId, limit), {
+    trackerId,
+    title: 'Books',
+    selectedDate,
+  })
 }
 
 function safeAssetPath(encodedPath: string): string | null {
@@ -1141,6 +1625,66 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
 
   if (entryMatch && method === 'DELETE') {
     json(res, 200, deleteEntry(Number(entryMatch[1])))
+    return
+  }
+
+  if (path === '/api/books' && method === 'POST') {
+    json(res, 200, createBook(await readBody(req) as CreateBookRequest))
+    return
+  }
+
+  const bookMatch = path.match(/^\/api\/books\/(\d+)$/)
+  if (bookMatch && method === 'GET') {
+    json(res, 200, getBook(Number(bookMatch[1])))
+    return
+  }
+
+  if (path === '/api/books/start' && method === 'POST') {
+    json(res, 200, createBookActivity('started', await readBody(req) as CreateBookActivityRequest))
+    return
+  }
+
+  if (path === '/api/books/read' && method === 'POST') {
+    json(res, 200, createBookActivity('read', await readBody(req) as CreateBookActivityRequest))
+    return
+  }
+
+  if (path === '/api/books/finish' && method === 'POST') {
+    json(res, 200, createBookActivity('finished', await readBody(req) as CreateBookActivityRequest))
+    return
+  }
+
+  if (bookMatch && method === 'PUT') {
+    json(res, 200, updateBook(Number(bookMatch[1]), await readBody(req) as UpdateBookRequest))
+    return
+  }
+
+  const bookReadMatch = path.match(/^\/api\/books\/read\/(\d+)$/)
+  if (bookReadMatch && method === 'PUT') {
+    json(res, 200, updateBookReadActivity(Number(bookReadMatch[1]), asRecord(await readBody(req)) as UpdateBookActivityRequest))
+    return
+  }
+
+  if (bookReadMatch && method === 'DELETE') {
+    json(res, 200, deleteBookReadActivity(Number(bookReadMatch[1])))
+    return
+  }
+
+  const bookHistoryMatch = path.match(/^\/api\/books\/trackers\/(\d+)\/history$/)
+  if (bookHistoryMatch && method === 'GET') {
+    json(res, 200, getBookHistory(Number(bookHistoryMatch[1]), optionalInt(url.searchParams.get('limit')) ?? 365))
+    return
+  }
+
+  const bookStatsMatch = path.match(/^\/api\/books\/trackers\/(\d+)\/stats$/)
+  if (bookStatsMatch && method === 'GET') {
+    json(res, 200, getBookStats(Number(bookStatsMatch[1]), optionalInt(url.searchParams.get('limit')) ?? 365))
+    return
+  }
+
+  const bookSelectedDayMatch = path.match(/^\/api\/books\/trackers\/(\d+)\/selected-day\/([^/]+)$/)
+  if (bookSelectedDayMatch && method === 'GET') {
+    json(res, 200, getBookSelectedDaySummary(Number(bookSelectedDayMatch[1]), decodeURIComponent(bookSelectedDayMatch[2]), optionalInt(url.searchParams.get('limit')) ?? 365))
     return
   }
 

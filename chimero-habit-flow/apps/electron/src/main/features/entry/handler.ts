@@ -1,10 +1,11 @@
 import { ipcMain } from 'electron'
-import { desc, eq, sql } from 'drizzle-orm'
-import { entries, entriesToTags, entryGaming, entryWeight, trackers } from '@packages/db'
+import { and, desc, eq, sql } from 'drizzle-orm'
+import { books, bookActivities, entries, entriesToTags, entryGaming, entryWeight, trackers } from '@packages/db'
 import { getDb as db } from '@packages/db/database'
 import { mapEntry, mapTracker } from '../../shared/mappers'
 import type { BaseEntryRequest, EntryUpdateRequest, QuickEntryContextResponse } from '@contracts/contracts'
 import { getTrackerIdentity } from '@contracts/features/tracking'
+import { getBookLifecycleRecord } from '@contracts/features/books'
 import { getEntryTagIds, getTags, replaceEntryTags } from '../tags/service'
 
 function formatDateStr(timestamp: number): string {
@@ -23,47 +24,56 @@ async function isGamingTracker(trackerId: number): Promise<boolean> {
   return getTrackerIdentity(mapTracker(row as Record<string, unknown>)) === 'gaming'
 }
 
+async function isBooksTracker(trackerId: number): Promise<boolean> {
+  const [row] = await db()
+    .select()
+    .from(trackers)
+    .where(eq(trackers.id, trackerId))
+    .limit(1)
+
+  if (!row) return false
+  return getTrackerIdentity(mapTracker(row as Record<string, unknown>)) === 'books'
+}
+
+const entryProjection = {
+  id: entries.id,
+  trackerId: entries.trackerId,
+  value: entries.value,
+  note: entries.note,
+  metadata: entries.metadata,
+  timestamp: entries.timestamp,
+  dateStr: entries.dateStr,
+  assetId: entries.assetId,
+  gamingStructured: entryGaming.entryId,
+  gameTitle: entryGaming.gameTitle,
+  gameKey: entryGaming.gameKey,
+  estimatedHours: entryGaming.estimatedHours,
+  bookStructured: bookActivities.entryId,
+  bookId: bookActivities.bookId,
+  bookTitle: books.title,
+  bookTitleKey: books.titleKey,
+  bookActivityType: bookActivities.activityType,
+}
+
 export function registerEntryHandlers(): void {
   ipcMain.handle('get-entries', async (_, options?: { limit?: number; trackerId?: number }) => {
     try {
       const limit = options?.limit ?? 100
       const base = db()
-        .select({
-          id: entries.id,
-          trackerId: entries.trackerId,
-          value: entries.value,
-          note: entries.note,
-          metadata: entries.metadata,
-          timestamp: entries.timestamp,
-          dateStr: entries.dateStr,
-          assetId: entries.assetId,
-          gamingStructured: entryGaming.entryId,
-          gameTitle: entryGaming.gameTitle,
-          gameKey: entryGaming.gameKey,
-          estimatedHours: entryGaming.estimatedHours,
-        })
+        .select(entryProjection)
         .from(entries)
         .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
+        .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
+        .leftJoin(books, eq(bookActivities.bookId, books.id))
         .orderBy(desc(entries.timestamp))
         .limit(limit)
       const rows = options?.trackerId
         ? await db()
-          .select({
-            id: entries.id,
-            trackerId: entries.trackerId,
-            value: entries.value,
-            note: entries.note,
-            metadata: entries.metadata,
-            timestamp: entries.timestamp,
-            dateStr: entries.dateStr,
-            assetId: entries.assetId,
-            gamingStructured: entryGaming.entryId,
-            gameTitle: entryGaming.gameTitle,
-            gameKey: entryGaming.gameKey,
-            estimatedHours: entryGaming.estimatedHours,
-          })
+          .select(entryProjection)
           .from(entries)
           .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
+          .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
+          .leftJoin(books, eq(bookActivities.bookId, books.id))
           .where(eq(entries.trackerId, options.trackerId))
           .orderBy(desc(entries.timestamp))
           .limit(limit)
@@ -82,8 +92,60 @@ export function registerEntryHandlers(): void {
       if (await isGamingTracker(data.trackerId)) {
         throw new Error('Use add-gaming-entry for Gaming entries')
       }
+      const dateStr = formatDateStr(data.timestamp)
+      const candidateEntry = mapEntry({
+        id: 0,
+        tracker_id: data.trackerId,
+        value: data.value ?? null,
+        note: data.note ?? null,
+        metadata: data.metadata ?? {},
+        timestamp: data.timestamp,
+        date_str: dateStr,
+        asset_id: data.assetId ?? null,
+      } as Record<string, unknown>)
+      const candidateBook = getBookLifecycleRecord(candidateEntry)
       const database = db()
       const inserted = await database.transaction(async (tx) => {
+        if (candidateBook.action === 'read' && !candidateBook.legacy) {
+          const rows = await tx
+            .select({
+              id: entries.id,
+              trackerId: entries.trackerId,
+              value: entries.value,
+              note: entries.note,
+              metadata: entries.metadata,
+              timestamp: entries.timestamp,
+              dateStr: entries.dateStr,
+              assetId: entries.assetId,
+              gamingStructured: entryGaming.entryId,
+              gameTitle: entryGaming.gameTitle,
+              gameKey: entryGaming.gameKey,
+              estimatedHours: entryGaming.estimatedHours,
+              bookStructured: bookActivities.entryId,
+              bookId: bookActivities.bookId,
+              bookTitle: books.title,
+              bookTitleKey: books.titleKey,
+              bookActivityType: bookActivities.activityType,
+            })
+            .from(entries)
+            .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
+            .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
+            .leftJoin(books, eq(bookActivities.bookId, books.id))
+            .where(and(eq(entries.trackerId, data.trackerId), eq(entries.dateStr, dateStr)))
+            .orderBy(desc(entries.timestamp))
+
+          const existing = rows
+            .map((row) => mapEntry(row as Record<string, unknown>))
+            .find((entry) => {
+              const existingBook = getBookLifecycleRecord(entry)
+              return existingBook.action === 'read' && !existingBook.legacy && existingBook.title === candidateBook.title
+            })
+
+          if (existing) {
+            return existing.id
+          }
+        }
+
         const [row] = await tx
           .insert(entries)
           .values({
@@ -92,17 +154,24 @@ export function registerEntryHandlers(): void {
             note: data.note ?? null,
             metadata: JSON.stringify(data.metadata ?? {}),
             timestamp: data.timestamp,
-            dateStr: formatDateStr(data.timestamp),
+            dateStr,
             assetId: data.assetId ?? null,
           })
           .returning()
         if (!row) return null
         await replaceEntryTags((row as { id: number }).id, data.tagIds, tx)
-        return row
+        return (row as { id: number }).id
       })
-      if (!inserted) return null
-      const mapped = mapEntry(inserted as Record<string, unknown>)
-      return { ...mapped, tagIds: data.tagIds ?? [] }
+      if (inserted == null) return null
+      const [row] = await db()
+        .select()
+        .from(entries)
+        .where(eq(entries.id, inserted))
+        .limit(1)
+      if (!row) return null
+      const mapped = mapEntry(row as Record<string, unknown>)
+      const tagIdsByEntry = await getEntryTagIds([mapped.id])
+      return { ...mapped, tagIds: tagIdsByEntry.get(mapped.id) ?? [] }
     } catch (e) {
       console.error('add-entry error:', e)
       return null
@@ -115,15 +184,20 @@ export function registerEntryHandlers(): void {
         .select({
           trackerId: entries.trackerId,
           gamingStructured: entryGaming.entryId,
+          bookStructured: bookActivities.entryId,
         })
         .from(entries)
         .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
+        .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
         .where(eq(entries.id, id))
         .limit(1)
 
       if (!existing) return null
       if (existing.gamingStructured && await isGamingTracker(existing.trackerId)) {
         throw new Error('Use update-gaming-entry for structured Gaming entries')
+      }
+      if (existing.bookStructured && await isBooksTracker(existing.trackerId)) {
+        throw new Error('Use the Books flow for structured Books entries')
       }
 
       const set: Record<string, unknown> = {}
@@ -156,10 +230,30 @@ export function registerEntryHandlers(): void {
 
   ipcMain.handle('delete-entry', async (_, id: number) => {
     try {
+      const [existing] = await db()
+        .select({
+          trackerId: entries.trackerId,
+          gamingStructured: entryGaming.entryId,
+          bookStructured: bookActivities.entryId,
+        })
+        .from(entries)
+        .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
+        .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
+        .where(eq(entries.id, id))
+        .limit(1)
+
+      if (existing?.gamingStructured && await isGamingTracker(existing.trackerId)) {
+        throw new Error('Use delete-gaming-entry logic for structured Gaming entries')
+      }
+      if (existing?.bookStructured && await isBooksTracker(existing.trackerId)) {
+        throw new Error('Use the Books flow for structured Books entries')
+      }
+
       const database = db()
       await database.transaction(async (tx) => {
         await tx.delete(entriesToTags).where(eq(entriesToTags.entryId, id))
         await tx.delete(entryGaming).where(eq(entryGaming.entryId, id))
+        await tx.delete(bookActivities).where(eq(bookActivities.entryId, id))
         await tx.delete(entryWeight).where(eq(entryWeight.entryId, id))
         await tx.delete(entries).where(eq(entries.id, id))
       })
@@ -174,21 +268,11 @@ export function registerEntryHandlers(): void {
     try {
       const limit = options?.limit ?? 100
       const rows = await db()
-        .select({
-          id: entries.id,
-          trackerId: entries.trackerId,
-          value: entries.value,
-          note: entries.note,
-          metadata: entries.metadata,
-          timestamp: entries.timestamp,
-          dateStr: entries.dateStr,
-          assetId: entries.assetId,
-          gamingStructured: entryGaming.entryId,
-          gameTitle: entryGaming.gameTitle,
-          gameKey: entryGaming.gameKey,
-          estimatedHours: entryGaming.estimatedHours,
-        })
+        .select(entryProjection)
         .from(entries)
+        .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
+        .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
+        .leftJoin(books, eq(bookActivities.bookId, books.id))
         .where(eq(entries.trackerId, trackerId))
         .orderBy(desc(entries.timestamp))
         .limit(limit)

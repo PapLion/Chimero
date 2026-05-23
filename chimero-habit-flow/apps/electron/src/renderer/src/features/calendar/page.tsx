@@ -10,6 +10,7 @@ import { TimelineView } from "./components/TimelineView"
 import { TagChips } from "@features/tags/components/TagChips"
 import type { CalendarDayEntry } from "@contracts/features/calendar"
 import { clampMoodScore, moodScoreToColor, moodScoreToLabel } from "@contracts/domain"
+import { getBookActionLabel, getBookLifecycleRecord } from "@contracts/features/books"
 import { getTrackerIdentity } from "@contracts/features/tracking"
 
 const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -55,6 +56,11 @@ export function CalendarPage() {
     const dateStr = new Date(currentYear, currentMonth, selectedDay).toISOString().slice(0, 10)
     return entriesByDate[dateStr] ?? []
   }, [entriesByDate, selectedDay, currentMonth, currentYear])
+  const { data: allEntries = [] } = useEntries()
+  const allEntriesById = useMemo(
+    () => new Map(allEntries.map((entry) => [entry.id, entry])),
+    [allEntries],
+  )
 
   // For selected day: show reminders that apply (one-off date match or recurring weekday match).
   const selectedDayReminders = useMemo(() => {
@@ -119,9 +125,6 @@ export function CalendarPage() {
     })
     return map
   }, [entriesByDate, trackers, hiddenCalendarTrackers])
-
-  // Fetch all entries for pills calculation
-  const { data: allEntries = [] } = useEntries()
 
   // Trackers con entries en el mes actual (para pills de Calendar)
   const trackersWithCalendarEntries = useMemo(() => {
@@ -452,14 +455,17 @@ export function CalendarPage() {
                       {selectedDayEntries.length > 0 ? (
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                           {selectedDayEntries.map((entry) => {
+                            const detailedEntry = allEntriesById.get(entry.id) ?? null
                             const tracker = trackers.find((t) => t.id === entry.trackerId)
                             const displayUnit = entry.unit ?? (tracker?.config?.unit as string | undefined)
                             const trackerNameLower = tracker?.name.toLowerCase() ?? ""
                             const isMoodEntry = trackerNameLower.includes("mood") || trackerNameLower.includes("feeling") || tracker?.icon === "smile"
                             const isTaskEntry = !!entry.taskState
                             const isGamingTracker = tracker ? getTrackerIdentity(tracker) === "gaming" : false
+                            const isBooksTracker = tracker ? getTrackerIdentity(tracker) === "books" : false
                             const gaming = entry.gaming?.structured ? entry.gaming : null
                             const legacyGaming = isGamingTracker && !gaming
+                            const book = isBooksTracker && detailedEntry ? getBookLifecycleRecord(detailedEntry as Entry) : null
                             const moodScore = isMoodEntry ? clampMoodScore(entry.value) : null
                             const entryTime = new Date(entry.timestamp).toLocaleTimeString(undefined, {
                               hour: "2-digit",
@@ -481,16 +487,18 @@ export function CalendarPage() {
                                   />
                                 </div>
                                 <p className="text-2xl font-display font-bold text-[hsl(var(--primary))]">
-                                  {isTaskEntry
-                                    ? (entry.taskState === "postponed" ? "Postponed" : "Task")
-                                    : gaming
-                                      ? `${gaming.estimatedHours}h`
-                                      : isMoodEntry && moodScore != null
-                                        ? `${moodScore}/10`
-                                        : legacyGaming
-                                          ? "Legacy"
-                                          : entry.value ?? "—"}
-                                  {!isTaskEntry && !isMoodEntry && displayUnit && (
+                                  {isBooksTracker && book
+                                    ? (book.action === "legacy" ? "Legacy" : getBookActionLabel(book.action))
+                                    : isTaskEntry
+                                      ? (entry.taskState === "postponed" ? "Postponed" : "Task")
+                                      : gaming
+                                        ? `${gaming.estimatedHours}h`
+                                        : isMoodEntry && moodScore != null
+                                          ? `${moodScore}/10`
+                                          : legacyGaming
+                                            ? "Legacy"
+                                            : entry.value ?? "—"}
+                                  {!isTaskEntry && !isMoodEntry && !isBooksTracker && displayUnit && (
                                     <span className="ml-1 text-sm font-normal text-[hsl(var(--muted-foreground))]">
                                       {displayUnit}
                                     </span>
@@ -518,6 +526,11 @@ export function CalendarPage() {
                                     {moodScoreToLabel(moodScore)}
                                   </p>
                                 )}
+                                {isBooksTracker && book && (
+                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                    {book.title}
+                                  </p>
+                                )}
                                 {legacyGaming && (
                                   <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
                                     Unstructured legacy game entry
@@ -526,13 +539,21 @@ export function CalendarPage() {
                                 {legacyGaming && entry.note && (
                                   <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
                                 )}
+                                {isBooksTracker && book && book.rating != null && (
+                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                    {book.rating.toFixed(1)}/5
+                                  </p>
+                                )}
+                                {isBooksTracker && book && book.action === "legacy" && entry.note && (
+                                  <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                )}
                                 {(entry as CalendarDayEntry).waist != null && (
                                   <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
                                     Waist {(entry as CalendarDayEntry).waist}
                                     {(entry as CalendarDayEntry).waistUnit ? ` ${(entry as CalendarDayEntry).waistUnit}` : ""}
                                   </p>
                                 )}
-                                {entry.note && !gaming && !legacyGaming && (
+                                {entry.note && !gaming && !legacyGaming && !isBooksTracker && (
                                   <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
                                 )}
                                 {gaming && (

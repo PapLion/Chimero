@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type { Tracker, Entry } from './store'
-import type { BaseEntryRequest, CreateGamingEntryRequest, CreateWeightEntryRequest, EntryUpdateRequest, GamingDetailResponse, GamingEntryResponse, SetTrackerGoalRequest, TrackerConfig, UpdateGamingEntryRequest, UpdateWeightEntryRequest } from '@contracts/contracts'
+import type { BaseEntryRequest, BookActivityResponse, BookResponse, CreateBookActivityRequest, CreateBookRequest, CreateGamingEntryRequest, CreateWeightEntryRequest, EntryUpdateRequest, GamingDetailResponse, GamingEntryResponse, SetTrackerGoalRequest, TrackerConfig, UpdateBookActivityRequest, UpdateBookRequest, UpdateGamingEntryRequest, UpdateWeightEntryRequest } from '@contracts/contracts'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
 export const queryKeys = {
@@ -34,6 +34,8 @@ export const queryKeys = {
   weightGoal: (trackerId: number) => ['weight-goal', trackerId] as const,
   gamingDetail: (trackerId: number) => ['gaming-detail', trackerId] as const,
   gamingDetailRoot: ['gaming-detail'] as const,
+  book: (bookId: number) => ['book', bookId] as const,
+  bookRoot: ['book'] as const,
   // Contacts
   contacts: ['contacts'] as const,
   contact: (id: number) => ['contact', id] as const,
@@ -160,6 +162,15 @@ export function useGamingDetail(trackerId: number, enabled = true) {
   })
 }
 
+export function useBook(bookId: number | null | undefined, enabled = true) {
+  return useQuery({
+    queryKey: bookId == null ? queryKeys.bookRoot : queryKeys.book(bookId),
+    queryFn: () => api.getBook(bookId as number),
+    enabled: enabled && bookId != null,
+    staleTime: 15_000,
+  })
+}
+
 export function useCalendarMonth(year: number, month: number) {
   return useQuery({
     queryKey: queryKeys.calendarMonth(year, month),
@@ -247,6 +258,92 @@ export function useAddGamingEntryMutation() {
       qc.invalidateQueries({ queryKey: queryKeys.stats })
       qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
       qc.invalidateQueries({ queryKey: queryKeys.gamingDetail(variables.trackerId) })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useCreateBookMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateBookRequest) => api.createBook(data) as Promise<BookResponse | null>,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+function useBookActivityMutation(
+  mutate: (data: CreateBookActivityRequest) => Promise<BookActivityResponse | null>,
+) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: mutate,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useStartBookMutation() {
+  return useBookActivityMutation((data) => api.startBook(data) as Promise<BookActivityResponse | null>)
+}
+
+export function useReadBookMutation() {
+  return useBookActivityMutation((data) => api.readBook(data) as Promise<BookActivityResponse | null>)
+}
+
+export function useFinishBookMutation() {
+  return useBookActivityMutation((data) => api.finishBook(data) as Promise<BookActivityResponse | null>)
+}
+
+export function useUpdateBookMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ bookId, updates }: { bookId: number; updates: UpdateBookRequest }) =>
+      api.updateBook(bookId, updates) as Promise<BookResponse | null>,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useUpdateBookReadActivityMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ entryId, updates }: { entryId: number; updates: UpdateBookActivityRequest }) =>
+      api.updateBookReadActivity(entryId, updates) as Promise<BookActivityResponse | null>,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useDeleteBookReadActivityMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (entryId: number) => api.deleteBookReadActivity(entryId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
       qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
     },
   })

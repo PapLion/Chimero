@@ -101,7 +101,11 @@ export function getTrackerIdentity(tracker: Pick<Tracker, 'name' | 'icon' | 'con
 
 export function usesMediaStyleRendering(tracker: Pick<Tracker, 'name' | 'icon' | 'config'>): boolean {
   const identity = getTrackerIdentity(tracker)
-  return identity === 'books' || identity === 'gaming' || identity === 'tv' || identity === 'media' || identity === 'legacy-media-tv'
+  return identity === 'gaming' || identity === 'tv' || identity === 'media' || identity === 'legacy-media-tv'
+}
+
+export function isBooksTracker(tracker: Pick<Tracker, 'name' | 'icon' | 'config'>): boolean {
+  return getTrackerIdentity(tracker) === 'books'
 }
 
 export function planDefaultTrackerSeedActions(input: {
