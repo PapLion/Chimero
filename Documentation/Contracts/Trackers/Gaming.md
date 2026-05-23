@@ -2,204 +2,187 @@
 
 ## 1. Purpose
 
-Gaming tracks game sessions with game played, estimated duration/value, optional win/loss only for games where the user records it, mood-correlation intent as future/generic insight support, per-game breakdowns, and calendar day summaries.
+Gaming tracks daily game sessions with a structured title, a normalized local grouping key, estimated hours, tags, assets, and selected-day summaries. Wins/losses, platform, mode, catalog identity, and mood correlation by game remain future scope.
 
 ## 2. Current Implementation Status
 
-- Status: GENERIC_MEDIA_STYLE_IMPLEMENTED.
-- Gaming is seeded/default and also available as a preset.
-- Quick Entry is text-first with optional numeric secondary value.
-- BentoGrid uses the Media widget for game-like trackers.
-- No game catalog, session table, platform field, win/loss field, or playtime validator exists today.
+- Status: STRUCTURED_ENTRY_FOUNDATION_IMPLEMENTED.
+- Gaming is seeded/default and available as a preset.
+- New Gaming entries use `entries` plus the additive `entry_gaming` extension row.
+- Legacy generic Gaming entries remain readable, but they are unstructured and excluded from verified structured-hour totals.
+- No game catalog, platform field, outcome-capability model, or win/loss schema exists yet.
 
 ## 3. Surface Contract / Frontend
 
 ### 3.1 Quick Entry / Edit Entry Input
 
-- Quick Entry captures game name in note/text.
-- Quick Entry may capture estimated duration/hours/rating as generic `value` or note text.
-- Optional win/loss is Future unless stored by user convention in note/tags.
-- Edit Entry updates generic note/game name, value/duration, timestamp, tags, and asset reference.
-- Delete uses generic delete behavior.
+- Quick Entry captures `gameTitle` and `estimatedHours` for structured Gaming entries.
+- Edit Entry can update `gameTitle`, `estimatedHours`, timestamp/date, tags, and assets.
+- Legacy generic Gaming entries can still be read and edited with generic fallback behavior.
+- Wins/losses, platform, mode, rating, and progress are still Future.
 
 ### 3.2 BentoGrid / Home Widget Read Model
 
-- Shows recent games from notes.
-- Shows screenshot/asset if attached.
-- Shows generic value when present.
+- Shows the latest structured game title and estimated hours.
+- Shows the selected-day structured game title and hours when available.
+- Shows an attached asset if present.
+- Does not surface fake totals from legacy values.
 
 ### 3.3 Tracker Detail / Entries Tab Read Model
 
-- Shows game/session entries with note/game name, optional value, timestamp, tags, assets, edit, and delete.
-- Does not require platform, win/loss, or structured game identity.
+- Shows structured game title, estimated hours, timestamp, tags, assets, edit, and delete.
+- Shows legacy unstructured history distinctly when present.
 
 ### 3.4 Tracker Detail / Statistics Tab Read Model
 
-- May show total entries, entries this week/year, days since last game, generic average value, and per-game counts if title parsing is reliable.
-- Per-game breakdowns are Future unless a stable game identity field exists.
+- Shows structured total hours, structured entry count, legacy entry count, and per-game grouped hours.
+- Legacy generic values are excluded from verified structured-hour totals.
 
 ### 3.5 Tracker Detail / Graphs Tab Read Model
 
-- Relevant for generic frequency/value over time.
-- Playtime graphs are only valid if duration is consistently captured as numeric value.
+- Uses structured hours over time only.
+- Must not treat legacy values as verified playtime.
 
 ### 3.6 Calendar Selected-Day Summary Read Model
 
-- Shows selected-day game/session title, optional duration/value, timestamp, tags, and asset reference.
+- Shows selected-day structured game title, estimated hours, timestamp, tags, and assets.
+- Legacy generic entries may still appear, but they must be marked as unstructured.
 
 ### 3.7 Insights / Correlations Read Model
 
-- Generic correlations can use Gaming values/counts by tracker ID.
-- Mood correlation intent is Future unless explicitly requested through Insight Lab and represented by comparable data.
+- Gaming counts and hours can be consumed later by insights.
+- Mood-by-game and losing-by-game correlations are still Future.
 
 ## 4. Deep Contract / Backend-Service
 
-### 1. Backend Entry Point
+### 4.1 Backend Entry Point
 
-- Status: GENERIC_ENTRY_ONLY.
-- Implemented generic IPC/API methods: `add-entry`, `update-entry`, `delete-entry`, `get-entries`, `get-stats`, `get-correlation-result`, `get-calendar-month`.
-- There is no Gaming-specific service, game catalog endpoint, session endpoint, win/loss endpoint, or playtime validator today.
-- Per-game breakdowns and timeline enhancements are FUTURE unless a stable game identity field is added.
+- Status: STRUCTURED_GAMING_SERVICE_PRESENT.
+- Implemented methods include `add-gaming-entry`, `update-gaming-entry`, `get-gaming-detail`, plus shared entry/calendar reads that expose Gaming rows honestly.
+- Structured Gaming writes validate title and hours before persisting the extension row.
 
-### 2. Request Validation
+### 4.2 Request Validation
 
-- Current fields: `trackerId`, game/session title in `note`, optional duration/rating in `value`, `timestamp`, optional `assetId`, optional `tagIds`.
-- Current backend does not require non-empty title, validate duration units, validate win/loss enums, enforce platform/game identity, or check per-game catalog references.
-- Mood correlation intent is not a request field; it remains generic Insight Lab selection.
-- Invalid generic writes return `null` or `false`.
+- Structured fields: `trackerId`, `gameTitle`, `estimatedHours`, `timestamp`, optional `assetId`, optional `tagIds`.
+- The backend requires a non-empty title and a finite non-negative hour value.
+- Legacy generic Gaming rows remain readable, but they are not backfilled or reinterpreted as structured hours.
 
-### 3. Normalization
+### 4.3 Normalization
 
 - Backend computes `dateStr` from `timestamp`.
-- `note` stores free text game/session identity; `value` stays a generic number.
-- `metadata` defaults to `{}`; future game IDs/results should not be treated as reliable while ad hoc metadata.
-- `assetId` defaults to `null`; tags follow generic replacement semantics.
-- Reads sort newest-first; calendar sorts by timestamp.
+- `gameTitle` is trimmed and collapsed for display.
+- `gameKey` is a normalized local grouping key derived from the title.
+- `estimatedHours` is stored as a validated numeric hour value.
 
-### 4. Persistence Plan
+### 4.4 Persistence Plan
 
 Write flow:
 
 1. Insert/update base entry in `entries`.
-2. Insert/update specialized tracker table if needed: none exists for Gaming.
-3. Insert/update junction rows in `entries_to_tags` when `tagIds` is provided.
-4. Update related entity state if needed: none today.
-5. Return mapped generic `Entry` contract.
+2. Insert/update structured Gaming row in `entry_gaming`.
+3. Insert/update tag joins in `entries_to_tags` when `tagIds` is provided.
+4. Return a mapped shared Gaming read model.
 
-- Generic entry/tag writes are transactional.
-- Delete removes the entry/tag joins; screenshots/assets are not deleted.
-- Analytics fields such as game identity, duration, and result should become structural before backend per-game stats depend on them.
+- Gaming writes are transactional across base row, extension row, and tags.
+- Delete removes the extension row safely along with the base entry.
+- Legacy generic Gaming entries are not backfilled into structured rows.
 
-### 5. Read / Query Plan
+### 4.5 Read / Query Plan
 
-- BentoGrid: reads recent generic entries and renders note/title, optional value, optional asset.
-- Entries tab: reads entries by tracker newest-first with title/note, value, timestamp, tags, assets.
-- Statistics tab: generic stats can compute total entries, active days, items this week/year, average value, and days since last entry.
-- Graphs: generic frequency/value over time; playtime graphs are valid only if value consistently means duration.
-- Calendar selected-day: month query returns each session with note/title, value, asset, tags.
-- Edit Entry prefill: generic entry response with note/value/timestamp/asset/tags.
-- Correlation/Insight: generic correlation can use count/value; mood correlation is FUTURE unless explicitly run through generic Insight Lab with sufficient data.
-- Empty state: no sessions returns empty arrays/neutral metrics.
+- BentoGrid: latest structured game plus selected-day summary.
+- Entries tab: structured title, key, hours, timestamp, tags, assets, edit, delete.
+- Statistics tab: structured total hours, entry count, legacy count, per-game hours.
+- Graphs: structured hours over time only.
+- Calendar selected-day: same-day structured Gaming entries with honest hours.
+- Edit Entry prefill: structured title, key, hours, timestamp, asset, tags.
 
-### 6. Computed Metrics
+### 4.6 Computed Metrics
 
-- Implemented/generic: entry count, active days, generic series, average value, generic correlation confidence/caveat.
-- Future: per-game breakdown, total playtime by game, win/loss rate, platform stats, timeline-specific session model.
-- Metrics are computed on read, not cached/denormalized.
+- Implemented: structured total hours, structured entry count, legacy count, per-game grouped hours, day series.
+- Future: win/loss rate, platform stats, timeline-by-game spans, outcome-aware mood correlations.
 
-### 7. Response Mapping
+### 4.7 Response Mapping
 
-- Flow: `entries` DB rows -> `mapEntry` -> shared `Entry` -> Gaming media-style surface response.
+- Flow: `entries` + `entry_gaming` DB rows -> shared Gaming read models -> UI surfaces.
 - Raw DB rows never return to renderer surfaces.
-- Missing title/value/result/asset/tags return `null` or `[]`.
-- Duration and game title display remains frontend-owned until a shared Gaming contract exists.
+- Missing structured data returns a legacy/unstructured read model instead of fabricated hours.
 
-### 8. Error Handling
+### 4.8 Error Handling
 
-- Invalid generic entry/DB failure returns `null` or `false`.
-- Missing tracker/entry/tag/asset uses generic null/empty fallback.
+- Invalid structured Gaming entry returns a safe failure/null response through the runtime adapter.
 - Empty dataset returns empty state.
-- Unsupported game identity/win-loss/per-game stats should be marked Future, not inferred as implemented.
+- Unsupported win/loss/platform/correlation behavior must remain marked Future.
 
-### 9. Transaction Rules
+### 4.9 Transaction Rules
 
-- Generic add/update/delete are transactional for `entries` and `entries_to_tags`.
-- No specialized Gaming related rows exist today.
-- Current status: transaction safety is IMPLEMENTED for generic entry/tag writes.
+- Gaming add/update/delete are transactional for `entries`, `entry_gaming`, and `entries_to_tags`.
+- Current status: transaction safety is implemented for structured Gaming writes.
 
-### 10. Data Ownership Rules
+### 4.10 Data Ownership Rules
 
-Frontend owns: capture, display, UI state, visual formatting.
-Backend owns: validation, normalization, derived metrics, relation resolution, persistence orchestration, response mapping.
-Database owns: durable storage, relational integrity, queryable structure.
-Shared contracts own: request/response shapes, app-facing types, pure domain helpers when reusable.
+- Frontend owns capture and display.
+- Backend owns validation, normalization, derived metrics, and response mapping.
+- Database owns durable storage and relational integrity.
+- Shared contracts own app-facing request/response shapes and pure domain helpers.
 
-### 11. Deep Contract Status
+### 4.11 Deep Contract Status
 
-- Status: GENERIC_ENTRY_ONLY.
-- Implemented: generic game session entries, media-style widget/detail/calendar, assets/tags, generic stats/correlation compatibility.
-- Gaps: game entity/catalog, structured session duration, win/loss, per-game breakdown, mood-correlation-specific backend model, timeline-specific session support.
+- Status: STRUCTURED_GAMING_FOUNDATION.
+- Implemented: structured title, normalized key, estimated hours, additive extension table, honest read models, compact widget/detail/calendar support.
+- Gaps: outcome-capability model, win/loss, platform, mode, catalog/entity system, mood correlation by game, timeline-by-game surfacing.
 
 ## 5. Persistence and Schema / Database
 
-- `trackers`: Gaming uses text/gamepad-style config.
-- `entries.note`: game/session/progress text.
-- `entries.value`: optional generic value such as hours/rating.
-- `entries.timestamp` and `entries.date_str`: session event time/day.
-- `entries.metadata`: generic/empty today.
-- `entries.asset_id`: optional screenshot/photo.
+- `entries`: shared base row for timestamp, note, asset, and tags compatibility.
+- `entry_gaming`: structured extension row with `game_title`, `game_key`, and `estimated_hours`.
 - `entries_to_tags`: explicit tags.
+- Legacy generic Gaming entries without `entry_gaming` remain readable but unstructured.
 
 ## 6. Input / Output Contracts
 
 ```ts
-type CreateGamingEntryRequest = BaseEntryRequest & {
+type CreateGamingEntryRequest = {
   trackerId: number
-  note: string | null
-  value?: number | null
+  gameTitle: string
+  estimatedHours: number
   timestamp: number
   assetId?: number | null
   tagIds?: number[]
-  metadata?: {
-    gameId?: Future<string>
-    gameTitle?: Future<string>
-    durationMinutes?: Future<number>
-    result?: Future<"win" | "loss" | "draw" | "not_applicable">
-  }
 }
 
-type UpdateGamingEntryRequest = Partial<Omit<CreateGamingEntryRequest, "trackerId">>
+type UpdateGamingEntryRequest = {
+  gameTitle?: string
+  estimatedHours?: number
+  timestamp?: number
+  assetId?: number | null
+  tagIds?: number[]
+}
 
-type GamingEntryResponse = BaseEntryResponse
+type GamingEntryResponse = {
+  entry: GamingEntryReadModel
+  tags: Tag[]
+}
 
 type GamingDetailResponse = {
-  entries: BaseEntryResponse["entry"][]
+  current: GamingEntryReadModel | null
+  history: GamingHistoryItem[]
+  chartData: Array<{ date: string; value: number; count: number }>
+  totalHours: number
+  structuredEntryCount: number
+  legacyEntryCount: number
+  perGameHours: Array<{ gameTitle: string; gameKey: string; hours: number; entryCount: number }>
 }
 
-type GamingBentoWidgetResponse = {
+type GamingHomeWidgetReadModel = {
   trackerId: number
-  recentItems: Array<{ entryId: number; title: string; value?: number | null; asset?: AssetSummary | null }>
-}
-
-type GamingEntriesTabResponse = {
-  entries: Array<BaseEntryResponse["entry"] & { tags?: TagSummary[]; assets?: AssetSummary[] }>
-}
-
-type GamingStatisticsResponse = {
-  totalEntries: number
-  itemsThisWeek?: number
-  itemsThisYear?: number
-  daysSinceLastEntry?: number | null
-  perGameBreakdown?: Future<Array<{ game: string; count: number; duration?: number }>>
-}
-
-type GamingCalendarDayResponse = TimelineEvent & {
-  entryId: number
-  trackerId: number
-  game?: string | null
-  value?: number | null
-  tagIds?: number[]
-  assets?: AssetSummary[]
+  title: string
+  currentGameTitle: string | null
+  currentEstimatedHours: number | null
+  selectedDayGameTitle: string | null
+  selectedDayEstimatedHours: number | null
+  totalHours: number
+  legacyEntryCount: number
+  sparkline: Array<{ date: string; value: number }>
 }
 ```
 
@@ -207,11 +190,11 @@ type GamingCalendarDayResponse = TimelineEvent & {
 
 | Field | Quick Entry | Edit Entry | DB | Backend Computed | BentoGrid | Entries Tab | Statistics Tab | Graphs Tab | Calendar | Insights/Correlations |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| game played/title | Yes | Yes | Yes | No | Yes | Yes | Optional | No | Yes | Optional |
-| estimated duration/value | Optional | Optional | Optional | Optional | Optional | Optional | Optional | Optional | Optional | Optional |
+| game title | Yes | Yes | Yes | No | Yes | Yes | Yes | No | Yes | Optional |
+| estimated hours | Yes | Yes | Yes | No | Yes | Yes | Yes | Yes | Yes | Optional |
 | win/loss | Future | Future | Future | Future | Future | Future | Future | Future | Future | Future |
 | platform/game identity | Future | Future | Future | Future | Future | Future | Future | Future | Future | Future |
-| per-game breakdown | No | No | No | Future | Future | No | Future | Future | Future | Future |
+| per-game breakdown | No | No | No | Future | Future | No | Yes | Future | Future | Future |
 | mood correlation | No | No | No | Future | No | No | Future | Future | No | Future |
 | tagIds | Optional | Optional | Yes | Optional | No | Yes | Future | Future | Optional | Future |
 | assets | Optional | Optional | Optional | Optional | Optional | Yes | No | No | Optional | Future |
@@ -233,14 +216,14 @@ type GamingCalendarDayResponse = TimelineEvent & {
 ## 9. Deep Contract Checklist
 
 - [x] Does backend have a clear entry point?
-- [ ] Does backend validate all request fields? Game/session-specific fields are not validated.
+- [x] Does backend validate all request fields that are now structural?
 - [x] Does backend normalize timestamp/dateStr/defaults?
 - [x] Does backend know which tables to write?
 - [x] Does backend write related rows transactionally?
 - [x] Does backend know which tables to read for each surface?
-- [ ] Does backend compute metrics instead of frontend? Only generic stats exist.
+- [x] Does backend compute metrics instead of frontend?
 - [x] Does backend map DB rows into shared contracts?
 - [x] Does backend handle empty/insufficient data?
-- [ ] Does backend return clear errors/warnings? Current path uses generic fallbacks.
+- [x] Does backend return clear errors/warnings?
 - [x] Does delete/update affect related rows safely?
 - [x] Is current implementation status honest?
