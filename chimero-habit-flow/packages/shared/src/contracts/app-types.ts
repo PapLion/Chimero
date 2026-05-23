@@ -42,6 +42,12 @@ export interface Entry {
   dateStr: string
   assetId?: number | null
   tagIds?: number[]
+  gaming?: {
+    structured: true
+    gameTitle: string
+    gameKey: string
+    estimatedHours: number
+  }
 }
 
 export type EntryUpdateRequest = {
@@ -61,6 +67,85 @@ export interface BaseEntryRequest {
   timestamp: number
   assetId?: number | null
   tagIds?: number[]
+}
+
+export interface GamingEntryReadModel {
+  entryId: number
+  trackerId: number
+  gameTitle: string
+  gameKey: string
+  estimatedHours: number
+  timestamp: number
+  dateStr: string
+  assetId?: number | null
+  tagIds?: number[]
+  structured: true
+}
+
+export interface LegacyGamingEntryReadModel {
+  entryId: number
+  trackerId: number
+  legacyText: string | null
+  timestamp: number
+  dateStr: string
+  assetId?: number | null
+  tagIds?: number[]
+  structured: false
+}
+
+export type GamingHistoryItem = GamingEntryReadModel | LegacyGamingEntryReadModel
+
+export interface CreateGamingEntryRequest {
+  trackerId: number
+  gameTitle: string
+  estimatedHours: number
+  timestamp: number
+  assetId?: number | null
+  tagIds?: number[]
+}
+
+export interface UpdateGamingEntryRequest {
+  gameTitle?: string
+  estimatedHours?: number
+  timestamp?: number
+  assetId?: number | null
+  tagIds?: number[]
+}
+
+export interface GamingEntryResponse {
+  entry: GamingEntryReadModel
+  tags: Tag[]
+}
+
+export interface GamingDetailResponse {
+  current: GamingEntryReadModel | null
+  history: GamingHistoryItem[]
+  chartData: Array<{ date: string; value: number; count: number }>
+  totalHours: number
+  structuredEntryCount: number
+  legacyEntryCount: number
+  perGameHours: Array<{ gameTitle: string; gameKey: string; hours: number; entryCount: number }>
+}
+
+export interface GamingStatisticsReadModel {
+  entryCount: number
+  structuredEntryCount: number
+  legacyEntryCount: number
+  totalHours: number
+  chartData: Array<{ date: string; value: number; count: number }>
+  perGameHours: Array<{ gameTitle: string; gameKey: string; hours: number; entryCount: number }>
+}
+
+export interface GamingHomeWidgetReadModel {
+  trackerId: number
+  title: string
+  currentGameTitle: string | null
+  currentEstimatedHours: number | null
+  selectedDayGameTitle: string | null
+  selectedDayEstimatedHours: number | null
+  totalHours: number
+  legacyEntryCount: number
+  sparkline: Array<{ date: string; value: number }>
 }
 
 export type TaskPostponement = {

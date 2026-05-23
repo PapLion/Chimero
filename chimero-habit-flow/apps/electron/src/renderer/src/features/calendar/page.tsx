@@ -10,6 +10,7 @@ import { TimelineView } from "./components/TimelineView"
 import { TagChips } from "@features/tags/components/TagChips"
 import type { CalendarDayEntry } from "@contracts/features/calendar"
 import { clampMoodScore, moodScoreToColor, moodScoreToLabel } from "@contracts/domain"
+import { getTrackerIdentity } from "@contracts/features/tracking"
 
 const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
@@ -456,6 +457,9 @@ export function CalendarPage() {
                             const trackerNameLower = tracker?.name.toLowerCase() ?? ""
                             const isMoodEntry = trackerNameLower.includes("mood") || trackerNameLower.includes("feeling") || tracker?.icon === "smile"
                             const isTaskEntry = !!entry.taskState
+                            const isGamingTracker = tracker ? getTrackerIdentity(tracker) === "gaming" : false
+                            const gaming = entry.gaming?.structured ? entry.gaming : null
+                            const legacyGaming = isGamingTracker && !gaming
                             const moodScore = isMoodEntry ? clampMoodScore(entry.value) : null
                             const entryTime = new Date(entry.timestamp).toLocaleTimeString(undefined, {
                               hour: "2-digit",
@@ -477,7 +481,15 @@ export function CalendarPage() {
                                   />
                                 </div>
                                 <p className="text-2xl font-display font-bold text-[hsl(var(--primary))]">
-                                  {isTaskEntry ? (entry.taskState === "postponed" ? "Postponed" : "Task") : isMoodEntry && moodScore != null ? `${moodScore}/10` : entry.value ?? "—"}
+                                  {isTaskEntry
+                                    ? (entry.taskState === "postponed" ? "Postponed" : "Task")
+                                    : gaming
+                                      ? `${gaming.estimatedHours}h`
+                                      : isMoodEntry && moodScore != null
+                                        ? `${moodScore}/10`
+                                        : legacyGaming
+                                          ? "Legacy"
+                                          : entry.value ?? "—"}
                                   {!isTaskEntry && !isMoodEntry && displayUnit && (
                                     <span className="ml-1 text-sm font-normal text-[hsl(var(--muted-foreground))]">
                                       {displayUnit}
@@ -506,14 +518,25 @@ export function CalendarPage() {
                                     {moodScoreToLabel(moodScore)}
                                   </p>
                                 )}
+                                {legacyGaming && (
+                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                    Unstructured legacy game entry
+                                  </p>
+                                )}
+                                {legacyGaming && entry.note && (
+                                  <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                )}
                                 {(entry as CalendarDayEntry).waist != null && (
                                   <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
                                     Waist {(entry as CalendarDayEntry).waist}
                                     {(entry as CalendarDayEntry).waistUnit ? ` ${(entry as CalendarDayEntry).waistUnit}` : ""}
                                   </p>
                                 )}
-                                {entry.note && (
+                                {entry.note && !gaming && !legacyGaming && (
                                   <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                )}
+                                {gaming && (
+                                  <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{gaming.gameTitle}</p>
                                 )}
                                 <TagChips
                                   tagIds={(entry as CalendarDayEntry).tagIds}

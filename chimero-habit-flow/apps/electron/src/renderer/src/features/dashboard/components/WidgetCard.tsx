@@ -3,8 +3,8 @@
 import { cn } from "@shared/utils"
 import { type Widget, type Tracker, type Entry } from "@shared/store"
 import { useMoodDailyAggregates, useUpdateEntryMutation, useWeightDetail } from "@shared/queries"
-import { buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, moodScoreToColor, postponeTaskToNextDay, unpostponeTask } from "@contracts/domain"
-import { usesMediaStyleRendering } from "@contracts/features/tracking"
+import { buildGamingHomeWidgetReadModel, buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, moodScoreToColor, postponeTaskToNextDay, unpostponeTask } from "@contracts/domain"
+import { getTrackerIdentity, usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, Salad, CalendarPlus, Undo2, Square, Tv, type LucideIcon } from "lucide-react"
@@ -388,17 +388,30 @@ function CounterWidget({
 function MediaWidget({ 
   entries, 
   tracker, 
-  assets 
+  assets,
+  selectedDate,
 }: { 
   entries: Entry[]; 
   tracker: Tracker;
   assets: Map<number, Asset>;
+  selectedDate: Date;
 }) {
+  const isGamingTracker = getTrackerIdentity(tracker) === "gaming"
+  const gamingHome = isGamingTracker
+    ? buildGamingHomeWidgetReadModel(entries, {
+        trackerId: tracker.id,
+        title: tracker.name,
+        selectedDate: dateToDateStr(selectedDate),
+      })
+    : null
+
   // Get last 3-4 entries
-  const recentEntries = entries
-    .filter((e) => e.note) // Only entries with notes (titles)
-    .slice(-4)
-    .reverse()
+  const recentEntries = isGamingTracker
+    ? entries.slice(-4).reverse()
+    : entries
+      .filter((e) => e.note)
+      .slice(-4)
+      .reverse()
 
   if (recentEntries.length === 0) {
     return (
@@ -423,32 +436,68 @@ function MediaWidget({
       <div className="flex items-center gap-3 mb-4">
         <div className="surface-chip p-2">
           {(() => {
-            const iconKey = (tracker.icon ?? "").trim() || "book"
+            const iconKey = (tracker.icon ?? "").trim() || (isGamingTracker ? "gamepad-2" : "book")
             const Icon = iconMap[iconKey] || Book
             return <Icon className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />
           })()}
         </div>
         <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">{tracker.name}</span>
       </div>
+      {gamingHome && (
+        (() => {
+          const displayHours = gamingHome.selectedDayEstimatedHours ?? gamingHome.currentEstimatedHours
+          const displayTitle = gamingHome.selectedDayGameTitle ?? gamingHome.currentGameTitle ?? "No gaming entry"
+          return (
+        <div className="mb-3 rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[hsl(var(--muted-foreground))]">Selected day</div>
+              <div className="truncate text-sm font-medium text-[hsl(var(--foreground))]">
+                {displayTitle}
+              </div>
+            </div>
+            <div className="text-sm font-medium text-[hsl(var(--foreground))]">
+              {displayHours != null ? `${displayHours}h` : "--"}
+            </div>
+          </div>
+          <div className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
+            {gamingHome.totalHours}h structured total
+          </div>
+        </div>
+          )
+        })()
+      )}
       <div className="space-y-3 flex-1 overflow-y-auto">
         {recentEntries.map((entry) => {
           const asset = entry.assetId ? assets.get(entry.assetId) : null
+          const gaming = entry.gaming?.structured ? entry.gaming : null
+          const legacyGaming = isGamingTracker && !gaming
           return (
             <div key={entry.id} className="flex items-start gap-3">
               {asset && (
                 <div className="w-12 h-12 overflow-hidden rounded-lg border border-[hsl(var(--border)/0.62)] shrink-0">
                   <img
                     src={asset.thumbnailUrl || asset.assetUrl}
-                    alt={entry.note || "Media"}
+                    alt={gaming?.gameTitle || entry.note || "Media"}
                     className="w-full h-full object-cover"
                   />
                 </div>
               )}
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-[hsl(var(--foreground))] truncate">
-                  {entry.note || "Untitled"}
+                  {gaming?.gameTitle || entry.note || "Untitled"}
                 </div>
-                {entry.value && entry.value > 0 && (
+                {legacyGaming && (
+                  <div className="mt-1 inline-flex rounded-full border border-[hsl(var(--border)/0.5)] px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">
+                    Legacy
+                  </div>
+                )}
+                {gaming ? (
+                  <div className="flex items-center gap-1 mt-1">
+                    <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                    <span className="text-xs text-[hsl(var(--muted-foreground))]">{gaming.estimatedHours}h</span>
+                  </div>
+                ) : !legacyGaming && entry.value && entry.value > 0 && (
                   <div className="flex items-center gap-1 mt-1">
                     <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
                     <span className="text-xs text-[hsl(var(--muted-foreground))]">{entry.value}</span>
@@ -1082,7 +1131,7 @@ export function WidgetCard({ widget, tracker, entries, assets, selectedDate }: W
 
     // Media Widget: Books, TV, Games, Media, Apps (must be before Task so "Books" list type gets Media)
     if (usesMediaStyleRendering(tracker)) {
-      return <MediaWidget entries={entries} tracker={tracker} assets={assets} />
+      return <MediaWidget entries={entries} tracker={tracker} assets={assets} selectedDate={selectedDate} />
     }
 
     // Social Widget: social/connection tracker

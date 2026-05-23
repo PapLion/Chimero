@@ -92,6 +92,16 @@ const featureCases = [
     ],
   },
   {
+    name: 'gaming',
+    modulePath: '../../../apps/electron/src/main/features/gaming/handler',
+    exportName: 'registerGamingHandlers',
+    channels: [
+      'add-gaming-entry',
+      'update-gaming-entry',
+      'get-gaming-detail',
+    ],
+  },
+  {
     name: 'reminders',
     modulePath: '../../../apps/electron/src/main/features/reminders/handler',
     exportName: 'registerReminderHandlers',

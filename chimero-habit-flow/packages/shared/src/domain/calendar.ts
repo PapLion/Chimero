@@ -10,6 +10,12 @@ type CalendarDayEntryInput = {
   dateStr: string
   assetId?: number | null
   tagIds?: number[]
+  gaming?: {
+    structured: boolean
+    gameTitle?: string
+    gameKey?: string
+    estimatedHours?: number
+  }
   task?: {
     state: Exclude<TaskDayState, 'hidden'>
     baseDate: string
@@ -38,6 +44,7 @@ export function buildCalendarDayEntry(input: CalendarDayEntryInput): CalendarDay
     dateStr: input.dateStr,
     assetId: input.assetId ?? null,
     tagIds: input.tagIds ?? [],
+    gaming: input.gaming,
     taskState: input.task?.state,
     taskBaseDate: input.task?.baseDate,
     taskActiveDate: input.task?.activeDate,

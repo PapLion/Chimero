@@ -1,9 +1,10 @@
 import { ipcMain } from 'electron'
 import { desc, eq, sql } from 'drizzle-orm'
-import { entries, entriesToTags, entryWeight, trackers } from '@packages/db'
+import { entries, entriesToTags, entryGaming, entryWeight, trackers } from '@packages/db'
 import { getDb as db } from '@packages/db/database'
 import { mapEntry, mapTracker } from '../../shared/mappers'
 import type { BaseEntryRequest, EntryUpdateRequest, QuickEntryContextResponse } from '@contracts/contracts'
+import { getTrackerIdentity } from '@contracts/features/tracking'
 import { getEntryTagIds, getTags, replaceEntryTags } from '../tags/service'
 
 function formatDateStr(timestamp: number): string {
@@ -11,15 +12,58 @@ function formatDateStr(timestamp: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+async function isGamingTracker(trackerId: number): Promise<boolean> {
+  const [row] = await db()
+    .select()
+    .from(trackers)
+    .where(eq(trackers.id, trackerId))
+    .limit(1)
+
+  if (!row) return false
+  return getTrackerIdentity(mapTracker(row as Record<string, unknown>)) === 'gaming'
+}
+
 export function registerEntryHandlers(): void {
   ipcMain.handle('get-entries', async (_, options?: { limit?: number; trackerId?: number }) => {
     try {
       const limit = options?.limit ?? 100
-      const base = db().select().from(entries).orderBy(desc(entries.timestamp)).limit(limit)
+      const base = db()
+        .select({
+          id: entries.id,
+          trackerId: entries.trackerId,
+          value: entries.value,
+          note: entries.note,
+          metadata: entries.metadata,
+          timestamp: entries.timestamp,
+          dateStr: entries.dateStr,
+          assetId: entries.assetId,
+          gamingStructured: entryGaming.entryId,
+          gameTitle: entryGaming.gameTitle,
+          gameKey: entryGaming.gameKey,
+          estimatedHours: entryGaming.estimatedHours,
+        })
+        .from(entries)
+        .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
+        .orderBy(desc(entries.timestamp))
+        .limit(limit)
       const rows = options?.trackerId
         ? await db()
-          .select()
+          .select({
+            id: entries.id,
+            trackerId: entries.trackerId,
+            value: entries.value,
+            note: entries.note,
+            metadata: entries.metadata,
+            timestamp: entries.timestamp,
+            dateStr: entries.dateStr,
+            assetId: entries.assetId,
+            gamingStructured: entryGaming.entryId,
+            gameTitle: entryGaming.gameTitle,
+            gameKey: entryGaming.gameKey,
+            estimatedHours: entryGaming.estimatedHours,
+          })
           .from(entries)
+          .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
           .where(eq(entries.trackerId, options.trackerId))
           .orderBy(desc(entries.timestamp))
           .limit(limit)
@@ -35,6 +79,9 @@ export function registerEntryHandlers(): void {
 
   ipcMain.handle('add-entry', async (_, data: BaseEntryRequest) => {
     try {
+      if (await isGamingTracker(data.trackerId)) {
+        throw new Error('Use add-gaming-entry for Gaming entries')
+      }
       const database = db()
       const inserted = await database.transaction(async (tx) => {
         const [row] = await tx
@@ -64,6 +111,21 @@ export function registerEntryHandlers(): void {
 
   ipcMain.handle('update-entry', async (_, id: number, updates: EntryUpdateRequest) => {
     try {
+      const [existing] = await db()
+        .select({
+          trackerId: entries.trackerId,
+          gamingStructured: entryGaming.entryId,
+        })
+        .from(entries)
+        .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
+        .where(eq(entries.id, id))
+        .limit(1)
+
+      if (!existing) return null
+      if (existing.gamingStructured && await isGamingTracker(existing.trackerId)) {
+        throw new Error('Use update-gaming-entry for structured Gaming entries')
+      }
+
       const set: Record<string, unknown> = {}
       if (updates.value !== undefined) set.value = updates.value
       if (updates.note !== undefined) set.note = updates.note
@@ -97,6 +159,7 @@ export function registerEntryHandlers(): void {
       const database = db()
       await database.transaction(async (tx) => {
         await tx.delete(entriesToTags).where(eq(entriesToTags.entryId, id))
+        await tx.delete(entryGaming).where(eq(entryGaming.entryId, id))
         await tx.delete(entryWeight).where(eq(entryWeight.entryId, id))
         await tx.delete(entries).where(eq(entries.id, id))
       })
@@ -111,7 +174,20 @@ export function registerEntryHandlers(): void {
     try {
       const limit = options?.limit ?? 100
       const rows = await db()
-        .select()
+        .select({
+          id: entries.id,
+          trackerId: entries.trackerId,
+          value: entries.value,
+          note: entries.note,
+          metadata: entries.metadata,
+          timestamp: entries.timestamp,
+          dateStr: entries.dateStr,
+          assetId: entries.assetId,
+          gamingStructured: entryGaming.entryId,
+          gameTitle: entryGaming.gameTitle,
+          gameKey: entryGaming.gameKey,
+          estimatedHours: entryGaming.estimatedHours,
+        })
         .from(entries)
         .where(eq(entries.trackerId, trackerId))
         .orderBy(desc(entries.timestamp))

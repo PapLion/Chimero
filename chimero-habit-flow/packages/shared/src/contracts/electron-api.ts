@@ -9,6 +9,7 @@ import type {
   CorrelationQueryRequest,
   CorrelationResultResponse,
   CreateWeightEntryRequest,
+  CreateGamingEntryRequest,
   Entry,
   EntryUpdateRequest,
   Reminder,
@@ -25,8 +26,11 @@ import type {
   TrackerConfig,
   TrackerGoalResponse,
   UpdateWeightEntryRequest,
+  UpdateGamingEntryRequest,
   WeightDetailResponse,
   WeightEntryResponse,
+  GamingDetailResponse,
+  GamingEntryResponse,
 } from './app-types'
 import type { DashboardLayoutItem, DashboardStats } from '../features/dashboard'
 import type { CalendarMonthData } from '../features/calendar'
@@ -85,6 +89,9 @@ export interface ElectronApi {
   getWeightDetail: (trackerId: number, options?: { limit?: number }) => Promise<WeightDetailResponse>
   getWeightGoal: (trackerId: number) => Promise<TrackerGoalResponse>
   setWeightGoal: (data: SetTrackerGoalRequest) => Promise<TrackerGoalResponse>
+  addGamingEntry: (data: CreateGamingEntryRequest) => Promise<GamingEntryResponse | null>
+  updateGamingEntry: (entryId: number, updates: UpdateGamingEntryRequest) => Promise<GamingEntryResponse | null>
+  getGamingDetail: (trackerId: number, options?: { limit?: number }) => Promise<GamingDetailResponse>
   getContacts: () => Promise<Contact[]>
   getContact: (id: number) => Promise<Contact | null>
   createContact: (data: ContactInsert) => Promise<Contact | null>

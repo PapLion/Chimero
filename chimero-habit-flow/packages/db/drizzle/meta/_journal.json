@@ -22,6 +22,13 @@
       "when": 1778209917639,
       "tag": "0002_foundation_tags_weight",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1779495808107,
+      "tag": "0003_overconfident_forgotten_one",
+      "breakpoints": true
     }
   ]
 }

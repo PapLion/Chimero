@@ -7,13 +7,14 @@ import type { WeightEntryHistoryItem } from "@contracts/contracts"
 import {
   buildMoodEntriesReadModel,
   buildMoodStatisticsReadModel,
+  buildGamingStatisticsReadModel,
   buildTaskDayReadModel,
   buildWeightEntriesTabReadModel,
   buildWeightStatisticsReadModel,
   postponeTaskToNextDay,
   unpostponeTask,
 } from "@contracts/domain"
-import { usesMediaStyleRendering } from "@contracts/features/tracking"
+import { getTrackerIdentity, usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useAppStore } from "@shared/store"
 import { useTrackers, useEntries, useDeleteEntryMutation, useUpdateEntryMutation, useWeightDetail, useTags } from "@shared/queries"
 import { filterEntriesByDate, cn } from "@shared/utils"
@@ -160,6 +161,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     (trackerNameLowerForMood.includes("mood") ||
       trackerNameLowerForMood.includes("feeling") ||
       tracker.icon === "smile")
+  const isGamingTracker = !!tracker && getTrackerIdentity(tracker) === "gaming"
   const { data: weightDetail } = useWeightDetail(trackerId, isWeightTracker)
   const weightEntriesReadModel = useMemo(
     () => weightDetail ? buildWeightEntriesTabReadModel(weightDetail) : { entries: [] },
@@ -180,6 +182,14 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   )
   const moodStatisticsReadModel = useMemo(
     () => buildMoodStatisticsReadModel(trackerEntries),
+    [trackerEntries],
+  )
+  const gamingStatisticsReadModel = useMemo(
+    () => buildGamingStatisticsReadModel(trackerEntries),
+    [trackerEntries],
+  )
+  const gamingStructuredEntries = useMemo(
+    () => trackerEntries.filter((entry) => entry.gaming?.structured),
     [trackerEntries],
   )
 
@@ -215,10 +225,14 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     ? (isToday ? weightStatisticsReadModel.totalEntries : weightHistoryEntries.length)
     : isMoodTracker
       ? (isToday ? moodStatisticsReadModel.count : moodHistoryEntries.length)
+    : isGamingTracker
+      ? (isToday ? gamingStatisticsReadModel.entryCount : selectedDateEntries.length)
     : isToday ? trackerEntries.length : selectedDateEntries.length
   const currentStreak = isWeightTracker && weightStatisticsReadModel
     ? weightStatisticsReadModel.streakDays
-    : calculateStreak(trackerEntries) // Streak is always calculated from all entries
+    : isGamingTracker
+      ? calculateStreak(gamingStructuredEntries)
+      : calculateStreak(trackerEntries) // Streak is always calculated from all entries
   const averageValue = selectedDateEntries.length > 0
     ? selectedDateEntries.reduce((sum, e) => sum + (e.value ?? 0), 0) / selectedDateEntries.length
     : 0
@@ -296,6 +310,29 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   // Chart data: Filtered by 1M, 3M, 1Y bounds
   const chartData = useMemo<TrackerChartPoint[]>(() => {
     if (!tracker) return []
+
+    if (isGamingTracker) {
+      const referenceDate = new Date(selectedDate.getTime())
+      referenceDate.setHours(23, 59, 59, 999)
+      const daysBack = chartTimeFilter === "1M" ? 30 : chartTimeFilter === "3M" ? 90 : 365
+      const cutoffDate = new Date(referenceDate.getTime())
+      cutoffDate.setDate(cutoffDate.getDate() - daysBack)
+      const cutoffStr = toDateStr(cutoffDate)
+      const refStr = toDateStr(referenceDate)
+
+      return gamingStatisticsReadModel.chartData
+        .filter((point) => point.date >= cutoffStr && point.date <= refStr)
+        .map((point) => {
+          const date = new Date(point.date)
+          return {
+            value: point.value,
+            date: chartTimeFilter === "1Y"
+              ? date.toLocaleDateString("en", { month: "short" })
+              : date.toLocaleDateString("en", { month: "short", day: "numeric" }),
+            fullDate: point.date,
+          }
+        })
+    }
 
     if (isWeightTracker && weightDetail?.chartData) {
       const referenceDate = new Date(selectedDate.getTime())
@@ -375,6 +412,35 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
 
   // Heatmap data: "Year in Pixels"
   const heatmapData = useMemo(() => {
+    if (isGamingTracker) {
+      const referenceDate = new Date(selectedDate.getTime())
+      referenceDate.setHours(0, 0, 0, 0)
+      const refTimeEnd = new Date(selectedDate.getTime())
+      refTimeEnd.setHours(23, 59, 59, 999)
+
+      const numDays = 364
+      const startDate = new Date(referenceDate.getTime())
+      startDate.setDate(referenceDate.getDate() - numDays + 1)
+
+      const daysArray = Array.from({ length: numDays }).map((_, i) => {
+        const d = new Date(startDate.getTime())
+        d.setDate(startDate.getDate() + i)
+        return d.toISOString().split("T")[0]
+      })
+
+      const intensityMap: Record<string, number> = {}
+      let maxIntensity = 0
+      const pastEntries = gamingStructuredEntries.filter((entry) => entry.timestamp <= refTimeEnd.getTime())
+      pastEntries.forEach((entry) => {
+        const dateStr = entry.dateStr || new Date(entry.timestamp).toISOString().split("T")[0]
+        if (!intensityMap[dateStr]) intensityMap[dateStr] = 0
+        intensityMap[dateStr] += entry.gaming?.estimatedHours ?? 0
+        if (intensityMap[dateStr] > maxIntensity) maxIntensity = intensityMap[dateStr]
+      })
+
+      return { daysArray, intensityMap, maxIntensity }
+    }
+
     const referenceDate = new Date(selectedDate.getTime())
     referenceDate.setHours(0, 0, 0, 0)
 
@@ -576,13 +642,15 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
               </div>
               <div className={statCardBase}>
                 <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">
-                  {isWeightType ? "Weekly Average" : isMoodType ? "Average Mood" : "Average Value"}
+                  {isWeightType ? "Weekly Average" : isMoodType ? "Average Mood" : isGamingTracker ? "Structured Hours" : "Average Value"}
                 </div>
                 <div className="text-3xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
                   {isWeightType
                     ? weightDetail?.weeklyAvg != null ? weightDetail.weeklyAvg.toFixed(1) : "--"
                     : isMoodType
                       ? moodStatisticsReadModel.averageScore != null ? `${moodStatisticsReadModel.averageScore.toFixed(1)}/10` : "--"
+                    : isGamingTracker
+                      ? `${gamingStatisticsReadModel.totalHours.toFixed(1)}h`
                     : averageValue > 0 ? averageValue.toFixed(1) : "--"}
                 </div>
               </div>
@@ -635,6 +703,27 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                     <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Latest Mood</div>
                     <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
                       {moodStatisticsReadModel.latestScore != null ? `${moodStatisticsReadModel.latestScore}/10` : "--"}
+                    </div>
+                  </div>
+                </>
+              ) : isGamingTracker ? (
+                <>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Structured Entries</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {gamingStatisticsReadModel.structuredEntryCount}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Legacy Entries</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {gamingStatisticsReadModel.legacyEntryCount}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Top Game</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {gamingStatisticsReadModel.perGameHours[0]?.gameTitle ?? "--"}
                     </div>
                   </div>
                 </>
@@ -930,6 +1019,8 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {historyEntries.map((entry) => {
                   const asset = entry.assetId != null ? assets.get(entry.assetId) : null
+                  const gaming = entry.gaming?.structured ? entry.gaming : null
+                  const legacyGaming = isGamingTracker && !gaming
                   return (
                     <div
                       key={entry.id}
@@ -949,7 +1040,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                         {asset ? (
                           <img
                             src={asset.thumbnailUrl || asset.assetUrl}
-                            alt={entry.note || "Media"}
+                            alt={gaming?.gameTitle || entry.note || "Media"}
                             className="w-full h-full object-cover"
                           />
                         ) : (
@@ -958,10 +1049,20 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                       </div>
                       <div className="p-3">
                         <div className="text-sm font-medium text-white/90 truncate mb-1">
-                          {entry.note || "Untitled"}
+                          {gaming?.gameTitle || entry.note || "Untitled"}
                         </div>
+                        {legacyGaming && (
+                          <div className="mb-1 inline-flex rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-white/45">
+                            Legacy
+                          </div>
+                        )}
                         {renderEntryTags(entry.tagIds, "mb-1 mt-2")}
-                        {entry.value != null && entry.value > 0 && (
+                        {gaming ? (
+                          <div className="flex items-center gap-1">
+                            <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                            <span className="text-xs text-white/50">{gaming.estimatedHours}h</span>
+                          </div>
+                        ) : !legacyGaming && entry.value != null && entry.value > 0 && (
                           <div className="flex items-center gap-1">
                             <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
                             <span className="text-xs text-white/50">{entry.value}</span>

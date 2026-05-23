@@ -138,6 +138,15 @@ export const entryWeight = sqliteTable("entry_weight", {
   weightUnitIdx: index("entry_weight_unit_idx").on(t.weightUnit),
 }));
 
+export const entryGaming = sqliteTable("entry_gaming", {
+  entryId: integer("entry_id").primaryKey().references(() => entries.id, { onDelete: "cascade" }),
+  gameTitle: text("game_title").notNull(),
+  gameKey: text("game_key").notNull(),
+  estimatedHours: real("estimated_hours").notNull(),
+}, (t) => ({
+  gameKeyIdx: index("entry_gaming_game_key_idx").on(t.gameKey),
+}));
+
 export const trackerGoals = sqliteTable("tracker_goals", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   trackerId: integer("tracker_id").references(() => trackers.id, { onDelete: "cascade" }).notNull(),

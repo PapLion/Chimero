@@ -66,6 +66,10 @@ const api: ElectronApi = {
   getWeightDetail: (trackerId, options) => ipcRenderer.invoke('get-weight-detail', trackerId, options),
   getWeightGoal: (trackerId) => ipcRenderer.invoke('get-weight-goal', trackerId),
   setWeightGoal: (data) => ipcRenderer.invoke('set-weight-goal', data),
+  // Gaming
+  addGamingEntry: (data) => ipcRenderer.invoke('add-gaming-entry', data),
+  updateGamingEntry: (entryId, updates) => ipcRenderer.invoke('update-gaming-entry', entryId, updates),
+  getGamingDetail: (trackerId, options) => ipcRenderer.invoke('get-gaming-detail', trackerId, options),
   // Contacts (Personal CRM)
   getContacts: () => ipcRenderer.invoke('get-contacts'),
   getContact: (id: number) => ipcRenderer.invoke('get-contact', id),

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerEntryHandlers } from '../../../apps/electron/src/main/features/entry/handler'
 import { addWeightEntry, deleteWeightEntry, updateWeightEntry } from '../../../apps/electron/src/main/features/weight/service'
+import { trackers } from '@packages/db'
 
 const mocks = vi.hoisted(() => ({
   handleMock: vi.fn(),
@@ -39,6 +40,19 @@ function createQueryDb() {
     dateStr: '2026-01-01',
     assetId: null,
   }
+  const trackerRow = {
+    id: 1,
+    name: 'Weight',
+    type: 'numeric',
+    icon: 'scale',
+    color: null,
+    order: 1,
+    config: '{}',
+    archived: 0,
+    is_custom: 0,
+    is_favorite: 0,
+    created_at: null,
+  }
   const weightRow = {
     entryId: 101,
     trackerId: 1,
@@ -51,6 +65,26 @@ function createQueryDb() {
     waistValue: null,
     waistUnit: null,
     bodyFatPercentage: null,
+  }
+
+  function createResultQuery(rows: unknown[], options?: { innerJoinRows?: unknown[]; leftJoinRows?: unknown[] }) {
+    const state = { rows }
+    const query: Record<string, unknown> = {}
+    query.where = vi.fn(() => query)
+    query.leftJoin = vi.fn(() => {
+      state.rows = options?.leftJoinRows ?? state.rows
+      return query
+    })
+    query.innerJoin = vi.fn(() => {
+      state.rows = options?.innerJoinRows ?? state.rows
+      return query
+    })
+    query.orderBy = vi.fn(() => query)
+    query.limit = vi.fn(() => state.rows)
+    query[Symbol.iterator] = function* () {
+      yield* state.rows as unknown[]
+    }
+    return query
   }
 
   const updateSetMock = vi.fn(() => ({
@@ -70,16 +104,15 @@ function createQueryDb() {
       where: vi.fn(() => undefined),
     })),
     select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        innerJoin: vi.fn(() => ({
-          where: vi.fn(() => [weightRow]),
-        })),
-        where: vi.fn(() => [entryRow]),
-        orderBy: vi.fn(() => ({
-          limit: vi.fn(() => [entryRow]),
-        })),
-        limit: vi.fn(() => [entryRow]),
-      })),
+      from: vi.fn((table: unknown) => {
+        if (table === trackers) {
+          return createResultQuery([trackerRow])
+        }
+        return createResultQuery([entryRow], {
+          leftJoinRows: [entryRow],
+          innerJoinRows: [weightRow],
+        })
+      }),
     })),
   }
   const tx = {

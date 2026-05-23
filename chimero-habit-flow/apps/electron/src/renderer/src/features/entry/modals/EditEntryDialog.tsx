@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { useTrackers, useUpdateEntryMutation, useUpdateWeightEntryMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
+import { useTrackers, useUpdateEntryMutation, useUpdateWeightEntryMutation, useUpdateGamingEntryMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
 import { Dialog, DialogContent, DialogTitle } from "@packages/ui/dialog"
 import { Input } from "@packages/ui/input"
 import { format } from "date-fns"
@@ -14,6 +14,7 @@ import { formatToastError, useToast } from "@shared/components/toast"
 import type { AssetWithUrls } from "@contracts/features/assets"
 import type { MeasurementUnit, Tracker, WeightUnit } from "@contracts/contracts"
 import { clampMoodScore } from "@contracts/domain"
+import { getTrackerIdentity } from "@contracts/features/tracking"
 import { getEntryConfig } from "../entry-config"
 
 interface EditEntryDialogProps {
@@ -43,6 +44,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     )
     const updateEntryMutation = useUpdateEntryMutation()
     const updateWeightEntryMutation = useUpdateWeightEntryMutation()
+    const updateGamingEntryMutation = useUpdateGamingEntryMutation()
     const createTagMutation = useCreateTagMutation()
     const qc = useQueryClient()
     const toast = useToast()
@@ -81,6 +83,10 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
             setNote(entry.note || "")
             setSelectedAssetId(entry.assetId || null)
             setSelectedTagIds(entry.tagIds ?? [])
+            if (entry.gaming?.structured) {
+                setValue(entry.gaming.estimatedHours.toString())
+                setNote(entry.gaming.gameTitle)
+            }
             const metadata = readMetadata(entry.metadata)
             const metadataWaist = metadata.waist
             setWaist(typeof metadataWaist === "number" ? metadataWaist.toString() : "")
@@ -93,6 +99,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     }, [open, entry])
 
     const tracker = entry ? trackers.find((t) => t.id === entry.trackerId) : null
+    const isGamingTracker = tracker ? getTrackerIdentity(tracker) === "gaming" : false
 
     const handleSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault()
@@ -121,8 +128,22 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                 tracker.icon === "scale" ||
                 tracker.name.toLowerCase().includes("weight") ||
                 tracker.name.toLowerCase().includes("peso")
+            const isStructuredGamingEntry = isGamingTracker && entry.gaming?.structured
 
-            if (isWeightTracker) {
+            if (isStructuredGamingEntry) {
+                const parsedHours = parseFloat(value)
+                if (!Number.isFinite(parsedHours) || !note.trim()) return
+                await updateGamingEntryMutation.mutateAsync({
+                    entryId: entry.id,
+                    updates: {
+                        gameTitle: note.trim(),
+                        estimatedHours: parsedHours,
+                        assetId: selectedAssetId,
+                        tagIds: selectedTagIds,
+                        timestamp,
+                    },
+                })
+            } else if (isWeightTracker) {
                 if (parsedValue == null) return
                 const parsedWaist = waist.trim() ? parseFloat(waist) : null
                 if (parsedWaist !== null && !Number.isFinite(parsedWaist)) return
@@ -133,6 +154,17 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                         weightUnit: getWeightUnit(),
                         waist: parsedWaist,
                         waistUnit: parsedWaist !== null ? getWaistUnit() : null,
+                        note: note.trim() || null,
+                        assetId: selectedAssetId,
+                        tagIds: selectedTagIds,
+                        timestamp,
+                    },
+                })
+            } else if (isGamingTracker) {
+                await updateEntryMutation.mutateAsync({
+                    id: entry.id,
+                    updates: {
+                        value: parsedValue,
                         note: note.trim() || null,
                         assetId: selectedAssetId,
                         tagIds: selectedTagIds,
@@ -197,7 +229,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     }
 
     if (!tracker) return null
-    const isPending = updateEntryMutation.isPending || updateWeightEntryMutation.isPending
+    const isPending = updateEntryMutation.isPending || updateWeightEntryMutation.isPending || updateGamingEntryMutation.isPending
     const handleOpenChange = (nextOpen: boolean) => {
         if (!nextOpen && isPending) return
         onOpenChange(nextOpen)
@@ -218,6 +250,8 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     const waistValue = waist.trim() ? parseFloat(waist) : null
     const saveDisabled = isWeightTracker
         ? !value || (waist.trim() !== "" && !Number.isFinite(waistValue))
+        : isGamingTracker
+          ? !note.trim() || !value || !Number.isFinite(parseFloat(value))
         : isText ? !note.trim() && !value : !value && !note.trim()
 
     return (

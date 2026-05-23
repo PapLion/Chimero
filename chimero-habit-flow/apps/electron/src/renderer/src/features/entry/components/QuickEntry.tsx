@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useRecentTrackers, useFavoriteTrackers, useAddEntryMutation, useAddWeightEntryMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
+import { useTrackers, useRecentTrackers, useFavoriteTrackers, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
 import { cn } from "@shared/utils"
 import { getEntryConfig } from "../entry-config"
 import type { Tracker } from "@shared/store"
@@ -21,6 +21,7 @@ import { CyberpunkSelect } from "@features/tracking/components/CyberpunkSelect"
 import { formatToastError, useToast } from "@shared/components/toast"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Activity, Calendar, Flame, Book, Gamepad2, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, ImageIcon, X, Tv, type LucideIcon } from "lucide-react"
 import { clampMoodScore } from "@contracts/domain"
+import { getTrackerIdentity } from "@contracts/features/tracking"
 
 const iconMap: Record<string, LucideIcon> = {
   scale: Scale,
@@ -68,6 +69,7 @@ export function QuickEntry() {
   }, [quickEntryContext?.suggestedTags, quickEntryContext?.tags, tagFallback])
   const addEntryMutation = useAddEntryMutation()
   const addWeightEntryMutation = useAddWeightEntryMutation()
+  const addGamingEntryMutation = useAddGamingEntryMutation()
   const createTagMutation = useCreateTagMutation()
   const createContactInteractionMutation = useCreateContactInteractionMutation()
   const toast = useToast()
@@ -257,6 +259,7 @@ export function QuickEntry() {
       trackerData.icon === "smile" ||
       trackerData.name.toLowerCase().includes("mood") ||
       trackerData.name.toLowerCase().includes("feeling")
+    const isGamingTracker = getTrackerIdentity(trackerData) === "gaming"
 
     setIsSubmitting(true)
 
@@ -273,6 +276,25 @@ export function QuickEntry() {
         })
 
         toast.success("Workout logged.", trackerData.name)
+        setQuickEntryOpen(false)
+        return
+      }
+
+      if (isGamingTracker) {
+        const gameTitle = note.trim()
+        const hours = value ? parseFloat(value) : NaN
+        if (!gameTitle || !Number.isFinite(hours)) return
+
+        await addGamingEntryMutation.mutateAsync({
+          trackerId: selectedTracker,
+          gameTitle,
+          estimatedHours: hours,
+          assetId: selectedAssetId,
+          tagIds: selectedTagIds,
+          timestamp: Date.now(),
+        })
+
+        toast.success("Game logged.", trackerData.name)
         setQuickEntryOpen(false)
         return
       }

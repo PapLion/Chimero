@@ -12,6 +12,12 @@ export interface CalendarDayEntry {
   dateStr: string
   assetId?: number | null
   tagIds?: number[]
+  gaming?: {
+    structured: boolean
+    gameTitle?: string
+    gameKey?: string
+    estimatedHours?: number
+  }
   taskState?: Exclude<TaskDayState, 'hidden'>
   taskBaseDate?: string
   taskActiveDate?: string

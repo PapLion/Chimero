@@ -52,6 +52,10 @@ export function mapTracker(row: Record<string, unknown>): Tracker {
 }
 
 export function mapEntry(row: Record<string, unknown>): Entry {
+  const gamingStructured = row.gamingStructured ?? row.gaming_structured
+  const gameTitle = row.gameTitle ?? row.game_title
+  const gameKey = row.gameKey ?? row.game_key
+  const estimatedHours = row.estimatedHours ?? row.estimated_hours
   return {
     id: row.id as number,
     trackerId: (row.trackerId ?? row.tracker_id) as number,
@@ -61,6 +65,15 @@ export function mapEntry(row: Record<string, unknown>): Entry {
     timestamp: row.timestamp as number,
     dateStr: (row.dateStr ?? row.date_str) as string,
     assetId: (row.assetId ?? row.asset_id) as number | null,
+    gaming:
+      gamingStructured
+        ? {
+            structured: true,
+            gameTitle: (gameTitle as string) ?? '',
+            gameKey: (gameKey as string) ?? '',
+            estimatedHours: (estimatedHours as number) ?? 0,
+          }
+        : undefined,
   }
 }
 

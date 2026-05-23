@@ -1,5 +1,5 @@
 import { getDb } from '@packages/db/database'
-import { entries, entryWeight, trackers } from '@packages/db'
+import { entries, entryGaming, entryWeight, trackers } from '@packages/db'
 import { eq } from 'drizzle-orm'
 import {
   buildCalendarDayEntry,
@@ -39,6 +39,10 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
       timestamp: entries.timestamp,
       dateStr: entries.dateStr,
       assetId: entries.assetId,
+      gamingStructured: entryGaming.entryId,
+      gameTitle: entryGaming.gameTitle,
+      gameKey: entryGaming.gameKey,
+      estimatedHours: entryGaming.estimatedHours,
       trackerName: trackers.name,
       trackerType: trackers.type,
       trackerIcon: trackers.icon,
@@ -67,6 +71,14 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
       dateStr: r.dateStr,
       assetId: r.assetId,
       tagIds: tagIdsByEntry.get(r.id) ?? [],
+      gaming: r.gamingStructured
+        ? {
+            structured: true,
+            gameTitle: String(r.gameTitle ?? ''),
+            gameKey: String(r.gameKey ?? ''),
+            estimatedHours: Number(r.estimatedHours ?? 0),
+          }
+        : undefined,
     }
     const tracker: Pick<Tracker, 'name' | 'type' | 'icon'> = {
       name: r.trackerName ?? '',

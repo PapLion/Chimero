@@ -5,8 +5,13 @@ import { getWebDb, getAssetsRoot, getWebDbPath, type WebDb } from '../db'
 import { buildTagTree, resolveInheritedTagIds } from '../../../../packages/shared/src/domain/tags'
 import {
   buildCalendarDayEntry,
+  buildGamingDetailReadModel,
+  entryToGamingReadModel,
   getTaskActiveDate,
   getTaskStateForDate,
+  normalizeGameKey,
+  normalizeGamingTitle,
+  validateEstimatedHours,
   isTaskTrackerLike,
   parseTaskStateMetadata,
 } from '../../../../packages/shared/src/domain'
@@ -21,8 +26,11 @@ import type {
   ContactUpdate,
   CorrelationQueryRequest,
   CreateWeightEntryRequest,
+  CreateGamingEntryRequest,
   Entry,
   EntryUpdateRequest,
+  GamingDetailResponse,
+  GamingEntryResponse,
   Reminder,
   ReminderInsert,
   SetTrackerGoalRequest,
@@ -32,8 +40,10 @@ import type {
   Tracker,
   TrackerGoal,
   UpdateWeightEntryRequest,
+  UpdateGamingEntryRequest,
   WeightEntry,
 } from '../../../../packages/shared/src/contracts'
+import { getTrackerIdentity } from '../../../../packages/shared/src/features/tracking'
 import type { AssetWithUrls } from '../../../../packages/shared/src/features/assets'
 
 type JsonRecord = Record<string, unknown>
@@ -143,6 +153,10 @@ function mapTracker(row: JsonRecord): Tracker {
 }
 
 function mapEntry(row: JsonRecord): Entry {
+  const gamingStructured = row.gaming_structured ?? row.gamingStructured
+  const gameTitle = row.game_title ?? row.gameTitle
+  const gameKey = row.game_key ?? row.gameKey
+  const estimatedHours = row.estimated_hours ?? row.estimatedHours
   return {
     id: Number(row.id),
     trackerId: Number(row.tracker_id ?? row.trackerId),
@@ -152,6 +166,14 @@ function mapEntry(row: JsonRecord): Entry {
     timestamp: Number(row.timestamp),
     dateStr: String(row.date_str ?? row.dateStr),
     assetId: row.asset_id == null ? null : Number(row.asset_id),
+    gaming: gamingStructured
+      ? {
+          structured: true,
+          gameTitle: String(gameTitle ?? ''),
+          gameKey: String(gameKey ?? ''),
+          estimatedHours: Number(estimatedHours ?? 0),
+        }
+      : undefined,
   }
 }
 
@@ -334,10 +356,33 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
   const limit = Math.min(options.limit ?? 100, 1000)
   const rows = options.trackerId
     ? getDb()
-      .prepare('SELECT * FROM entries WHERE tracker_id = ? ORDER BY timestamp DESC LIMIT ?')
+      .prepare(`
+        SELECT
+          e.*,
+          eg.entry_id AS gaming_structured,
+          eg.game_title,
+          eg.game_key,
+          eg.estimated_hours
+        FROM entries e
+        LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+        WHERE e.tracker_id = ?
+        ORDER BY e.timestamp DESC
+        LIMIT ?
+      `)
       .all(options.trackerId, limit)
     : getDb()
-      .prepare('SELECT * FROM entries ORDER BY timestamp DESC LIMIT ?')
+      .prepare(`
+        SELECT
+          e.*,
+          eg.entry_id AS gaming_structured,
+          eg.game_title,
+          eg.game_key,
+          eg.estimated_hours
+        FROM entries e
+        LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+        ORDER BY e.timestamp DESC
+        LIMIT ?
+      `)
       .all(limit)
   return withTagIds(rows.map((row) => mapEntry(row as JsonRecord)))
 }
@@ -345,6 +390,7 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
 function addEntry(data: BaseEntryRequest): Entry | null {
   if (!Number.isInteger(data.trackerId) || data.trackerId <= 0) throw new Error('Invalid trackerId')
   if (!Number.isFinite(data.timestamp)) throw new Error('Invalid timestamp')
+  if (isGamingTracker(data.trackerId)) throw new Error('Use add-gaming-entry for Gaming entries')
   const dateStr = formatDateStr(data.timestamp)
   const insert = getDb().transaction(() => {
     const result = getDb()
@@ -371,6 +417,21 @@ function addEntry(data: BaseEntryRequest): Entry | null {
 }
 
 function updateEntry(id: number, updates: EntryUpdateRequest): Entry | null {
+  const existing = getDb()
+    .prepare(`
+      SELECT
+        e.tracker_id,
+        eg.entry_id AS gaming_structured
+      FROM entries e
+      LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(id) as JsonRecord | undefined
+  if (existing?.gaming_structured && isGamingTracker(Number(existing.tracker_id))) {
+    throw new Error('Use update-gaming-entry for structured Gaming entries')
+  }
+
   const set: string[] = []
   const params: JsonRecord = { id }
   if ('value' in updates) {
@@ -412,6 +473,7 @@ function updateEntry(id: number, updates: EntryUpdateRequest): Entry | null {
 function deleteEntry(id: number): boolean {
   getDb().transaction(() => {
     getDb().prepare('DELETE FROM entries_to_tags WHERE entry_id = ?').run(id)
+    getDb().prepare('DELETE FROM entry_gaming WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM entry_weight WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM entries WHERE id = ?').run(id)
   })()
@@ -598,7 +660,7 @@ function getCorrelationResult(request: CorrelationQueryRequest) {
 
 function addWeightEntry(data: CreateWeightEntryRequest) {
   if (!Number.isFinite(data.weight)) throw new Error('Weight must be a finite number')
-  const id = getDb().transaction(() => {
+  const insert = getDb().transaction(() => {
     const dateStr = formatDateStr(data.timestamp)
     const inserted = getDb()
       .prepare(`
@@ -637,6 +699,7 @@ function addWeightEntry(data: CreateWeightEntryRequest) {
     replaceEntryTags(entryId, data.tagIds)
     return entryId
   })()
+  const id = insert
   const entry = getWeightEntryById(id)
   return entry ? { entry, tags: tagsForEntry(id) } : null
 }
@@ -767,6 +830,147 @@ function setWeightGoal(data: SetTrackerGoalRequest): TrackerGoal | null {
       })
   })()
   return getWeightGoal(data.trackerId)
+}
+
+function isGamingTracker(trackerId: number): boolean {
+  const row = getDb().prepare('SELECT * FROM trackers WHERE id = ? LIMIT 1').get(trackerId)
+  if (!row) return false
+  return getTrackerIdentity(mapTracker(row as JsonRecord)) === 'gaming'
+}
+
+function getGamingEntryById(entryId: number): GamingEntryResponse | null {
+  const row = getDb()
+    .prepare(`
+      SELECT
+        e.id,
+        e.tracker_id,
+        e.value,
+        e.note,
+        e.metadata,
+        e.timestamp,
+        e.date_str,
+        e.asset_id,
+        eg.entry_id AS gaming_structured,
+        eg.game_title,
+        eg.game_key,
+        eg.estimated_hours
+      FROM entries e
+      LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+
+  if (!row) return null
+  const entry = mapEntry(row)
+  if (!entry.gaming?.structured) return null
+  return {
+    entry: entryToGamingReadModel(entry) as GamingEntryResponse['entry'],
+    tags: tagsForEntry(entryId),
+  }
+}
+
+function addGamingEntry(data: CreateGamingEntryRequest): GamingEntryResponse | null {
+  if (!isGamingTracker(data.trackerId)) throw new Error('Gaming entries can only be created for the Gaming tracker')
+  const gameTitle = normalizeGamingTitle(data.gameTitle)
+  if (!gameTitle) throw new Error('Game title is required')
+  const estimatedHours = validateEstimatedHours(data.estimatedHours)
+  const gameKey = normalizeGameKey(gameTitle)
+  if (!Number.isFinite(data.timestamp)) throw new Error('Timestamp must be finite')
+  const dateStr = formatDateStr(data.timestamp)
+
+  const insert = getDb().transaction(() => {
+    const result = getDb()
+      .prepare(`
+        INSERT INTO entries (tracker_id, value, note, metadata, asset_id, timestamp, date_str)
+        VALUES (@trackerId, @value, @note, @metadata, @assetId, @timestamp, @dateStr)
+      `)
+      .run({
+        trackerId: data.trackerId,
+        value: null,
+        note: gameTitle,
+        metadata: JSON.stringify({ trackerKind: 'gaming' }),
+        assetId: data.assetId ?? null,
+        timestamp: data.timestamp,
+        dateStr,
+      })
+    const entryId = Number(result.lastInsertRowid)
+    getDb()
+      .prepare(`
+        INSERT INTO entry_gaming (entry_id, game_title, game_key, estimated_hours)
+        VALUES (?, ?, ?, ?)
+      `)
+      .run(entryId, gameTitle, gameKey, estimatedHours)
+    replaceEntryTags(entryId, data.tagIds)
+    return entryId
+  })()
+
+  return getGamingEntryById(insert)
+}
+
+function updateGamingEntry(entryId: number, updates: UpdateGamingEntryRequest): GamingEntryResponse | null {
+  const existing = getDb()
+    .prepare(`
+      SELECT e.tracker_id, eg.entry_id AS gaming_structured
+      FROM entries e
+      LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+
+  if (!existing || !existing.gaming_structured || !isGamingTracker(Number(existing.tracker_id))) {
+    throw new Error('Structured Gaming entries can only be updated through the Gaming flow')
+  }
+
+  const entrySet: string[] = []
+  const entryParams: JsonRecord = { id: entryId }
+  const gamingSet: string[] = []
+  const gamingParams: JsonRecord = { id: entryId }
+
+  if ('gameTitle' in updates) {
+    const gameTitle = normalizeGamingTitle(String(updates.gameTitle ?? ''))
+    if (!gameTitle) throw new Error('Game title is required')
+    entrySet.push('note = @gameTitle')
+    entryParams.gameTitle = gameTitle
+    gamingSet.push('game_title = @gameTitle')
+    gamingSet.push('game_key = @gameKey')
+    gamingParams.gameTitle = gameTitle
+    gamingParams.gameKey = normalizeGameKey(gameTitle)
+  }
+  if ('estimatedHours' in updates) {
+    gamingSet.push('estimated_hours = @estimatedHours')
+    gamingParams.estimatedHours = validateEstimatedHours(updates.estimatedHours)
+  }
+  if ('assetId' in updates) {
+    entrySet.push('asset_id = @assetId')
+    entryParams.assetId = updates.assetId ?? null
+  }
+  if ('timestamp' in updates) {
+    const timestamp = Number(updates.timestamp)
+    if (!Number.isFinite(timestamp)) throw new Error('Timestamp must be finite')
+    entrySet.push('timestamp = @timestamp')
+    entrySet.push('date_str = @dateStr')
+    entryParams.timestamp = timestamp
+    entryParams.dateStr = formatDateStr(timestamp)
+  }
+
+  getDb().transaction(() => {
+    if (entrySet.length > 0) {
+      getDb().prepare(`UPDATE entries SET ${entrySet.join(', ')} WHERE id = @id`).run(entryParams)
+    }
+    if (gamingSet.length > 0) {
+      getDb().prepare(`UPDATE entry_gaming SET ${gamingSet.join(', ')} WHERE entry_id = @id`).run(gamingParams)
+    }
+    replaceEntryTags(entryId, updates.tagIds)
+  })()
+
+  return getGamingEntryById(entryId)
+}
+
+function getGamingDetail(trackerId: number, options: { limit?: number } = {}): GamingDetailResponse {
+  const entries = getEntries({ trackerId, limit: options.limit ?? 365 })
+  return buildGamingDetailReadModel(entries)
 }
 
 function safeAssetPath(encodedPath: string): string | null {
@@ -977,12 +1181,17 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
           t.name AS tracker_name,
           t.type AS tracker_type,
           t.icon AS tracker_icon,
+          eg.entry_id AS gaming_structured,
+          eg.game_title,
+          eg.game_key,
+          eg.estimated_hours,
           ew.weight_value,
           ew.weight_unit,
           ew.waist_value,
           ew.waist_unit
         FROM entries e
         LEFT JOIN trackers t ON t.id = e.tracker_id
+        LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
         LEFT JOIN entry_weight ew ON ew.entry_id = e.id
         ORDER BY e.timestamp ASC
       `)
@@ -1024,6 +1233,14 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
         dateStr,
         assetId: entry.assetId ?? null,
         tagIds: tagIdsByEntry.get(entry.id) ?? [],
+        gaming: entry.gaming
+          ? {
+              structured: true,
+              gameTitle: entry.gaming.gameTitle,
+              gameKey: entry.gaming.gameKey,
+              estimatedHours: entry.gaming.estimatedHours,
+            }
+          : undefined,
         task: taskState === 'hidden' || !taskMetadata
           ? null
           : {
@@ -1045,6 +1262,23 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
       }
     }
     json(res, 200, { year, month, entriesByDate, activeDays: Array.from(activeDays).sort((a, b) => a - b) })
+    return
+  }
+
+  if (path === '/api/gaming/entries' && method === 'POST') {
+    json(res, 200, addGamingEntry(await readBody(req) as CreateGamingEntryRequest))
+    return
+  }
+
+  const gamingEntryMatch = path.match(/^\/api\/gaming\/entries\/(\d+)$/)
+  if (gamingEntryMatch && method === 'PUT') {
+    json(res, 200, updateGamingEntry(Number(gamingEntryMatch[1]), await readBody(req) as UpdateGamingEntryRequest))
+    return
+  }
+
+  const gamingDetailMatch = path.match(/^\/api\/gaming\/trackers\/(\d+)\/detail$/)
+  if (gamingDetailMatch && method === 'GET') {
+    json(res, 200, getGamingDetail(Number(gamingDetailMatch[1]), { limit: optionalInt(url.searchParams.get('limit')) ?? 365 }))
     return
   }
 

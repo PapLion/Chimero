@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -61,5 +63,19 @@ describe('database migration transition', () => {
     prepareConsolidatedMigrationTransition('unused')
 
     expect(mocks.deleteMigrationHistoryRunMock).not.toHaveBeenCalled()
+  })
+
+  it('adds the gaming extension migration without backfilling legacy entries', () => {
+    const migration = readFileSync(
+      resolve(process.cwd(), 'packages/db/drizzle/0003_overconfident_forgotten_one.sql'),
+      'utf-8',
+    )
+
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS `entry_gaming`')
+    expect(migration).toContain('FOREIGN KEY (`entry_id`) REFERENCES `entries`(`id`) ON UPDATE no action ON DELETE cascade')
+    expect(migration).toContain('CREATE INDEX IF NOT EXISTS `entry_gaming_game_key_idx`')
+    expect(migration).not.toMatch(/INSERT INTO `?entries`?/i)
+    expect(migration).not.toMatch(/UPDATE `?entries`?/i)
+    expect(migration).not.toMatch(/DELETE FROM `?entries`?/i)
   })
 })
