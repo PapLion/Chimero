@@ -14,10 +14,10 @@ import {
   postponeTaskToNextDay,
   unpostponeTask,
 } from "@contracts/domain"
-import { buildBooksTrackerReadModel, getBookActionLabel, getBookLifecycleRecord } from "@contracts/features/books"
+import { buildBooksTrackerReadModel, formatBookRatingDisplay, getBookActionLabel, getBookLifecycleRecord } from "@contracts/features/books"
 import { getTrackerIdentity, isBooksTracker, usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useEntries, useDeleteEntryMutation, useUpdateEntryMutation, useWeightDetail, useTags } from "@shared/queries"
+import { useTrackers, useEntries, useDeleteEntryMutation, useUpdateEntryMutation, useWeightDetail, useTags, useBook } from "@shared/queries"
 import { filterEntriesByDate, cn } from "@shared/utils"
 import type { Entry } from "@shared/store"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, CalendarPlus, Undo2, Square, Tv, type LucideIcon } from "lucide-react"
@@ -118,6 +118,19 @@ const entryCardBase =
 
 const actionButtonBase =
   "rounded-lg border border-white/8 bg-white/[0.06] p-1.5 text-white/60 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-white/[0.1] hover:text-[hsl(var(--foreground))]"
+
+function BookFinishedRatingBadge({ bookId }: { bookId: number }) {
+  const { data: bookDetails } = useBook(bookId)
+  const ratingDisplay = formatBookRatingDisplay(bookDetails?.book.ratingTenths ?? null)
+
+  if (!ratingDisplay) return null
+
+  return (
+    <span className="rounded-full border border-[hsl(var(--border)/0.62)] bg-white/[0.03] px-2 py-0.5 text-[11px] text-[hsl(var(--foreground))]">
+      {ratingDisplay}
+    </span>
+  )
+}
 
 export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, assets }: TrackerDetailViewProps) {
   const { selectedDate: storeSelectedDate } = useAppStore()
@@ -559,6 +572,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const renderBookEntryCard = (bookEntry: ReturnType<typeof getBookLifecycleRecord>, legacySection = false) => {
     const rawEntry = trackerEntries.find((entry) => entry.id === bookEntry.entryId)
     if (!rawEntry) return null
+    const structuredBookId = !legacySection && bookEntry.action === "finished" && rawEntry.book?.structured ? rawEntry.book.bookId : null
 
     return (
       <div
@@ -580,11 +594,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {bookEntry.rating != null && (
-            <span className="rounded-full border border-[hsl(var(--border)/0.62)] bg-white/[0.03] px-2 py-0.5 text-[11px] text-[hsl(var(--foreground))]">
-              {bookEntry.rating.toFixed(1)}/5
-            </span>
-          )}
+          {structuredBookId != null && <BookFinishedRatingBadge bookId={structuredBookId} />}
           {!legacySection && !bookEntry.editable && (
             <span className="rounded-full border border-[hsl(var(--border)/0.62)] bg-white/[0.03] px-2 py-0.5 text-[11px] text-[hsl(var(--muted-foreground))]">
               History only
