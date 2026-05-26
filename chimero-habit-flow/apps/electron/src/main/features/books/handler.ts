@@ -4,6 +4,7 @@ import {
   deleteBookReadActivity,
   finishBook,
   getBook,
+  getBooks,
   getBookHistory,
   getBookSelectedDaySummary,
   getBookStats,
@@ -40,6 +41,7 @@ function emptySelectedDay() {
     currentActivityType: null,
     selectedDayBookTitle: null,
     selectedDayActivityType: null,
+    selectedDayEntries: [],
     uniqueBookCount: 0,
     structuredEntryCount: 0,
     legacyEntryCount: 0,
@@ -54,6 +56,15 @@ export function registerBooksHandlers(): void {
     } catch (e) {
       console.error('get-book error:', e)
       return null
+    }
+  })
+
+  ipcMain.handle('get-books', async () => {
+    try {
+      return await getBooks()
+    } catch (e) {
+      console.error('get-books error:', e)
+      return []
     }
   })
 

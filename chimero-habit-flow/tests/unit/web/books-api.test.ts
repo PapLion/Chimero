@@ -101,6 +101,9 @@ function createWebBooksDb() {
         if (normalized === 'select * from tags order by name asc') {
           return state.tags
         }
+        if (normalized === 'select * from books order by updated_at desc, created_at desc, id desc') {
+          return [state.bookRow]
+        }
         if (normalized === 'select entry_id, tag_id from entries_to_tags where entry_id in (?)') {
           const entryId = Number(params[0])
           const tagIds = state.entryTags.get(entryId) ?? []
@@ -290,5 +293,23 @@ describe('web books api', () => {
         ratingTenths: null,
       },
     })
+  })
+
+  it('returns structured books for the visible shelf surface without inventing activities', async () => {
+    const db = createWebBooksDb()
+    mocks.getWebDbMock.mockResolvedValue(db)
+
+    const response = await invokeJson('GET', '/api/books', undefined)
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json).toEqual([
+      expect.objectContaining({
+        id: 11,
+        title: 'Dune',
+        shelf: 'tbr',
+        status: 'planned',
+      }),
+    ])
+    expect(db.state.bookActivities.size).toBe(0)
   })
 })

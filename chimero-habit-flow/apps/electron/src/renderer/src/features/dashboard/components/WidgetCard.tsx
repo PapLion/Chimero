@@ -1,10 +1,11 @@
 "use client"
 
+import { useMemo } from "react"
 import { cn } from "@shared/utils"
 import { type Widget, type Tracker, type Entry } from "@shared/store"
-import { useMoodDailyAggregates, useUpdateEntryMutation, useWeightDetail } from "@shared/queries"
+import { useBooks, useMoodDailyAggregates, useUpdateEntryMutation, useWeightDetail } from "@shared/queries"
 import { buildGamingHomeWidgetReadModel, buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, moodScoreToColor, postponeTaskToNextDay, unpostponeTask } from "@contracts/domain"
-import { buildBooksTrackerReadModel, getBookActionLabel } from "@contracts/features/books"
+import { buildBooksTrackerReadModel, formatBookRatingDisplay, getBookActionLabel } from "@contracts/features/books"
 import { getTrackerIdentity, isBooksTracker, usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
@@ -159,19 +160,39 @@ function BooksWidget({
   assets: Map<number, Asset>
   selectedDate: Date
 }) {
-  const booksHome = buildBooksTrackerReadModel(entries, selectedDate)
-  const iconKey = (tracker.icon ?? "").trim() || "book"
-  const Icon = iconMap[iconKey] || Book
-  const selectedDay = booksHome.selectedDay
-  const hasStructuredBooks = booksHome.structured.length > 0
-  const hasLegacyBooks = booksHome.legacy.length > 0
+const { data: books = [] } = useBooks()
+const booksHome = buildBooksTrackerReadModel(entries, selectedDate)
+const iconKey = (tracker.icon ?? "").trim() || "book"
+const Icon = iconMap[iconKey] || Book
+const selectedDayEntries = booksHome.selectedDayEntries
+const booksByShelf = useMemo(() => {
+  const sorted = [...books].sort(
+    (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || (b.createdAt ?? 0) - (a.createdAt ?? 0) || b.id - a.id,
+  )
+  return {
+    want: sorted.filter((book) => book.shelf === "tbr"),
+    reading: sorted.filter((book) => book.shelf === "reading"),
+    finished: sorted.filter((book) => book.shelf === "finished"),
+  }
+}, [books])
+const hasBookEntities = books.length > 0
+const hasStructuredBooks = booksHome.structured.length > 0
+const hasLegacyBooks = booksHome.legacy.length > 0
+const bookById = useMemo(() => new Map(books.map((book) => [book.id, book])), [books])
+const shelfCounts = hasBookEntities
+  ? {
+      want: booksByShelf.want.length,
+      reading: booksByShelf.reading.length,
+      finished: booksByShelf.finished.length,
+    }
+  : booksHome.shelfCounts
 
-  if (!hasStructuredBooks && !hasLegacyBooks) {
-    return (
-      <div className="flex h-full flex-col">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="surface-chip p-2">
-            <Icon className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />
+if (!hasBookEntities && !hasStructuredBooks && !hasLegacyBooks) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="surface-chip p-2">
+          <Icon className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />
           </div>
           <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">{tracker.name}</span>
         </div>
@@ -189,41 +210,85 @@ function BooksWidget({
         <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">{tracker.name}</span>
       </div>
 
-      <div className="mb-3 grid grid-cols-3 gap-2">
-        <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
-          <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Want</div>
-          <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{booksHome.shelfCounts.want}</div>
-        </div>
-        <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
-          <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Reading</div>
-          <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{booksHome.shelfCounts.reading}</div>
-        </div>
-        <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
-          <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Finished</div>
-          <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{booksHome.shelfCounts.finished}</div>
-        </div>
-      </div>
-
-      {selectedDay && selectedDay.action !== "legacy" && (
-        <div className="mb-3 rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[hsl(var(--muted-foreground))]">
-                {selectedDay.dateStr === `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`
-                  ? "Selected day"
-                  : "Latest structured"}
+      {hasBookEntities ? (
+        <div className="mb-3 space-y-3">
+          {([
+            ["Want to Read", booksByShelf.want],
+            ["Reading", booksByShelf.reading],
+            ["Finished", booksByShelf.finished],
+          ] as const).map(([label, items]) => {
+            if (items.length === 0) return null
+            return (
+              <div key={label} className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">{label}</div>
+                  <div className="text-xs text-[hsl(var(--muted-foreground))]">{items.length}</div>
+                </div>
+                <div className="mt-2 space-y-2">
+                  {items.slice(0, 3).map((book) => (
+                    <div key={book.id} className="rounded-xl border border-[hsl(var(--border)/0.5)] bg-white/[0.02] p-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-[hsl(var(--foreground))]">{book.title}</div>
+                          <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                            {book.shelf === "tbr" ? "Want to Read" : book.shelf === "reading" ? "Reading" : "Finished"}
+                          </div>
+                        </div>
+                        {book.shelf === "finished" && formatBookRatingDisplay(book.ratingTenths) && (
+                          <div className="shrink-0 text-xs text-[hsl(var(--muted-foreground))]">
+                            {formatBookRatingDisplay(book.ratingTenths)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="mt-1 truncate text-sm font-medium text-[hsl(var(--foreground))]">{selectedDay.title}</div>
-            </div>
-            <div className="text-xs font-medium text-[hsl(var(--foreground))]">{getBookActionLabel(selectedDay.action)}</div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="mb-3 grid grid-cols-3 gap-2">
+          <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Want</div>
+            <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{booksHome.shelfCounts.want}</div>
           </div>
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <div className="text-xs text-[hsl(var(--muted-foreground))]">
-              {new Date(selectedDay.timestamp).toLocaleDateString()}
-            </div>
-            {selectedDay.rating != null && (
-              <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedDay.rating.toFixed(1)}/5</div>
-            )}
+          <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Reading</div>
+            <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{booksHome.shelfCounts.reading}</div>
+          </div>
+          <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Finished</div>
+            <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{booksHome.shelfCounts.finished}</div>
+          </div>
+        </div>
+      )}
+
+      {selectedDayEntries.length > 0 && (
+        <div className="mb-3 rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-3">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[hsl(var(--muted-foreground))]">
+            Selected day
+          </div>
+          <div className="mt-2 space-y-2">
+            {selectedDayEntries.map((entry) => {
+              const book = entry.bookId != null ? bookById.get(entry.bookId) : null
+              const ratingDisplay = entry.action === "finished" ? formatBookRatingDisplay(book?.ratingTenths ?? null) : null
+              return (
+                <div key={entry.entryId} className="rounded-xl border border-[hsl(var(--border)/0.5)] bg-white/[0.02] p-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-[hsl(var(--foreground))]">{entry.title}</div>
+                      <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                        {getBookActionLabel(entry.action)} · {new Date(entry.timestamp).toLocaleDateString()}
+                      </div>
+                    </div>
+                    {ratingDisplay && (
+                      <div className="shrink-0 text-xs text-[hsl(var(--muted-foreground))]">{ratingDisplay}</div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -257,6 +322,7 @@ function BooksWidget({
 
       <div className="mt-auto pt-3 text-xs text-[hsl(var(--muted-foreground))]">
         {booksHome.readingStreakDays} day streak · {booksHome.finishedThisMonth} finished this month
+        {hasBookEntities ? ` · ${shelfCounts.want} want / ${shelfCounts.reading} reading / ${shelfCounts.finished} finished` : ""}
         {hasLegacyBooks ? ` · ${booksHome.legacy.length} legacy` : ""}
       </div>
     </div>

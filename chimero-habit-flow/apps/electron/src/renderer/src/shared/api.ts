@@ -113,6 +113,7 @@ const webApi: ElectronApi = {
   updateGamingEntry: (entryId, updates) => request(`/api/gaming/entries/${entryId}`, { method: 'PUT', body: updates }),
   getGamingDetail: (trackerId, options) => request(`/api/gaming/trackers/${trackerId}/detail${queryString(options)}`),
   getBook: (bookId) => request(`/api/books/${bookId}`),
+  getBooks: () => request('/api/books'),
   createBook: (data) => request('/api/books', { method: 'POST', body: data }),
   startBook: (data) => request('/api/books/start', { method: 'POST', body: data }),
   readBook: (data) => request('/api/books/read', { method: 'POST', body: data }),

@@ -31,6 +31,7 @@ export interface BooksTrackerReadModel {
   finished: BookLifecycleRecord[]
   latestStructured: BookLifecycleRecord | null
   selectedDay: BookLifecycleRecord | null
+  selectedDayEntries: BookLifecycleRecord[]
   recentFinished: BookLifecycleRecord[]
   shelfCounts: {
     want: number
@@ -315,7 +316,8 @@ export function buildBooksTrackerReadModel(entries: Entry[], selectedDate: Date)
   const finished = records.filter((entry) => entry.action === 'finished')
   const latestStructured = structured[0] ?? null
   const selectedDayStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`
-  const selectedDay = records.find((entry) => entry.dateStr === selectedDayStr) ?? null
+  const selectedDayEntries = structured.filter((entry) => entry.dateStr === selectedDayStr)
+  const selectedDay = selectedDayEntries[0] ?? null
   const recentFinished = finished.slice(0, 3)
   const now = new Date(selectedDate.getTime())
   now.setHours(23, 59, 59, 999)
@@ -349,6 +351,7 @@ export function buildBooksTrackerReadModel(entries: Entry[], selectedDate: Date)
     finished,
     latestStructured,
     selectedDay,
+    selectedDayEntries,
     recentFinished,
     shelfCounts: {
       want: wantToRead.length,

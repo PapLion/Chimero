@@ -71,6 +71,7 @@ const api: ElectronApi = {
   updateGamingEntry: (entryId, updates) => ipcRenderer.invoke('update-gaming-entry', entryId, updates),
   getGamingDetail: (trackerId, options) => ipcRenderer.invoke('get-gaming-detail', trackerId, options),
   getBook: (bookId: number) => ipcRenderer.invoke('get-book', bookId),
+  getBooks: () => ipcRenderer.invoke('get-books'),
   createBook: (data) => ipcRenderer.invoke('create-book', data),
   startBook: (data) => ipcRenderer.invoke('start-book', data),
   readBook: (data) => ipcRenderer.invoke('read-book', data),

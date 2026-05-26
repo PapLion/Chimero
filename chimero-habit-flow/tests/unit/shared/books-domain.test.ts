@@ -150,6 +150,70 @@ describe('shared book domain helpers', () => {
     ])
   })
 
+  it('keeps all same-day structured book activities in the selected-day read model', () => {
+    const sameDayEntries: Entry[] = [
+      {
+        id: 10,
+        trackerId: 5,
+        value: null,
+        note: 'Started smoke one',
+        metadata: {},
+        timestamp: Date.parse('2026-05-21T08:00:00'),
+        dateStr: '2026-05-21',
+        book: {
+          structured: true,
+          bookId: 20,
+          title: 'Started smoke one',
+          titleKey: 'started smoke one',
+          activityType: 'started',
+        },
+      },
+      {
+        id: 11,
+        trackerId: 5,
+        value: null,
+        note: 'Started smoke two',
+        metadata: {},
+        timestamp: Date.parse('2026-05-21T09:00:00'),
+        dateStr: '2026-05-21',
+        book: {
+          structured: true,
+          bookId: 21,
+          title: 'Started smoke two',
+          titleKey: 'started smoke two',
+          activityType: 'started',
+        },
+      },
+      {
+        id: 12,
+        trackerId: 5,
+        value: null,
+        note: 'Finished smoke',
+        metadata: {},
+        timestamp: Date.parse('2026-05-21T10:00:00'),
+        dateStr: '2026-05-21',
+        book: {
+          structured: true,
+          bookId: 22,
+          title: 'Finished smoke',
+          titleKey: 'finished smoke',
+          activityType: 'finished',
+        },
+      },
+    ]
+
+    const selected = buildBookSelectedDayReadModel(sameDayEntries, {
+      trackerId: 5,
+      title: 'Books',
+      selectedDate: '2026-05-21',
+    })
+
+    expect(selected.selectedDayEntries).toHaveLength(3)
+    expect(selected.selectedDayEntries.map((entry) => entry.entryId)).toEqual([12, 11, 10])
+    expect(selected.selectedDayBookTitle).toBe('Finished smoke')
+    expect(selected.selectedDayActivityType).toBe('finished')
+  })
+
   it('treats service-written finish metadata as a structured finished activity in the tracker read model', () => {
     const legacyEntry = entries[0]
     const finishEntry: Entry = {

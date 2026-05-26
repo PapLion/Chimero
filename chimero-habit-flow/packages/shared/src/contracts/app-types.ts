@@ -217,6 +217,7 @@ export interface BookSelectedDaySummaryReadModel {
   currentActivityType: BookActivityType | null
   selectedDayBookTitle: string | null
   selectedDayActivityType: BookActivityType | null
+  selectedDayEntries: BookHistoryItem[]
   uniqueBookCount: number
   structuredEntryCount: number
   legacyEntryCount: number

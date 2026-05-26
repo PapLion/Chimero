@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
+import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useBooks, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
 import { cn } from "@shared/utils"
 import { getEntryConfig } from "../entry-config"
 import type { Entry, Tracker } from "@shared/store"
@@ -102,8 +102,10 @@ export function QuickEntry() {
   const [reminderTime, setReminderTime] = useState("")
   const [linkedTrackerId, setLinkedTrackerId] = useState<number | undefined>(undefined)
   const bookIdCacheRef = useRef(new Map<string, number>())
+  const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
 
   const { data: selectedTrackerEntries = [] } = useEntries(selectedTracker ? { trackerId: selectedTracker } : undefined)
+  const { data: books = [] } = useBooks(commandBarOpen && (selectedTrackerData ? isBooksTracker(selectedTrackerData) : false))
 
   // Assets for picker
   const { data: assetsData } = useAssets({ limit: 50 })
@@ -115,6 +117,9 @@ export function QuickEntry() {
 
   const selectedTrackerBookIdsByTitle = useMemo(() => {
     const map = new Map<string, number>()
+    for (const book of books as Array<{ id: number; title: string }>) {
+      map.set(normalizeBookKey(book.title), book.id)
+    }
     for (const entry of selectedTrackerEntries as Entry[]) {
       if (entry.book?.structured) {
         map.set(normalizeBookKey(entry.book.title), entry.book.bookId)
@@ -126,9 +131,7 @@ export function QuickEntry() {
       }
     }
     return map
-  }, [normalizeBookKey, selectedTrackerEntries])
-
-  const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
+  }, [normalizeBookKey, books, selectedTrackerEntries])
 
   // Autocomplete: Favorites + Recents (deduped) + All trackers filtered by search
   const searchLower = search.toLowerCase().trim()

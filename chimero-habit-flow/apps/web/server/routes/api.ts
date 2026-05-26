@@ -1193,6 +1193,13 @@ function getBook(bookId: number): BookResponse | null {
   return row ? { book: mapBookRow(row as JsonRecord) } : null
 }
 
+function getBooks(): Book[] {
+  return getDb()
+    .prepare('SELECT * FROM books ORDER BY updated_at DESC, created_at DESC, id DESC')
+    .all()
+    .map((row) => mapBookRow(row as JsonRecord))
+}
+
 function getBookEntries(trackerId: number, limit = 365): Entry[] {
   return getEntries({ trackerId, limit })
 }
@@ -1630,6 +1637,11 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
 
   if (path === '/api/books' && method === 'POST') {
     json(res, 200, createBook(await readBody(req) as CreateBookRequest))
+    return
+  }
+
+  if (path === '/api/books' && method === 'GET') {
+    json(res, 200, getBooks())
     return
   }
 

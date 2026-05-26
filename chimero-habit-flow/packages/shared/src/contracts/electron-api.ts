@@ -13,6 +13,7 @@ import type {
   CreateBookRequest,
   CreateBookActivityRequest,
   Entry,
+  Book,
   EntryUpdateRequest,
   BookActivityResponse,
   BookHistoryItem,
@@ -102,6 +103,7 @@ export interface ElectronApi {
   updateGamingEntry: (entryId: number, updates: UpdateGamingEntryRequest) => Promise<GamingEntryResponse | null>
   getGamingDetail: (trackerId: number, options?: { limit?: number }) => Promise<GamingDetailResponse>
   getBook: (bookId: number) => Promise<BookResponse | null>
+  getBooks: () => Promise<Book[]>
   createBook: (data: CreateBookRequest) => Promise<BookResponse | null>
   startBook: (data: CreateBookActivityRequest) => Promise<BookActivityResponse | null>
   readBook: (data: CreateBookActivityRequest) => Promise<BookActivityResponse | null>

@@ -97,6 +97,15 @@ export async function getBook(bookId: number): Promise<BookResponse | null> {
   return book ? { book } : null
 }
 
+export async function getBooks(): Promise<Book[]> {
+  const rows = await getDb()
+    .select()
+    .from(books)
+    .orderBy(desc(books.updatedAt), desc(books.createdAt), desc(books.id))
+
+  return rows.map((row) => mapBookRow(row as Record<string, unknown>))
+}
+
 const bookEntryProjection = {
   id: entries.id,
   trackerId: entries.trackerId,

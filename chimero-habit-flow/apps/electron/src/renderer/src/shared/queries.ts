@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type { Tracker, Entry } from './store'
-import type { BaseEntryRequest, BookActivityResponse, BookResponse, CreateBookActivityRequest, CreateBookRequest, CreateGamingEntryRequest, CreateWeightEntryRequest, EntryUpdateRequest, GamingDetailResponse, GamingEntryResponse, SetTrackerGoalRequest, TrackerConfig, UpdateBookActivityRequest, UpdateBookRequest, UpdateGamingEntryRequest, UpdateWeightEntryRequest } from '@contracts/contracts'
+import type { BaseEntryRequest, Book, BookActivityResponse, BookResponse, CreateBookActivityRequest, CreateBookRequest, CreateGamingEntryRequest, CreateWeightEntryRequest, EntryUpdateRequest, GamingDetailResponse, GamingEntryResponse, SetTrackerGoalRequest, TrackerConfig, UpdateBookActivityRequest, UpdateBookRequest, UpdateGamingEntryRequest, UpdateWeightEntryRequest } from '@contracts/contracts'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
 export const queryKeys = {
@@ -34,6 +34,7 @@ export const queryKeys = {
   weightGoal: (trackerId: number) => ['weight-goal', trackerId] as const,
   gamingDetail: (trackerId: number) => ['gaming-detail', trackerId] as const,
   gamingDetailRoot: ['gaming-detail'] as const,
+  booksRoot: ['books'] as const,
   book: (bookId: number) => ['book', bookId] as const,
   bookRoot: ['book'] as const,
   // Contacts
@@ -171,6 +172,15 @@ export function useBook(bookId: number | null | undefined, enabled = true) {
   })
 }
 
+export function useBooks(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.booksRoot,
+    queryFn: () => api.getBooks() as Promise<Book[]>,
+    enabled,
+    staleTime: 15_000,
+  })
+}
+
 export function useCalendarMonth(year: number, month: number) {
   return useQuery({
     queryKey: queryKeys.calendarMonth(year, month),
@@ -267,7 +277,11 @@ export function useCreateBookMutation() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: CreateBookRequest) => api.createBook(data) as Promise<BookResponse | null>,
-    onSuccess: () => {
+    onSuccess: (result) => {
+      if (result?.book.id != null) {
+        qc.invalidateQueries({ queryKey: queryKeys.book(result.book.id) })
+      }
+      qc.invalidateQueries({ queryKey: queryKeys.booksRoot })
       qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
       qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
       qc.invalidateQueries({ queryKey: queryKeys.stats })
@@ -283,7 +297,11 @@ function useBookActivityMutation(
   const qc = useQueryClient()
   return useMutation({
     mutationFn: mutate,
-    onSuccess: () => {
+    onSuccess: (result) => {
+      if (result?.book.id != null) {
+        qc.invalidateQueries({ queryKey: queryKeys.book(result.book.id) })
+      }
+      qc.invalidateQueries({ queryKey: queryKeys.booksRoot })
       qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
       qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
       qc.invalidateQueries({ queryKey: queryKeys.stats })
@@ -310,7 +328,12 @@ export function useUpdateBookMutation() {
   return useMutation({
     mutationFn: ({ bookId, updates }: { bookId: number; updates: UpdateBookRequest }) =>
       api.updateBook(bookId, updates) as Promise<BookResponse | null>,
-    onSuccess: () => {
+    onSuccess: (result, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.book(variables.bookId) })
+      if (result?.book.id != null) {
+        qc.invalidateQueries({ queryKey: queryKeys.book(result.book.id) })
+      }
+      qc.invalidateQueries({ queryKey: queryKeys.booksRoot })
       qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
       qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
       qc.invalidateQueries({ queryKey: queryKeys.stats })

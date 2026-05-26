@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { books, bookActivities, entries, trackers } from '@packages/db'
-import { getBook, readBook } from '../../../apps/electron/src/main/features/books/service'
+import { createBook, getBook, getBooks, readBook } from '../../../apps/electron/src/main/features/books/service'
 
 const mocks = vi.hoisted(() => ({
   getDbMock: vi.fn(),
@@ -52,9 +52,11 @@ function createBooksDb() {
   }
   const state = {
     nextEntryId: 101,
+    nextBookId: 12,
     entries: new Map<number, Record<string, unknown>>(),
     readActivities: new Map<string, { entryId: number; bookId: number; dateStr: string; activityType: string }>(),
     bookRow,
+    books: [bookRow],
   }
 
   function buildEntryProjectionRow(entryId: number) {
@@ -85,17 +87,21 @@ function createBooksDb() {
 
   function createQuery(projection?: unknown) {
     let kind: 'tracker' | 'book' | 'bookActivities' | 'entryProjection' | 'unknown' = projection ? 'entryProjection' : 'unknown'
+    const resolveRows = () => {
+      if (kind === 'tracker') return [trackerRow]
+      if (kind === 'book') return state.books
+      if (kind === 'bookActivities') return Array.from(state.readActivities.values())
+      if (kind === 'entryProjection') return buildEntryProjectionRow(101)
+      return []
+    }
     const query: Record<string, unknown> = {}
     query.where = vi.fn(() => query)
     query.leftJoin = vi.fn(() => query)
     query.orderBy = vi.fn(() => query)
     query.limit = vi.fn(() => {
-      if (kind === 'tracker') return [trackerRow]
-      if (kind === 'book') return [state.bookRow]
-      if (kind === 'bookActivities') return Array.from(state.readActivities.values())
-      if (kind === 'entryProjection') return buildEntryProjectionRow(101)
-      return []
+      return resolveRows()
     })
+    query.then = vi.fn((resolve: (value: unknown) => unknown) => Promise.resolve(resolve(resolveRows())))
     query.from = vi.fn((table: unknown) => {
       if (table === trackers) kind = 'tracker'
       else if (table === books) kind = 'book'
@@ -115,6 +121,18 @@ function createBooksDb() {
             returning: vi.fn(() => {
               const row = { ...values, id: state.nextEntryId++ }
               state.entries.set(row.id as number, row)
+              return [row]
+            }),
+          })),
+        }
+      }
+      if (table === books) {
+        return {
+          values: vi.fn((values: Record<string, unknown>) => ({
+            returning: vi.fn(() => {
+              const row = { ...values, id: state.nextBookId++ }
+              state.books.unshift(row as typeof bookRow)
+              state.bookRow = row as typeof bookRow
               return [row]
             }),
           })),
@@ -228,5 +246,43 @@ describe('books persistence service', () => {
         ratingTenths: null,
       },
     })
+  })
+
+  it('returns structured books for the visible shelf surface without inventing activities', async () => {
+    const { db, state } = createBooksDb()
+    state.bookRow.shelf = 'tbr'
+    state.bookRow.status = 'planned'
+    mocks.getDbMock.mockReturnValue(db)
+
+    await expect(getBooks()).resolves.toEqual([
+      expect.objectContaining({
+        id: 11,
+        title: 'Dune',
+        shelf: 'tbr',
+        status: 'planned',
+      }),
+    ])
+    expect(state.readActivities.size).toBe(0)
+  })
+
+  it('persists a want-to-read book entity without creating a reading activity', async () => {
+    const { db, state } = createBooksDb()
+    mocks.getDbMock.mockReturnValue(db)
+
+    const response = await createBook({
+      title: 'Want to Read smoke',
+      shelf: 'tbr',
+      status: 'planned',
+    })
+
+    expect(response).toMatchObject({
+      book: {
+        title: 'Want to Read smoke',
+        shelf: 'tbr',
+        status: 'planned',
+      },
+    })
+    expect(state.books.some((book) => book.title === 'Want to Read smoke')).toBe(true)
+    expect(state.readActivities.size).toBe(0)
   })
 })

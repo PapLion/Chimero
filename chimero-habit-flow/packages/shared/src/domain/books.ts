@@ -110,7 +110,8 @@ export function buildBookSelectedDayReadModel(
   const structured = history.filter((entry): entry is BookEntryReadModel => entry.structured)
   const selectedDate = validateDateString(options.selectedDate, 'Selected date')
   const latest = structured[0] ?? null
-  const selectedDay = structured.find((entry) => entry.dateStr === selectedDate) ?? null
+  const selectedDayEntries = structured.filter((entry) => entry.dateStr === selectedDate)
+  const selectedDay = selectedDayEntries[0] ?? null
   const stats = buildBookStatisticsReadModel(entries)
 
   return {
@@ -120,10 +121,10 @@ export function buildBookSelectedDayReadModel(
     currentActivityType: latest?.activityType ?? null,
     selectedDayBookTitle: selectedDay?.title ?? null,
     selectedDayActivityType: selectedDay?.activityType ?? null,
+    selectedDayEntries,
     uniqueBookCount: stats.uniqueBookCount,
     structuredEntryCount: stats.structuredEntryCount,
     legacyEntryCount: stats.legacyEntryCount,
     sparkline: stats.chartData.map((point) => ({ date: point.date, value: point.value })),
   }
 }
-
