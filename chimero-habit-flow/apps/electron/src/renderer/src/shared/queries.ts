@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type { Tracker, Entry } from './store'
-import type { BaseEntryRequest, Book, BookActivityResponse, BookResponse, CreateBookActivityRequest, CreateBookRequest, CreateGamingEntryRequest, CreateWeightEntryRequest, EntryUpdateRequest, GamingDetailResponse, GamingEntryResponse, SetTrackerGoalRequest, TrackerConfig, UpdateBookActivityRequest, UpdateBookRequest, UpdateGamingEntryRequest, UpdateWeightEntryRequest } from '@contracts/contracts'
+import type { BaseEntryRequest, Book, BookActivityResponse, BookResponse, CreateBookActivityRequest, CreateBookRequest, CreateFoodEntryRequest, CreateGamingEntryRequest, CreateWeightEntryRequest, EntryUpdateRequest, FoodDetailResponse, FoodEntryResponse, GamingDetailResponse, GamingEntryResponse, SetTrackerGoalRequest, TrackerConfig, UpdateBookActivityRequest, UpdateBookRequest, UpdateFoodEntryRequest, UpdateGamingEntryRequest, UpdateWeightEntryRequest } from '@contracts/contracts'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
 export const queryKeys = {
@@ -34,6 +34,8 @@ export const queryKeys = {
   weightGoal: (trackerId: number) => ['weight-goal', trackerId] as const,
   gamingDetail: (trackerId: number) => ['gaming-detail', trackerId] as const,
   gamingDetailRoot: ['gaming-detail'] as const,
+  foodDetail: (trackerId: number) => ['food-detail', trackerId] as const,
+  foodDetailRoot: ['food-detail'] as const,
   booksRoot: ['books'] as const,
   book: (bookId: number) => ['book', bookId] as const,
   bookRoot: ['book'] as const,
@@ -163,6 +165,15 @@ export function useGamingDetail(trackerId: number, enabled = true) {
   })
 }
 
+export function useFoodDetail(trackerId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.foodDetail(trackerId),
+    queryFn: () => api.getFoodDetail(trackerId) as Promise<FoodDetailResponse>,
+    enabled: enabled && !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
 export function useBook(bookId: number | null | undefined, enabled = true) {
   return useQuery({
     queryKey: bookId == null ? queryKeys.bookRoot : queryKeys.book(bookId),
@@ -268,6 +279,21 @@ export function useAddGamingEntryMutation() {
       qc.invalidateQueries({ queryKey: queryKeys.stats })
       qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
       qc.invalidateQueries({ queryKey: queryKeys.gamingDetail(variables.trackerId) })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useAddFoodEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateFoodEntryRequest) => api.addFoodEntry(data) as Promise<FoodEntryResponse | null>,
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.foodDetail(variables.trackerId) })
       qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
     },
   })
@@ -399,6 +425,37 @@ export function useUpdateGamingEntryMutation() {
       qc.invalidateQueries({ queryKey: queryKeys.stats })
       qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
       if (trackerId) qc.invalidateQueries({ queryKey: queryKeys.gamingDetail(trackerId) })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useUpdateFoodEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ entryId, updates }: { entryId: number; updates: UpdateFoodEntryRequest }) =>
+      api.updateFoodEntry(entryId, updates) as Promise<FoodEntryResponse | null>,
+    onSuccess: (result) => {
+      const trackerId = result?.entry.trackerId
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      if (trackerId) qc.invalidateQueries({ queryKey: queryKeys.foodDetail(trackerId) })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useDeleteFoodEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (entryId: number) => api.deleteFoodEntry(entryId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.foodDetailRoot })
       qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
     },
   })

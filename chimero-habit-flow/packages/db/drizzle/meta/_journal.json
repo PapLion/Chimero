@@ -36,6 +36,13 @@
       "when": 1779496800000,
       "tag": "0004_books_entity_and_activity",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1779497000000,
+      "tag": "0005_food_log_extension",
+      "breakpoints": true
     }
   ]
 }

@@ -177,6 +177,17 @@ export const entryGaming = sqliteTable("entry_gaming", {
   gameKeyIdx: index("entry_gaming_game_key_idx").on(t.gameKey),
 }));
 
+export const entryFood = sqliteTable("entry_food", {
+  entryId: integer("entry_id").primaryKey().references(() => entries.id, { onDelete: "cascade" }),
+  foodName: text("food_name").notNull(),
+  foodKey: text("food_key").notNull(),
+  calories: real("calories"),
+  mealType: text("meal_type", { enum: ["breakfast", "lunch", "dinner", "snack", "other"] }),
+}, (t) => ({
+  foodKeyIdx: index("entry_food_food_key_idx").on(t.foodKey),
+  mealTypeIdx: index("entry_food_meal_type_idx").on(t.mealType),
+}));
+
 export const trackerGoals = sqliteTable("tracker_goals", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   trackerId: integer("tracker_id").references(() => trackers.id, { onDelete: "cascade" }).notNull(),

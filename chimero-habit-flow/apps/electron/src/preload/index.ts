@@ -70,6 +70,11 @@ const api: ElectronApi = {
   addGamingEntry: (data) => ipcRenderer.invoke('add-gaming-entry', data),
   updateGamingEntry: (entryId, updates) => ipcRenderer.invoke('update-gaming-entry', entryId, updates),
   getGamingDetail: (trackerId, options) => ipcRenderer.invoke('get-gaming-detail', trackerId, options),
+  // Food
+  addFoodEntry: (data) => ipcRenderer.invoke('add-food-entry', data),
+  updateFoodEntry: (entryId, updates) => ipcRenderer.invoke('update-food-entry', entryId, updates),
+  deleteFoodEntry: (entryId) => ipcRenderer.invoke('delete-food-entry', entryId),
+  getFoodDetail: (trackerId, options) => ipcRenderer.invoke('get-food-detail', trackerId, options),
   getBook: (bookId: number) => ipcRenderer.invoke('get-book', bookId),
   getBooks: () => ipcRenderer.invoke('get-books'),
   createBook: (data) => ipcRenderer.invoke('create-book', data),

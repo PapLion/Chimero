@@ -462,9 +462,12 @@ export function CalendarPage() {
                             const isMoodEntry = trackerNameLower.includes("mood") || trackerNameLower.includes("feeling") || tracker?.icon === "smile"
                             const isTaskEntry = !!entry.taskState
                             const isGamingTracker = tracker ? getTrackerIdentity(tracker) === "gaming" : false
+                            const isFoodTracker = tracker ? getTrackerIdentity(tracker) === "diet" : false
                             const isBooksTracker = tracker ? getTrackerIdentity(tracker) === "books" : false
                             const gaming = entry.gaming?.structured ? entry.gaming : null
+                            const food = entry.food?.structured ? entry.food : null
                             const legacyGaming = isGamingTracker && !gaming
+                            const legacyFood = isFoodTracker && !food
                             const book = isBooksTracker && detailedEntry ? getBookLifecycleRecord(detailedEntry as Entry) : null
                             const moodScore = isMoodEntry ? clampMoodScore(entry.value) : null
                             const entryTime = new Date(entry.timestamp).toLocaleTimeString(undefined, {
@@ -547,13 +550,32 @@ export function CalendarPage() {
                                 {isBooksTracker && book && book.action === "legacy" && entry.note && (
                                   <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
                                 )}
+                                {food && (
+                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                    {food.foodName}
+                                  </p>
+                                )}
+                                {food && (
+                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                    {food.calories != null ? `${Math.round(food.calories)} kcal` : "Calories not set"}
+                                    {food.mealType ? ` · ${food.mealType}` : ""}
+                                  </p>
+                                )}
+                                {legacyFood && (
+                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                    Unstructured legacy food entry
+                                  </p>
+                                )}
+                                {legacyFood && entry.note && (
+                                  <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                )}
                                 {(entry as CalendarDayEntry).waist != null && (
                                   <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
                                     Waist {(entry as CalendarDayEntry).waist}
                                     {(entry as CalendarDayEntry).waistUnit ? ` ${(entry as CalendarDayEntry).waistUnit}` : ""}
                                   </p>
                                 )}
-                                {entry.note && !gaming && !legacyGaming && !isBooksTracker && (
+                                {entry.note && !gaming && !legacyGaming && !isBooksTracker && !food && !legacyFood && (
                                   <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
                                 )}
                                 {gaming && (

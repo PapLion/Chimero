@@ -102,6 +102,17 @@ const featureCases = [
     ],
   },
   {
+    name: 'food',
+    modulePath: '../../../apps/electron/src/main/features/food/handler',
+    exportName: 'registerFoodHandlers',
+    channels: [
+      'add-food-entry',
+      'update-food-entry',
+      'delete-food-entry',
+      'get-food-detail',
+    ],
+  },
+  {
     name: 'books',
     modulePath: '../../../apps/electron/src/main/features/books/handler',
     exportName: 'registerBooksHandlers',

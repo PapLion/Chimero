@@ -1,4 +1,4 @@
-import type { TaskDayState, TaskPostponement } from '../../contracts/app-types'
+import type { MealType, TaskDayState, TaskPostponement } from '../../contracts/app-types'
 
 export interface CalendarDayEntry {
   id: number
@@ -17,6 +17,13 @@ export interface CalendarDayEntry {
     gameTitle?: string
     gameKey?: string
     estimatedHours?: number
+  }
+  food?: {
+    structured: true
+    foodName: string
+    foodKey: string
+    calories: number | null
+    mealType: MealType | null
   }
   taskState?: Exclude<TaskDayState, 'hidden'>
   taskBaseDate?: string

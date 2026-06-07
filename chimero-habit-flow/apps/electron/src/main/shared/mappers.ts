@@ -2,6 +2,7 @@ import type {
   Contact,
   ContactInteraction,
   Entry,
+  MealType,
   Reminder,
   Tag,
   TagRelationship,
@@ -56,6 +57,11 @@ export function mapEntry(row: Record<string, unknown>): Entry {
   const gameTitle = row.gameTitle ?? row.game_title
   const gameKey = row.gameKey ?? row.game_key
   const estimatedHours = row.estimatedHours ?? row.estimated_hours
+  const foodStructured = row.foodStructured ?? row.food_structured
+  const foodName = row.foodName ?? row.food_name
+  const foodKey = row.foodKey ?? row.food_key
+  const calories = row.calories ?? row.foodCalories ?? row.food_calories ?? row.value
+  const mealType = row.mealType ?? row.meal_type
   const bookStructured = row.bookStructured ?? row.book_structured
   const bookId = row.bookId ?? row.book_id
   const bookTitle = row.bookTitle ?? row.book_title
@@ -77,6 +83,16 @@ export function mapEntry(row: Record<string, unknown>): Entry {
             gameTitle: (gameTitle as string) ?? '',
             gameKey: (gameKey as string) ?? '',
             estimatedHours: (estimatedHours as number) ?? 0,
+          }
+        : undefined,
+    food:
+      foodStructured
+        ? {
+            structured: true,
+            foodName: (foodName as string) ?? '',
+            foodKey: (foodKey as string) ?? '',
+            calories: calories == null ? null : Number(calories),
+            mealType: (mealType as MealType | null) ?? null,
           }
         : undefined,
     book:

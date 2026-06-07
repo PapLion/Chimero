@@ -48,6 +48,13 @@ export interface Entry {
     gameKey: string
     estimatedHours: number
   }
+  food?: {
+    structured: true
+    foodName: string
+    foodKey: string
+    calories: number | null
+    mealType: MealType | null
+  }
   book?: {
     structured: true
     bookId: number
@@ -151,6 +158,92 @@ export interface GamingHomeWidgetReadModel {
   selectedDayGameTitle: string | null
   selectedDayEstimatedHours: number | null
   totalHours: number
+  legacyEntryCount: number
+  sparkline: Array<{ date: string; value: number }>
+}
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other'
+
+export interface FoodEntryReadModel {
+  entryId: number
+  trackerId: number
+  foodName: string
+  foodKey: string
+  calories: number | null
+  mealType: MealType | null
+  timestamp: number
+  dateStr: string
+  assetId?: number | null
+  tagIds?: number[]
+  structured: true
+}
+
+export interface LegacyFoodEntryReadModel {
+  entryId: number
+  trackerId: number
+  legacyText: string | null
+  legacyValue: number | null
+  timestamp: number
+  dateStr: string
+  assetId?: number | null
+  tagIds?: number[]
+  structured: false
+}
+
+export type FoodHistoryItem = FoodEntryReadModel | LegacyFoodEntryReadModel
+
+export interface CreateFoodEntryRequest {
+  trackerId: number
+  foodName: string
+  calories?: number | null
+  mealType?: MealType | null
+  timestamp: number
+  assetId?: number | null
+  tagIds?: number[]
+}
+
+export interface UpdateFoodEntryRequest {
+  foodName?: string
+  calories?: number | null
+  mealType?: MealType | null
+  timestamp?: number
+  assetId?: number | null
+  tagIds?: number[]
+}
+
+export interface FoodEntryResponse {
+  entry: FoodEntryReadModel
+  tags: Tag[]
+}
+
+export interface FoodStatisticsReadModel {
+  entryCount: number
+  structuredEntryCount: number
+  legacyEntryCount: number
+  totalCalories: number
+  chartData: Array<{ date: string; value: number; count: number }>
+  foodFrequency: Array<{ foodName: string; foodKey: string; entryCount: number; totalCalories: number }>
+  tagFrequency: Array<{ tagId: number; tagName: string; entryCount: number }>
+}
+
+export interface FoodDetailResponse {
+  current: FoodEntryReadModel | null
+  history: FoodHistoryItem[]
+  chartData: Array<{ date: string; value: number; count: number }>
+  totalCalories: number
+  structuredEntryCount: number
+  legacyEntryCount: number
+  foodFrequency: Array<{ foodName: string; foodKey: string; entryCount: number; totalCalories: number }>
+  tagFrequency: Array<{ tagId: number; tagName: string; entryCount: number }>
+}
+
+export interface FoodHomeWidgetReadModel {
+  trackerId: number
+  title: string
+  currentFoodName: string | null
+  currentCalories: number | null
+  selectedDayEntries: FoodHistoryItem[]
+  totalCalories: number
   legacyEntryCount: number
   sparkline: Array<{ date: string; value: number }>
 }

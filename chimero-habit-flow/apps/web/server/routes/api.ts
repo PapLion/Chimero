@@ -9,17 +9,23 @@ import {
   buildBookHistoryReadModel,
   buildBookSelectedDayReadModel,
   buildBookStatisticsReadModel,
+  buildFoodDetailReadModel,
   buildGamingDetailReadModel,
+  entryToFoodHistoryItem,
   entryToBookHistoryItem,
   entryToGamingReadModel,
   getTaskActiveDate,
   getTaskStateForDate,
+  normalizeFoodKey,
+  normalizeFoodName,
   normalizeGameKey,
   normalizeGamingTitle,
   normalizeBookTitle,
   normalizeBookTitleKey,
   validateEstimatedHours,
   validateBookRatingTenths,
+  validateCaloriesOptional,
+  validateMealType,
   isTaskTrackerLike,
   parseTaskStateMetadata,
 } from '../../../../packages/shared/src/domain'
@@ -42,11 +48,16 @@ import type {
   BookStatisticsReadModel,
   CreateBookActivityRequest,
   CreateBookRequest,
+  CreateFoodEntryRequest,
   CreateWeightEntryRequest,
   CreateGamingEntryRequest,
   Entry,
   EntryUpdateRequest,
   BookActivityType,
+  FoodDetailResponse,
+  FoodEntryResponse,
+  MealType,
+  UpdateFoodEntryRequest,
   GamingDetailResponse,
   GamingEntryResponse,
   Reminder,
@@ -177,6 +188,11 @@ function mapEntry(row: JsonRecord): Entry {
   const gameTitle = row.game_title ?? row.gameTitle
   const gameKey = row.game_key ?? row.gameKey
   const estimatedHours = row.estimated_hours ?? row.estimatedHours
+  const foodStructured = row.food_structured ?? row.foodStructured
+  const foodName = row.food_name ?? row.foodName
+  const foodKey = row.food_key ?? row.foodKey
+  const calories = row.calories
+  const mealType = row.meal_type ?? row.mealType
   const bookStructured = row.book_structured ?? row.bookStructured
   const bookId = row.book_id ?? row.bookId
   const bookTitle = row.book_title ?? row.bookTitle
@@ -199,6 +215,15 @@ function mapEntry(row: JsonRecord): Entry {
             estimatedHours: Number(estimatedHours ?? 0),
           }
         : undefined,
+    food: foodStructured
+        ? {
+          structured: true,
+          foodName: String(foodName ?? ''),
+          foodKey: String(foodKey ?? ''),
+          calories: calories == null ? null : Number(calories),
+          mealType: mealType == null ? null : mealType as MealType,
+        }
+      : undefined,
     book: bookStructured
       ? {
           structured: true,
@@ -399,6 +424,11 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
           eg.game_title,
           eg.game_key,
           eg.estimated_hours,
+          ef.entry_id AS food_structured,
+          ef.food_name,
+          ef.food_key,
+          ef.calories,
+          ef.meal_type,
           ba.entry_id AS book_structured,
           ba.book_id,
           b.title AS book_title,
@@ -406,6 +436,7 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
           ba.activity_type AS book_activity_type
         FROM entries e
         LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+        LEFT JOIN entry_food ef ON ef.entry_id = e.id
         LEFT JOIN book_activities ba ON ba.entry_id = e.id
         LEFT JOIN books b ON b.id = ba.book_id
         WHERE e.tracker_id = ?
@@ -421,6 +452,11 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
           eg.game_title,
           eg.game_key,
           eg.estimated_hours,
+          ef.entry_id AS food_structured,
+          ef.food_name,
+          ef.food_key,
+          ef.calories,
+          ef.meal_type,
           ba.entry_id AS book_structured,
           ba.book_id,
           b.title AS book_title,
@@ -428,6 +464,7 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
           ba.activity_type AS book_activity_type
         FROM entries e
         LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+        LEFT JOIN entry_food ef ON ef.entry_id = e.id
         LEFT JOIN book_activities ba ON ba.entry_id = e.id
         LEFT JOIN books b ON b.id = ba.book_id
         ORDER BY e.timestamp DESC
@@ -441,6 +478,7 @@ function addEntry(data: BaseEntryRequest): Entry | null {
   if (!Number.isInteger(data.trackerId) || data.trackerId <= 0) throw new Error('Invalid trackerId')
   if (!Number.isFinite(data.timestamp)) throw new Error('Invalid timestamp')
   if (isGamingTracker(data.trackerId)) throw new Error('Use add-gaming-entry for Gaming entries')
+  if (isFoodTracker(data.trackerId)) throw new Error('Use add-food-entry for structured Food entries')
   const dateStr = formatDateStr(data.timestamp)
   const candidateEntry = mapEntry({
     id: 0,
@@ -518,9 +556,11 @@ function updateEntry(id: number, updates: EntryUpdateRequest): Entry | null {
       SELECT
         e.tracker_id,
         eg.entry_id AS gaming_structured,
+        ef.entry_id AS food_structured,
         ba.entry_id AS book_structured
       FROM entries e
       LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+      LEFT JOIN entry_food ef ON ef.entry_id = e.id
       LEFT JOIN book_activities ba ON ba.entry_id = e.id
       WHERE e.id = ?
       LIMIT 1
@@ -528,6 +568,9 @@ function updateEntry(id: number, updates: EntryUpdateRequest): Entry | null {
     .get(id) as JsonRecord | undefined
   if (existing?.gaming_structured && isGamingTracker(Number(existing.tracker_id))) {
     throw new Error('Use update-gaming-entry for structured Gaming entries')
+  }
+  if (existing?.food_structured && isFoodTracker(Number(existing.tracker_id))) {
+    throw new Error('Use the Food flow for structured Food entries')
   }
   if (existing?.book_structured && isBooksTracker(Number(existing.tracker_id))) {
     throw new Error('Use the Books flow for structured Books entries')
@@ -577,9 +620,11 @@ function deleteEntry(id: number): boolean {
       SELECT
         e.tracker_id,
         eg.entry_id AS gaming_structured,
+        ef.entry_id AS food_structured,
         ba.entry_id AS book_structured
       FROM entries e
       LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+      LEFT JOIN entry_food ef ON ef.entry_id = e.id
       LEFT JOIN book_activities ba ON ba.entry_id = e.id
       WHERE e.id = ?
       LIMIT 1
@@ -588,6 +633,9 @@ function deleteEntry(id: number): boolean {
   if (existing?.gaming_structured && isGamingTracker(Number(existing.tracker_id))) {
     throw new Error('Use delete-gaming-entry logic for structured Gaming entries')
   }
+  if (existing?.food_structured && isFoodTracker(Number(existing.tracker_id))) {
+    throw new Error('Use the Food flow for structured Food entries')
+  }
   if (existing?.book_structured && isBooksTracker(Number(existing.tracker_id))) {
     throw new Error('Use the Books flow for structured Books entries')
   }
@@ -595,6 +643,7 @@ function deleteEntry(id: number): boolean {
   getDb().transaction(() => {
     getDb().prepare('DELETE FROM entries_to_tags WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM entry_gaming WHERE entry_id = ?').run(id)
+    getDb().prepare('DELETE FROM entry_food WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM book_activities WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM entry_weight WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM entries WHERE id = ?').run(id)
@@ -954,6 +1003,12 @@ function setWeightGoal(data: SetTrackerGoalRequest): TrackerGoal | null {
   return getWeightGoal(data.trackerId)
 }
 
+function isFoodTracker(trackerId: number): boolean {
+  const row = getDb().prepare('SELECT * FROM trackers WHERE id = ? LIMIT 1').get(trackerId)
+  if (!row) return false
+  return getTrackerIdentity(mapTracker(row as JsonRecord)) === 'diet'
+}
+
 function isGamingTracker(trackerId: number): boolean {
   const row = getDb().prepare('SELECT * FROM trackers WHERE id = ? LIMIT 1').get(trackerId)
   if (!row) return false
@@ -1094,6 +1149,176 @@ function updateGamingEntry(entryId: number, updates: UpdateGamingEntryRequest): 
   })()
 
   return getGamingEntryById(entryId)
+}
+
+function getFoodEntryById(entryId: number): FoodEntryResponse | null {
+  const row = getDb()
+    .prepare(`
+      SELECT
+        e.id,
+        e.tracker_id,
+        e.value,
+        e.note,
+        e.metadata,
+        e.timestamp,
+        e.date_str,
+        e.asset_id,
+        ef.entry_id AS food_structured,
+        ef.food_name,
+        ef.food_key,
+        ef.calories,
+        ef.meal_type
+      FROM entries e
+      LEFT JOIN entry_food ef ON ef.entry_id = e.id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+
+  if (!row) return null
+  const entry = mapEntry(row)
+  if (!entry.food?.structured) return null
+  return {
+    entry: entryToFoodHistoryItem(entry) as FoodEntryResponse['entry'],
+    tags: tagsForEntry(entryId),
+  }
+}
+
+function addFoodEntry(data: CreateFoodEntryRequest): FoodEntryResponse | null {
+  if (!isFoodTracker(data.trackerId)) throw new Error('Food entries can only be created for the Diet tracker')
+  const foodName = normalizeFoodName(data.foodName)
+  if (!foodName) throw new Error('Food name is required')
+  const foodKey = normalizeFoodKey(foodName)
+  const calories = validateCaloriesOptional(data.calories)
+  const mealType = validateMealType(data.mealType)
+  if (!Number.isFinite(data.timestamp)) throw new Error('Timestamp must be finite')
+  const dateStr = formatDateStr(data.timestamp)
+
+  const entryId = getDb().transaction(() => {
+    const inserted = getDb()
+      .prepare(`
+        INSERT INTO entries (tracker_id, value, note, metadata, asset_id, timestamp, date_str)
+        VALUES (@trackerId, @value, @note, @metadata, @assetId, @timestamp, @dateStr)
+      `)
+      .run({
+        trackerId: data.trackerId,
+        value: null,
+        note: foodName,
+        metadata: JSON.stringify({
+          trackerKind: 'diet',
+          food: { structured: true, foodName, foodKey, calories, mealType },
+        }),
+        assetId: data.assetId ?? null,
+        timestamp: data.timestamp,
+        dateStr,
+      })
+    const insertedEntryId = Number(inserted.lastInsertRowid)
+    getDb()
+      .prepare(`
+        INSERT INTO entry_food (entry_id, food_name, food_key, calories, meal_type)
+        VALUES (?, ?, ?, ?, ?)
+      `)
+      .run(insertedEntryId, foodName, foodKey, calories, mealType)
+    replaceEntryTags(insertedEntryId, data.tagIds)
+    return insertedEntryId
+  })()
+
+  return getFoodEntryById(entryId)
+}
+
+function updateFoodEntry(entryId: number, updates: UpdateFoodEntryRequest): FoodEntryResponse | null {
+  const existing = getDb()
+    .prepare(`
+      SELECT e.tracker_id, ef.entry_id AS food_structured
+      FROM entries e
+      LEFT JOIN entry_food ef ON ef.entry_id = e.id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+
+  if (!existing?.food_structured || !isFoodTracker(Number(existing.tracker_id))) {
+    throw new Error('Structured Food entries can only be updated through the Food flow')
+  }
+
+  const entrySet: string[] = []
+  const foodSet: string[] = []
+  const entryParams: JsonRecord = { entryId }
+  const foodParams: JsonRecord = { entryId }
+
+  if (updates.foodName !== undefined) {
+    const foodName = normalizeFoodName(updates.foodName)
+    if (!foodName) throw new Error('Food name is required')
+    entrySet.push('note = @foodName')
+    foodSet.push('food_name = @foodName')
+    foodSet.push('food_key = @foodKey')
+    entryParams.foodName = foodName
+    foodParams.foodName = foodName
+    foodParams.foodKey = normalizeFoodKey(foodName)
+  }
+  if (updates.calories !== undefined) {
+    foodSet.push('calories = @calories')
+    foodParams.calories = validateCaloriesOptional(updates.calories)
+  }
+  if (updates.mealType !== undefined) {
+    foodSet.push('meal_type = @mealType')
+    foodParams.mealType = validateMealType(updates.mealType)
+  }
+  if (updates.assetId !== undefined) {
+    entrySet.push('asset_id = @assetId')
+    entryParams.assetId = updates.assetId ?? null
+  }
+  if (updates.timestamp !== undefined) {
+    const timestamp = Number(updates.timestamp)
+    if (!Number.isFinite(timestamp)) throw new Error('Timestamp must be finite')
+    entrySet.push('timestamp = @timestamp')
+    entrySet.push('date_str = @dateStr')
+    entryParams.timestamp = timestamp
+    entryParams.dateStr = formatDateStr(timestamp)
+  }
+
+  getDb().transaction(() => {
+    if (entrySet.length > 0) {
+      getDb().prepare(`UPDATE entries SET ${entrySet.join(', ')} WHERE id = @entryId`).run(entryParams)
+    }
+    if (foodSet.length > 0) {
+      getDb().prepare(`UPDATE entry_food SET ${foodSet.join(', ')} WHERE entry_id = @entryId`).run(foodParams)
+    }
+    replaceEntryTags(entryId, updates.tagIds)
+  })()
+
+  return getFoodEntryById(entryId)
+}
+
+function deleteFoodEntry(entryId: number): boolean {
+  const existing = getDb()
+    .prepare(`
+      SELECT e.tracker_id, ef.entry_id AS food_structured
+      FROM entries e
+      LEFT JOIN entry_food ef ON ef.entry_id = e.id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+
+  if (!existing?.food_structured || !isFoodTracker(Number(existing.tracker_id))) {
+    throw new Error('Structured Food entries can only be deleted through the Food flow')
+  }
+
+  getDb().transaction(() => {
+    getDb().prepare('DELETE FROM entries_to_tags WHERE entry_id = ?').run(entryId)
+    getDb().prepare('DELETE FROM entry_food WHERE entry_id = ?').run(entryId)
+    getDb().prepare('DELETE FROM entries WHERE id = ?').run(entryId)
+  })()
+  return true
+}
+
+function getFoodDetail(trackerId: number, options: { limit?: number } = {}): FoodDetailResponse {
+  if (!isFoodTracker(trackerId)) {
+    throw new Error('Food detail can only be read for the Diet tracker')
+  }
+  const entries = getEntries({ trackerId, limit: options.limit ?? 365 })
+  return buildFoodDetailReadModel(entries, getTags())
 }
 
 function getGamingDetail(trackerId: number, options: { limit?: number } = {}): GamingDetailResponse {
@@ -1741,6 +1966,11 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
           eg.game_title,
           eg.game_key,
           eg.estimated_hours,
+          ef.entry_id AS food_structured,
+          ef.food_name,
+          ef.food_key,
+          ef.calories,
+          ef.meal_type,
           ew.weight_value,
           ew.weight_unit,
           ew.waist_value,
@@ -1748,6 +1978,7 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
         FROM entries e
         LEFT JOIN trackers t ON t.id = e.tracker_id
         LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
+        LEFT JOIN entry_food ef ON ef.entry_id = e.id
         LEFT JOIN entry_weight ew ON ew.entry_id = e.id
         ORDER BY e.timestamp ASC
       `)
@@ -1797,6 +2028,15 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
               estimatedHours: entry.gaming.estimatedHours,
             }
           : undefined,
+        food: entry.food
+          ? {
+              structured: true,
+              foodName: entry.food.foodName,
+              foodKey: entry.food.foodKey,
+              calories: entry.food.calories,
+              mealType: entry.food.mealType,
+            }
+          : undefined,
         task: taskState === 'hidden' || !taskMetadata
           ? null
           : {
@@ -1835,6 +2075,28 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
   const gamingDetailMatch = path.match(/^\/api\/gaming\/trackers\/(\d+)\/detail$/)
   if (gamingDetailMatch && method === 'GET') {
     json(res, 200, getGamingDetail(Number(gamingDetailMatch[1]), { limit: optionalInt(url.searchParams.get('limit')) ?? 365 }))
+    return
+  }
+
+  if (path === '/api/food/entries' && method === 'POST') {
+    json(res, 200, addFoodEntry(await readBody(req) as CreateFoodEntryRequest))
+    return
+  }
+
+  const foodEntryMatch = path.match(/^\/api\/food\/entries\/(\d+)$/)
+  if (foodEntryMatch && method === 'PUT') {
+    json(res, 200, updateFoodEntry(Number(foodEntryMatch[1]), await readBody(req) as UpdateFoodEntryRequest))
+    return
+  }
+
+  if (foodEntryMatch && method === 'DELETE') {
+    json(res, 200, deleteFoodEntry(Number(foodEntryMatch[1])))
+    return
+  }
+
+  const foodDetailMatch = path.match(/^\/api\/food\/trackers\/(\d+)\/detail$/)
+  if (foodDetailMatch && method === 'GET') {
+    json(res, 200, getFoodDetail(Number(foodDetailMatch[1]), { limit: optionalInt(url.searchParams.get('limit')) ?? 365 }))
     return
   }
 

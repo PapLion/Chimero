@@ -4,7 +4,7 @@ import { useMemo } from "react"
 import { cn } from "@shared/utils"
 import { type Widget, type Tracker, type Entry } from "@shared/store"
 import { useBooks, useMoodDailyAggregates, useUpdateEntryMutation, useWeightDetail } from "@shared/queries"
-import { buildGamingHomeWidgetReadModel, buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, moodScoreToColor, postponeTaskToNextDay, unpostponeTask } from "@contracts/domain"
+import { buildFoodHomeWidgetReadModel, buildGamingHomeWidgetReadModel, buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, moodScoreToColor, postponeTaskToNextDay, unpostponeTask } from "@contracts/domain"
 import { buildBooksTrackerReadModel, formatBookRatingDisplay, getBookActionLabel } from "@contracts/features/books"
 import { getTrackerIdentity, isBooksTracker, usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useSortable } from "@dnd-kit/sortable"
@@ -324,6 +324,122 @@ if (!hasBookEntities && !hasStructuredBooks && !hasLegacyBooks) {
         {booksHome.readingStreakDays} day streak · {booksHome.finishedThisMonth} finished this month
         {hasBookEntities ? ` · ${shelfCounts.want} want / ${shelfCounts.reading} reading / ${shelfCounts.finished} finished` : ""}
         {hasLegacyBooks ? ` · ${booksHome.legacy.length} legacy` : ""}
+      </div>
+    </div>
+  )
+}
+
+function FoodWidget({
+  entries,
+  tracker,
+  selectedDate,
+}: {
+  entries: Entry[]
+  tracker: Tracker
+  selectedDate: Date
+}) {
+  const foodHome = buildFoodHomeWidgetReadModel(entries, {
+    trackerId: tracker.id,
+    title: tracker.name,
+    selectedDate: dateToDateStr(selectedDate),
+  })
+  const iconKey = (tracker.icon ?? "").trim() || "salad"
+  const Icon = iconMap[iconKey] || Salad
+  const hasStructuredEntries = foodHome.currentFoodName != null || foodHome.selectedDayEntries.some((entry) => entry.structured)
+
+  if (!hasStructuredEntries && foodHome.legacyEntryCount === 0) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="surface-chip p-2">
+            <Icon className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />
+          </div>
+          <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">{tracker.name}</span>
+        </div>
+        <p className="text-sm text-[hsl(var(--muted-foreground))]">No structured food logs yet</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="mb-3 flex items-center gap-3">
+        <div className="surface-chip p-2">
+          <Icon className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />
+        </div>
+        <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">{tracker.name}</span>
+      </div>
+
+      <div className="mb-3 grid grid-cols-3 gap-2">
+        <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Latest</div>
+          <div className="mt-1 truncate text-sm font-semibold text-[hsl(var(--foreground))]">
+            {foodHome.currentFoodName ?? "--"}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Calories</div>
+          <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">
+            {foodHome.currentCalories != null ? Math.round(foodHome.currentCalories) : "--"}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Legacy</div>
+          <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{foodHome.legacyEntryCount}</div>
+        </div>
+      </div>
+
+      {foodHome.selectedDayEntries.length > 0 && (
+        <div className="mb-3 rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-3">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[hsl(var(--muted-foreground))]">
+            Selected day
+          </div>
+          <div className="mt-2 space-y-2">
+            {foodHome.selectedDayEntries.slice(0, 3).map((entry) => (
+              <div key={entry.entryId} className="rounded-xl border border-[hsl(var(--border)/0.5)] bg-white/[0.02] p-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-[hsl(var(--foreground))]">
+                      {entry.structured ? entry.foodName : "Legacy food entry"}
+                    </div>
+                    <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                      {entry.structured
+                        ? `${entry.calories != null ? `${Math.round(entry.calories)} kcal` : "Calories not set"}${entry.mealType ? ` · ${entry.mealType}` : ""}`
+                        : entry.legacyText || "No structured fields"}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-xs text-[hsl(var(--muted-foreground))]">
+                    {new Date(entry.timestamp).toLocaleDateString()}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mb-3 h-20">
+        {foodHome.sparkline.length > 1 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={foodHome.sparkline}>
+              <defs>
+                <linearGradient id={`foodWidgetGradient-${tracker.id}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(142 76% 36%)" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="hsl(142 76% 36%)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Area type="monotone" dataKey="value" stroke="hsl(142 76% 36%)" fill={`url(#foodWidgetGradient-${tracker.id})`} strokeWidth={2} dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex h-full items-center justify-center rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] text-xs text-[hsl(var(--muted-foreground))]">
+            Not enough data for a trend yet
+          </div>
+        )}
+      </div>
+
+      <div className="mt-auto text-xs text-[hsl(var(--muted-foreground))]">
+        {foodHome.totalCalories.toFixed(0)} total calories · {foodHome.selectedDayEntries.length} selected day entries
       </div>
     </div>
   )
@@ -1300,6 +1416,7 @@ export function WidgetCard({ widget, tracker, entries, assets, selectedDate }: W
   const renderContent = () => {
     const trackerNameLower = tracker.name.toLowerCase()
     const trackerType = tracker.type
+    const isFoodTracker = getTrackerIdentity(tracker) === "diet"
 
     // Mood Widget: rating type with smile icon
     if ((trackerNameLower.includes("mood") || trackerNameLower.includes("feeling") || tracker.icon === "smile") && (trackerType === "rating" || trackerType === "range")) {
@@ -1324,6 +1441,10 @@ export function WidgetCard({ widget, tracker, entries, assets, selectedDate }: W
     // Social Widget: social/connection tracker
     if (trackerNameLower.includes("social") || tracker.icon === "users") {
       return <SocialWidget entries={entries} tracker={tracker} selectedDate={selectedDate} />
+    }
+
+    if (isFoodTracker) {
+      return <FoodWidget entries={entries} tracker={tracker} selectedDate={selectedDate} />
     }
 
     // Progress Widget: Diet, Water (before Task so "Diet" list type gets Progress)

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   useTrackersMock: vi.fn(),
   useEntriesMock: vi.fn(),
   useDeleteEntryMutationMock: vi.fn(),
+  useDeleteFoodEntryMutationMock: vi.fn(),
   useUpdateEntryMutationMock: vi.fn(),
   useWeightDetailMock: vi.fn(),
   useTagsMock: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock('@shared/queries', () => ({
   useTrackers: mocks.useTrackersMock,
   useEntries: mocks.useEntriesMock,
   useDeleteEntryMutation: mocks.useDeleteEntryMutationMock,
+  useDeleteFoodEntryMutation: mocks.useDeleteFoodEntryMutationMock,
   useUpdateEntryMutation: mocks.useUpdateEntryMutationMock,
   useWeightDetail: mocks.useWeightDetailMock,
   useTags: mocks.useTagsMock,
@@ -102,6 +104,7 @@ describe('TrackerDetailView books rating surface', () => {
     mocks.useTrackersMock.mockReturnValue({ data: [tracker] })
     mocks.useEntriesMock.mockReturnValue({ data: [], isPending: false })
     mocks.useDeleteEntryMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mocks.useDeleteFoodEntryMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useUpdateEntryMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useWeightDetailMock.mockReturnValue({ data: undefined })
     mocks.useTagsMock.mockReturnValue({ data: [] })

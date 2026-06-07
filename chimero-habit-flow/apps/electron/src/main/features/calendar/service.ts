@@ -1,5 +1,5 @@
 import { getDb } from '@packages/db/database'
-import { entries, entryGaming, entryWeight, trackers } from '@packages/db'
+import { entries, entryFood, entryGaming, entryWeight, trackers } from '@packages/db'
 import { eq } from 'drizzle-orm'
 import {
   buildCalendarDayEntry,
@@ -9,7 +9,7 @@ import {
   parseTaskStateMetadata,
 } from '@contracts/domain'
 import type { CalendarDayEntry, CalendarMonthData } from '@contracts/features/calendar'
-import type { Entry, Tracker } from '@contracts/contracts'
+import type { Entry, MealType, Tracker } from '@contracts/contracts'
 import { getEntryTagIds } from '../tags/service'
 
 function parseJsonObject(value: unknown): Record<string, unknown> {
@@ -43,6 +43,11 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
       gameTitle: entryGaming.gameTitle,
       gameKey: entryGaming.gameKey,
       estimatedHours: entryGaming.estimatedHours,
+      foodStructured: entryFood.entryId,
+      foodName: entryFood.foodName,
+      foodKey: entryFood.foodKey,
+      calories: entryFood.calories,
+      mealType: entryFood.mealType,
       trackerName: trackers.name,
       trackerType: trackers.type,
       trackerIcon: trackers.icon,
@@ -53,6 +58,7 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
     })
     .from(entries)
     .leftJoin(entryWeight, eq(entryWeight.entryId, entries.id))
+    .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
     .leftJoin(trackers, eq(trackers.id, entries.trackerId))
     .orderBy(entries.timestamp)
 
@@ -77,6 +83,15 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
             gameTitle: String(r.gameTitle ?? ''),
             gameKey: String(r.gameKey ?? ''),
             estimatedHours: Number(r.estimatedHours ?? 0),
+          }
+        : undefined,
+      food: r.foodStructured
+        ? {
+            structured: true,
+            foodName: String(r.foodName ?? ''),
+            foodKey: String(r.foodKey ?? ''),
+            calories: r.calories == null ? null : Number(r.calories),
+            mealType: (r.mealType ?? null) as MealType | null,
           }
         : undefined,
     }
@@ -112,9 +127,10 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
       dateStr,
       assetId: r.assetId,
       tagIds: tagIdsByEntry.get(r.id) ?? [],
+        food: entry.food,
         task: taskState === 'hidden' || !taskMetadata
-          ? null
-          : {
+            ? null
+            : {
               state: taskState,
               baseDate: r.dateStr,
               activeDate: taskMetadata.activeDate,

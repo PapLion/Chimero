@@ -8,6 +8,7 @@ import {
   buildMoodEntriesReadModel,
   buildMoodStatisticsReadModel,
   buildGamingStatisticsReadModel,
+  buildFoodDetailReadModel,
   buildTaskDayReadModel,
   buildWeightEntriesTabReadModel,
   buildWeightStatisticsReadModel,
@@ -17,7 +18,7 @@ import {
 import { buildBooksTrackerReadModel, formatBookRatingDisplay, getBookActionLabel, getBookLifecycleRecord } from "@contracts/features/books"
 import { getTrackerIdentity, isBooksTracker, usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useEntries, useDeleteEntryMutation, useUpdateEntryMutation, useWeightDetail, useTags, useBook } from "@shared/queries"
+import { useTrackers, useEntries, useDeleteEntryMutation, useDeleteFoodEntryMutation, useUpdateEntryMutation, useWeightDetail, useTags, useBook } from "@shared/queries"
 import { filterEntriesByDate, cn } from "@shared/utils"
 import type { Entry } from "@shared/store"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, CalendarPlus, Undo2, Square, Tv, type LucideIcon } from "lucide-react"
@@ -138,6 +139,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const { data: allEntries = [] } = useEntries({ limit: 1000 })
   const { data: tags = [] } = useTags()
   const deleteEntryMutation = useDeleteEntryMutation()
+  const deleteFoodEntryMutation = useDeleteFoodEntryMutation()
   const updateEntryMutation = useUpdateEntryMutation()
   const toast = useToast()
 
@@ -185,6 +187,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
       tracker.icon === "smile")
   const isBooksTrackerType = !!tracker && isBooksTracker(tracker)
   const isGamingTracker = !!tracker && getTrackerIdentity(tracker) === "gaming"
+  const isFoodTrackerType = !!tracker && getTrackerIdentity(tracker) === "diet"
   const { data: weightDetail } = useWeightDetail(trackerId, isWeightTracker)
   const weightEntriesReadModel = useMemo(
     () => weightDetail ? buildWeightEntriesTabReadModel(weightDetail) : { entries: [] },
@@ -214,6 +217,10 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const gamingStructuredEntries = useMemo(
     () => trackerEntries.filter((entry) => entry.gaming?.structured),
     [trackerEntries],
+  )
+  const foodDetailReadModel = useMemo(
+    () => (isFoodTrackerType ? buildFoodDetailReadModel(trackerEntries, tags) : null),
+    [isFoodTrackerType, trackerEntries, tags],
   )
   const booksReadModel = useMemo(
     () => (isBooksTrackerType ? buildBooksTrackerReadModel(trackerEntries, selectedDate) : null),
@@ -384,6 +391,29 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
             date: chartTimeFilter === "1Y"
               ? date.toLocaleDateString("en", { month: "short" })
               : date.toLocaleDateString("en", { month: "short", day: "numeric" }),
+          fullDate: point.date,
+        }
+      })
+    }
+
+    if (isFoodTrackerType && foodDetailReadModel?.chartData) {
+      const referenceDate = new Date(selectedDate.getTime())
+      referenceDate.setHours(23, 59, 59, 999)
+      const daysBack = chartTimeFilter === "1M" ? 30 : chartTimeFilter === "3M" ? 90 : 365
+      const cutoffDate = new Date(referenceDate.getTime())
+      cutoffDate.setDate(cutoffDate.getDate() - daysBack)
+      const cutoffStr = toDateStr(cutoffDate)
+      const refStr = toDateStr(referenceDate)
+
+      return foodDetailReadModel.chartData
+        .filter((point) => point.date >= cutoffStr && point.date <= refStr)
+        .map((point) => {
+          const date = new Date(point.date)
+          return {
+            value: point.value,
+            date: chartTimeFilter === "1Y"
+              ? date.toLocaleDateString("en", { month: "short" })
+              : date.toLocaleDateString("en", { month: "short", day: "numeric" }),
             fullDate: point.date,
           }
         })
@@ -439,7 +469,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
         fullDate: dateStr,
       }
     })
-  }, [trackerEntries, tracker, chartTimeFilter, selectedDate, isWeightTracker, isGamingTracker, gamingStatisticsReadModel.chartData, weightDetail?.chartData])
+  }, [trackerEntries, tracker, chartTimeFilter, selectedDate, isWeightTracker, isGamingTracker, isFoodTrackerType, gamingStatisticsReadModel.chartData, weightDetail?.chartData, foodDetailReadModel?.chartData])
 
   // Heatmap data: "Year in Pixels"
   const heatmapData = useMemo(() => {
@@ -831,6 +861,33 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                     <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Top Game</div>
                     <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
                       {gamingStatisticsReadModel.perGameHours[0]?.gameTitle ?? "--"}
+                    </div>
+                  </div>
+                </>
+              ) : isFoodTrackerType ? (
+                <>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Structured Entries</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {foodDetailReadModel?.structuredEntryCount ?? 0}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Legacy Entries</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {foodDetailReadModel?.legacyEntryCount ?? 0}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Total Calories</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {foodDetailReadModel?.totalCalories != null ? foodDetailReadModel.totalCalories.toFixed(0) : "--"}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Top Food</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {foodDetailReadModel?.foodFrequency[0]?.foodName ?? "--"}
                     </div>
                   </div>
                 </>
@@ -1477,12 +1534,17 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                   )
                 })}
               </div>
-            ) : isDietType ? (
-              /* History - Diet: Large inline meal photos */
+            ) : isFoodTrackerType ? (
+              /* History - Food: structured meals with legacy fallback */
               <div className="space-y-4">
                 {historyEntries.map((entry) => {
-                  const value = entry.value ?? 0
-                  const isHighCal = averageValue > 0 && value > averageValue * 1.3
+                  const food = entry.food?.structured ? entry.food : null
+                  const legacyFood = isFoodTrackerType && !food
+                  const calories = food?.calories ?? null
+                  const averageCalories = foodDetailReadModel?.structuredEntryCount
+                    ? foodDetailReadModel.totalCalories / foodDetailReadModel.structuredEntryCount
+                    : 0
+                  const isHighCal = calories != null && averageCalories > 0 && calories > averageCalories * 1.3
                   const asset = entry.assetId != null ? assets.get(entry.assetId) : null
                   return (
                     <div
@@ -1499,7 +1561,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between gap-3 mb-2">
                         <div className="text-sm text-white/60">
                           {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
                           {" · "}
@@ -1509,10 +1571,24 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                           "text-lg font-semibold",
                           isHighCal ? "text-rose-400" : "text-white"
                         )}>
-                          {Math.round(value)} kcal
+                          {calories != null ? `${Math.round(calories)} kcal` : "—"}
                         </div>
                       </div>
-                      <div className="text-sm text-white/90 mb-2">{entry.note || "Meal"}</div>
+                      <div className="text-sm text-white/90 mb-1">
+                        {food?.foodName || entry.note || "Meal"}
+                      </div>
+                      {food && (
+                        <div className="mb-2 text-xs text-white/50">
+                          {food.mealType ? `${food.mealType} · ` : ""}
+                          {food.foodKey}
+                        </div>
+                      )}
+                      {legacyFood && (
+                        <div className="mb-2 text-sm text-white/60">Unstructured legacy food entry</div>
+                      )}
+                      {legacyFood && entry.note && (
+                        <div className="text-sm text-white/60 mb-2">{entry.note}</div>
+                      )}
                       {renderEntryTags(entry.tagIds)}
                       {asset && (
                         <div className="mt-3 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
@@ -1520,7 +1596,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                             src={asset.thumbnailUrl || asset.assetUrl}
                             alt=""
                             className="w-full h-auto max-h-[300px] object-contain"
-                            title={entry.note || "Meal photo"}
+                            title={food?.foodName || entry.note || "Meal photo"}
                           />
                         </div>
                       )}
@@ -1644,13 +1720,18 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
           if (!deletingEntry) return
 
           const entry = deletingEntry
+          const isStructuredFoodEntry = isFoodTrackerType && entry.food?.structured
 
           try {
-            await deleteEntryMutation.mutateAsync(entry.id)
+            if (isStructuredFoodEntry) {
+              await deleteFoodEntryMutation.mutateAsync(entry.id)
+            } else {
+              await deleteEntryMutation.mutateAsync(entry.id)
+            }
             setDeletingEntry(null)
             toast.destructive(
               "Entry deleted.",
-              entry.note?.trim() || tracker?.name || "Tracker entry",
+              entry.food?.structured ? entry.food.foodName : entry.note?.trim() || tracker?.name || "Tracker entry",
             )
           } catch (error) {
             toast.error(

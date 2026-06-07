@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useBooks, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
+import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useBooks, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useAddFoodEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
 import { cn } from "@shared/utils"
 import { getEntryConfig } from "../entry-config"
 import type { Entry, Tracker } from "@shared/store"
@@ -22,6 +22,7 @@ import { formatToastError, useToast } from "@shared/components/toast"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Activity, Calendar, Flame, Book, Gamepad2, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, ImageIcon, X, Tv, BookmarkPlus, BookOpen, BookMarked, CheckCheck, type LucideIcon } from "lucide-react"
 import { clampMoodScore } from "@contracts/domain"
 import { getTrackerIdentity, isBooksTracker } from "@contracts/features/tracking"
+import type { MealType } from "@contracts/contracts"
 
 const iconMap: Record<string, LucideIcon> = {
   scale: Scale,
@@ -70,6 +71,7 @@ export function QuickEntry() {
   const addEntryMutation = useAddEntryMutation()
   const addWeightEntryMutation = useAddWeightEntryMutation()
   const addGamingEntryMutation = useAddGamingEntryMutation()
+  const addFoodEntryMutation = useAddFoodEntryMutation()
   const createBookMutation = useCreateBookMutation()
   const startBookMutation = useStartBookMutation()
   const readBookMutation = useReadBookMutation()
@@ -83,6 +85,7 @@ export function QuickEntry() {
   const [value, setValue] = useState("")
   const [waist, setWaist] = useState("")
   const [note, setNote] = useState("")
+  const [mealType, setMealType] = useState<MealType | "">("")
   const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null)
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([])
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
@@ -309,6 +312,7 @@ export function QuickEntry() {
       trackerData.icon === "smile" ||
       trackerData.name.toLowerCase().includes("mood") ||
       trackerData.name.toLowerCase().includes("feeling")
+    const isFoodTracker = getTrackerIdentity(trackerData) === "diet"
     const isGamingTracker = getTrackerIdentity(trackerData) === "gaming"
 
     setIsSubmitting(true)
@@ -345,6 +349,27 @@ export function QuickEntry() {
         })
 
         toast.success("Game logged.", trackerData.name)
+        setQuickEntryOpen(false)
+        return
+      }
+
+      if (isFoodTracker) {
+        const foodName = note.trim()
+        if (!foodName) return
+        const calories = value.trim() ? parseFloat(value) : null
+        if (calories !== null && !Number.isFinite(calories)) return
+
+        await addFoodEntryMutation.mutateAsync({
+          trackerId: selectedTracker,
+          foodName,
+          calories,
+          mealType: mealType || null,
+          assetId: selectedAssetId,
+          tagIds: selectedTagIds,
+          timestamp: Date.now(),
+        })
+
+        toast.success("Food logged.", trackerData.name)
         setQuickEntryOpen(false)
         return
       }
@@ -449,9 +474,11 @@ export function QuickEntry() {
     addEntryMutation,
     addWeightEntryMutation,
     addGamingEntryMutation,
+    addFoodEntryMutation,
     createContactInteractionMutation,
     isSubmitting,
     note,
+    mealType,
     selectedAssetId,
     selectedContacts,
     selectedExercises,
@@ -583,6 +610,7 @@ export function QuickEntry() {
       selectedTrackerData.name.toLowerCase().includes("weight") ||
       selectedTrackerData.name.toLowerCase().includes("peso")
     : false
+  const isFoodTracker = selectedTrackerData ? getTrackerIdentity(selectedTrackerData) === "diet" : false
   const isBooksTrackerSelected = selectedTrackerData ? isBooksTracker(selectedTrackerData) : false
 
   const renderTrackerList = (trackerList: typeof trackers, title: string) => {
@@ -747,7 +775,7 @@ export function QuickEntry() {
                           {selectedTrackerData.name}
                         </div>
                         <div className="line-clamp-2 text-xs text-[hsl(var(--muted-foreground))]">
-                          {isBooksTrackerSelected ? "Log a book event" : "Enter new value"}
+                          {isBooksTrackerSelected ? "Log a book event" : isFoodTracker ? "Log a food entry" : "Enter new value"}
                         </div>
                       </div>
                     </>
@@ -834,6 +862,60 @@ export function QuickEntry() {
                         <CheckCheck className="h-4 w-4" />
                         Finish
                       </button>
+                    </div>
+                  </div>
+                ) : isFoodTracker ? (
+                  <div className="mb-4 space-y-3">
+                    <div>
+                      <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                        Food Name
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="What did you eat?"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            void handleSubmit()
+                          }
+                        }}
+                        className="h-12 text-lg bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                          Calories (optional)
+                        </label>
+                        <Input
+                          type="number"
+                          placeholder="Calories"
+                          value={value}
+                          onChange={(e) => setValue(e.target.value)}
+                          className="h-12 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                          Meal Type (optional)
+                        </label>
+                        <select
+                          value={mealType}
+                          onChange={(e) => setMealType((e.target.value as MealType) || "")}
+                          className="h-12 w-full rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-3 text-sm text-[hsl(var(--foreground))] outline-none transition-colors focus:border-[hsl(var(--border)/0.95)]"
+                        >
+                          <option value="">Any meal</option>
+                          <option value="breakfast">Breakfast</option>
+                          <option value="lunch">Lunch</option>
+                          <option value="dinner">Dinner</option>
+                          <option value="snack">Snack</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                 ) : isSocialTracker ? (
@@ -1140,6 +1222,8 @@ export function QuickEntry() {
                           ? selectedExercises.length === 0 // Exercise trackers need at least one exercise selected
                           : isSocialTracker
                             ? selectedContacts.length === 0 // Social trackers need at least one contact selected
+                            : isFoodTracker
+                              ? !note.trim()
                             : selectedTrackerData?.type === "text" || selectedTrackerData?.type === "list"
                               ? !note.trim() && !value
                               : selectedTrackerData?.type === "binary" || selectedTrackerData?.type === "composite"

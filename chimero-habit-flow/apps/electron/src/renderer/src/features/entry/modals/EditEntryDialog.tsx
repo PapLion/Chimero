@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { useTrackers, useUpdateEntryMutation, useUpdateWeightEntryMutation, useUpdateGamingEntryMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
+import { useTrackers, useUpdateEntryMutation, useUpdateWeightEntryMutation, useUpdateGamingEntryMutation, useUpdateFoodEntryMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
 import { Dialog, DialogContent, DialogTitle } from "@packages/ui/dialog"
 import { Input } from "@packages/ui/input"
 import { format } from "date-fns"
@@ -12,7 +12,7 @@ import { TagSelector } from "@features/tags/components/TagChips"
 import type { Entry } from "@shared/store"
 import { formatToastError, useToast } from "@shared/components/toast"
 import type { AssetWithUrls } from "@contracts/features/assets"
-import type { MeasurementUnit, Tracker, WeightUnit } from "@contracts/contracts"
+import type { MealType, MeasurementUnit, Tracker, WeightUnit } from "@contracts/contracts"
 import { clampMoodScore } from "@contracts/domain"
 import { getTrackerIdentity } from "@contracts/features/tracking"
 import { getEntryConfig } from "../entry-config"
@@ -45,12 +45,14 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     const updateEntryMutation = useUpdateEntryMutation()
     const updateWeightEntryMutation = useUpdateWeightEntryMutation()
     const updateGamingEntryMutation = useUpdateGamingEntryMutation()
+    const updateFoodEntryMutation = useUpdateFoodEntryMutation()
     const createTagMutation = useCreateTagMutation()
     const qc = useQueryClient()
     const toast = useToast()
 
     const [value, setValue] = useState("")
     const [note, setNote] = useState("")
+    const [mealType, setMealType] = useState<MealType | "">("")
     const [waist, setWaist] = useState("")
     const [date, setDate] = useState("")
     const [time, setTime] = useState("")
@@ -87,6 +89,13 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                 setValue(entry.gaming.estimatedHours.toString())
                 setNote(entry.gaming.gameTitle)
             }
+            if (entry.food?.structured) {
+                setNote(entry.food.foodName)
+                setValue(entry.food.calories != null ? entry.food.calories.toString() : "")
+                setMealType(entry.food.mealType ?? "")
+            } else {
+                setMealType("")
+            }
             const metadata = readMetadata(entry.metadata)
             const metadataWaist = metadata.waist
             setWaist(typeof metadataWaist === "number" ? metadataWaist.toString() : "")
@@ -100,6 +109,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
 
     const tracker = entry ? trackers.find((t) => t.id === entry.trackerId) : null
     const isGamingTracker = tracker ? getTrackerIdentity(tracker) === "gaming" : false
+    const isFoodTracker = tracker ? getTrackerIdentity(tracker) === "diet" : false
 
     const handleSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault()
@@ -129,6 +139,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                 tracker.name.toLowerCase().includes("weight") ||
                 tracker.name.toLowerCase().includes("peso")
             const isStructuredGamingEntry = isGamingTracker && entry.gaming?.structured
+            const isStructuredFoodEntry = isFoodTracker && entry.food?.structured
 
             if (isStructuredGamingEntry) {
                 const parsedHours = parseFloat(value)
@@ -138,6 +149,21 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                     updates: {
                         gameTitle: note.trim(),
                         estimatedHours: parsedHours,
+                        assetId: selectedAssetId,
+                        tagIds: selectedTagIds,
+                        timestamp,
+                    },
+                })
+            } else if (isStructuredFoodEntry) {
+                const calories = value.trim() ? parseFloat(value) : null
+                if (calories !== null && !Number.isFinite(calories)) return
+                if (!note.trim()) return
+                await updateFoodEntryMutation.mutateAsync({
+                    entryId: entry.id,
+                    updates: {
+                        foodName: note.trim(),
+                        calories,
+                        mealType: mealType || null,
                         assetId: selectedAssetId,
                         tagIds: selectedTagIds,
                         timestamp,
@@ -229,7 +255,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     }
 
     if (!tracker) return null
-    const isPending = updateEntryMutation.isPending || updateWeightEntryMutation.isPending || updateGamingEntryMutation.isPending
+    const isPending = updateEntryMutation.isPending || updateWeightEntryMutation.isPending || updateGamingEntryMutation.isPending || updateFoodEntryMutation.isPending
     const handleOpenChange = (nextOpen: boolean) => {
         if (!nextOpen && isPending) return
         onOpenChange(nextOpen)
@@ -252,6 +278,8 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
         ? !value || (waist.trim() !== "" && !Number.isFinite(waistValue))
         : isGamingTracker
           ? !note.trim() || !value || !Number.isFinite(parseFloat(value))
+        : isFoodTracker
+          ? !note.trim()
         : isText ? !note.trim() && !value : !value && !note.trim()
 
     return (
@@ -293,7 +321,48 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                             </div>
                         </div>
 
-                        {tracker.type === "rating" ? (
+                        {isFoodTracker && entry?.food?.structured ? (
+                            <div className="space-y-3">
+                                <div className="space-y-1">
+                                    <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Food Name</label>
+                                    <Input
+                                        type="text"
+                                        placeholder="What did you eat?"
+                                        value={note}
+                                        onChange={(e) => setNote(e.target.value)}
+                                        className="h-11 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="space-y-1">
+                                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Calories (Optional)</label>
+                                        <Input
+                                            type="number"
+                                            placeholder="Calories"
+                                            value={value}
+                                            onChange={(e) => setValue(e.target.value)}
+                                            className="h-11 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Meal Type (Optional)</label>
+                                        <select
+                                            value={mealType}
+                                            onChange={(e) => setMealType((e.target.value as MealType) || "")}
+                                            className="h-11 w-full rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-3 text-sm text-[hsl(var(--foreground))] outline-none transition-colors focus:border-[hsl(var(--border)/0.95)]"
+                                        >
+                                            <option value="">Any meal</option>
+                                            <option value="breakfast">Breakfast</option>
+                                            <option value="lunch">Lunch</option>
+                                            <option value="dinner">Dinner</option>
+                                            <option value="snack">Snack</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : tracker.type === "rating" ? (
                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                                 {ratingOptions.map((rating) => (
                                     <button

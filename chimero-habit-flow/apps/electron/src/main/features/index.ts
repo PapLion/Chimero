@@ -9,8 +9,9 @@ import { registerTagHandlers } from './tags/handler'
 import { registerWeightHandlers } from './weight/handler'
 import { registerGamingHandlers } from './gaming/handler'
 import { registerBooksHandlers } from './books/handler'
+import { registerFoodHandlers } from './food/handler'
 
-export { registerTrackingHandlers, registerEntryHandlers, registerReminderHandlers, registerAssetHandlers, registerContactHandlers, registerCalendarHandlers, registerExerciseHandlers, registerTagHandlers, registerWeightHandlers, registerGamingHandlers, registerBooksHandlers }
+export { registerTrackingHandlers, registerEntryHandlers, registerReminderHandlers, registerAssetHandlers, registerContactHandlers, registerCalendarHandlers, registerExerciseHandlers, registerTagHandlers, registerWeightHandlers, registerGamingHandlers, registerBooksHandlers, registerFoodHandlers }
 
 export function registerIpcHandlers(): void {
   registerTrackingHandlers()
@@ -24,4 +25,5 @@ export function registerIpcHandlers(): void {
   registerWeightHandlers()
   registerGamingHandlers()
   registerBooksHandlers()
+  registerFoodHandlers()
 }

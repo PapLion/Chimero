@@ -1,6 +1,7 @@
 export * from './streak'
 export * from './tags'
 export * from './gaming'
+export * from './food'
 export * from './books'
 export * from './weight'
 export * from './mood'

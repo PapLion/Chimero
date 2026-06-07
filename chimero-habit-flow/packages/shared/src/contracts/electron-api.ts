@@ -8,6 +8,7 @@ import type {
   ContactInteractionInsert,
   CorrelationQueryRequest,
   CorrelationResultResponse,
+  CreateFoodEntryRequest,
   CreateWeightEntryRequest,
   CreateGamingEntryRequest,
   CreateBookRequest,
@@ -20,6 +21,8 @@ import type {
   BookResponse,
   BookSelectedDaySummaryReadModel,
   BookStatisticsReadModel,
+  FoodDetailResponse,
+  FoodEntryResponse,
   Reminder,
   ReminderInsert,
   QuickEntryContextResponse,
@@ -33,6 +36,7 @@ import type {
   Tracker,
   TrackerConfig,
   TrackerGoalResponse,
+  UpdateFoodEntryRequest,
   UpdateWeightEntryRequest,
   UpdateGamingEntryRequest,
   UpdateBookActivityRequest,
@@ -97,6 +101,10 @@ export interface ElectronApi {
   updateWeightEntry: (entryId: number, updates: UpdateWeightEntryRequest) => Promise<WeightEntryResponse | null>
   deleteWeightEntry: (entryId: number) => Promise<boolean>
   getWeightDetail: (trackerId: number, options?: { limit?: number }) => Promise<WeightDetailResponse>
+  addFoodEntry: (data: CreateFoodEntryRequest) => Promise<FoodEntryResponse | null>
+  updateFoodEntry: (entryId: number, updates: UpdateFoodEntryRequest) => Promise<FoodEntryResponse | null>
+  deleteFoodEntry: (entryId: number) => Promise<boolean>
+  getFoodDetail: (trackerId: number, options?: { limit?: number }) => Promise<FoodDetailResponse>
   getWeightGoal: (trackerId: number) => Promise<TrackerGoalResponse>
   setWeightGoal: (data: SetTrackerGoalRequest) => Promise<TrackerGoalResponse>
   addGamingEntry: (data: CreateGamingEntryRequest) => Promise<GamingEntryResponse | null>

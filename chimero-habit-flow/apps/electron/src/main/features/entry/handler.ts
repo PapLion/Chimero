@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { and, desc, eq, sql } from 'drizzle-orm'
-import { books, bookActivities, entries, entriesToTags, entryGaming, entryWeight, trackers } from '@packages/db'
+import { books, bookActivities, entries, entriesToTags, entryFood, entryGaming, entryWeight, trackers } from '@packages/db'
 import { getDb as db } from '@packages/db/database'
 import { mapEntry, mapTracker } from '../../shared/mappers'
 import type { BaseEntryRequest, EntryUpdateRequest, QuickEntryContextResponse } from '@contracts/contracts'
@@ -35,6 +35,17 @@ async function isBooksTracker(trackerId: number): Promise<boolean> {
   return getTrackerIdentity(mapTracker(row as Record<string, unknown>)) === 'books'
 }
 
+async function isFoodTracker(trackerId: number): Promise<boolean> {
+  const [row] = await db()
+    .select()
+    .from(trackers)
+    .where(eq(trackers.id, trackerId))
+    .limit(1)
+
+  if (!row) return false
+  return getTrackerIdentity(mapTracker(row as Record<string, unknown>)) === 'diet'
+}
+
 const entryProjection = {
   id: entries.id,
   trackerId: entries.trackerId,
@@ -48,6 +59,11 @@ const entryProjection = {
   gameTitle: entryGaming.gameTitle,
   gameKey: entryGaming.gameKey,
   estimatedHours: entryGaming.estimatedHours,
+  foodStructured: entryFood.entryId,
+  foodName: entryFood.foodName,
+  foodKey: entryFood.foodKey,
+  calories: entryFood.calories,
+  mealType: entryFood.mealType,
   bookStructured: bookActivities.entryId,
   bookId: bookActivities.bookId,
   bookTitle: books.title,
@@ -63,6 +79,7 @@ export function registerEntryHandlers(): void {
         .select(entryProjection)
         .from(entries)
         .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
+        .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
         .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
         .leftJoin(books, eq(bookActivities.bookId, books.id))
         .orderBy(desc(entries.timestamp))
@@ -72,6 +89,7 @@ export function registerEntryHandlers(): void {
           .select(entryProjection)
           .from(entries)
           .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
+          .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
           .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
           .leftJoin(books, eq(bookActivities.bookId, books.id))
           .where(eq(entries.trackerId, options.trackerId))
@@ -91,6 +109,9 @@ export function registerEntryHandlers(): void {
     try {
       if (await isGamingTracker(data.trackerId)) {
         throw new Error('Use add-gaming-entry for Gaming entries')
+      }
+      if (await isFoodTracker(data.trackerId)) {
+        throw new Error('Use add-food-entry for Diet entries')
       }
       const dateStr = formatDateStr(data.timestamp)
       const candidateEntry = mapEntry({
@@ -184,10 +205,12 @@ export function registerEntryHandlers(): void {
         .select({
           trackerId: entries.trackerId,
           gamingStructured: entryGaming.entryId,
+          foodStructured: entryFood.entryId,
           bookStructured: bookActivities.entryId,
         })
         .from(entries)
         .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
+        .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
         .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
         .where(eq(entries.id, id))
         .limit(1)
@@ -195,6 +218,9 @@ export function registerEntryHandlers(): void {
       if (!existing) return null
       if (existing.gamingStructured && await isGamingTracker(existing.trackerId)) {
         throw new Error('Use update-gaming-entry for structured Gaming entries')
+      }
+      if (existing.foodStructured && await isFoodTracker(existing.trackerId)) {
+        throw new Error('Use the Food flow for structured Diet entries')
       }
       if (existing.bookStructured && await isBooksTracker(existing.trackerId)) {
         throw new Error('Use the Books flow for structured Books entries')
@@ -234,16 +260,21 @@ export function registerEntryHandlers(): void {
         .select({
           trackerId: entries.trackerId,
           gamingStructured: entryGaming.entryId,
+          foodStructured: entryFood.entryId,
           bookStructured: bookActivities.entryId,
         })
         .from(entries)
         .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
+        .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
         .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
         .where(eq(entries.id, id))
         .limit(1)
 
       if (existing?.gamingStructured && await isGamingTracker(existing.trackerId)) {
         throw new Error('Use delete-gaming-entry logic for structured Gaming entries')
+      }
+      if (existing?.foodStructured && await isFoodTracker(existing.trackerId)) {
+        throw new Error('Use the Food flow for structured Diet entries')
       }
       if (existing?.bookStructured && await isBooksTracker(existing.trackerId)) {
         throw new Error('Use the Books flow for structured Books entries')
@@ -271,6 +302,7 @@ export function registerEntryHandlers(): void {
         .select(entryProjection)
         .from(entries)
         .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
+        .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
         .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
         .leftJoin(books, eq(bookActivities.bookId, books.id))
         .where(eq(entries.trackerId, trackerId))

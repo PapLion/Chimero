@@ -1,5 +1,5 @@
 import type { CalendarDayEntry } from '../features/calendar'
-import type { TaskDayState, TaskPostponement } from '../contracts/app-types'
+import type { MealType, TaskDayState, TaskPostponement } from '../contracts/app-types'
 
 type CalendarDayEntryInput = {
   id: number
@@ -15,6 +15,13 @@ type CalendarDayEntryInput = {
     gameTitle?: string
     gameKey?: string
     estimatedHours?: number
+  }
+  food?: {
+    structured: true
+    foodName: string
+    foodKey: string
+    calories: number | null
+    mealType: MealType | null
   }
   task?: {
     state: Exclude<TaskDayState, 'hidden'>
@@ -45,6 +52,7 @@ export function buildCalendarDayEntry(input: CalendarDayEntryInput): CalendarDay
     assetId: input.assetId ?? null,
     tagIds: input.tagIds ?? [],
     gaming: input.gaming,
+    food: input.food,
     taskState: input.task?.state,
     taskBaseDate: input.task?.baseDate,
     taskActiveDate: input.task?.activeDate,
