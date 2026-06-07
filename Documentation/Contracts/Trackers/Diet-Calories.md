@@ -2,44 +2,44 @@
 
 ## 1. Purpose
 
-Diet tracks food/diet entries. Current file name is Diet-Calories, but product intent includes broader Food/Diet tracking. The contract must not reduce the tracker to calories only where surfaces already ask for meal/item, quantity/unit, food tags, inherited tags, and last-time/count style support.
+Diet is the product identity for structured Food logs. The file name remains `Diet-Calories`, but the shipped contract now treats Food as first-class structured entries with legacy generic Diet rows still readable as unstructured history. The contract must not collapse the tracker back to calories-only semantics.
 
 ## 2. Current Implementation Status
 
-- Status: GENERIC_IMPLEMENTED_WITH_BROADER_PRODUCT_INTENT.
-- Default/preset names differ between `Diet`, `Diet / Calories`, and broader food-like detection.
-- Quick Entry currently captures numeric calories/value plus meal/category note.
-- Tracker Detail has diet-specific rendering branches for meal-like entries and assets.
-- No dedicated food item, macro, meal, or nutrition table exists.
+- Status: STRUCTURED_FOOD_IMPLEMENTED_WITH_LEGACY_ROWS.
+- Default/preset names still differ between `Diet`, `Diet / Calories`, and broader food-like detection, but the active runtime now routes the Diet identity through the Food flow.
+- Quick Entry and Edit Entry now capture structured `foodName`, normalized `foodKey`, optional positive calories, optional meal type, tags, and assets.
+- Tracker Detail, Home widget, Calendar, and stats surfaces now render structured Food logs and keep legacy generic Diet rows visible as unstructured history.
+- Dedicated `entry_food` rows now exist; no catalog, macro, ingredient, or nutrition lookup table exists.
 
 ## 3. Surface Contract / Frontend
 
 ### 3.1 Quick Entry / Edit Entry Input
 
-- Quick Entry captures numeric calories/value today.
-- Quick Entry captures optional meal/item name in note/context.
-- Quantity/unit and macros are Future unless a product/code path explicitly adds them.
-- Food tags are explicit `tagIds`; inherited tags are not silently persisted.
-- Edit Entry can update value, note/meal, timestamp, tags, and asset reference.
-- Delete uses generic delete behavior.
+- Quick Entry captures structured `foodName`.
+- Quick Entry captures optional positive calories and optional meal type.
+- Tags are explicit `tagIds`; inherited tags are not silently persisted.
+- Edit Entry can update `foodName`, calories, meal type, timestamp, tags, and asset reference for structured Food rows.
+- Legacy generic Diet rows remain editable through the generic entry path when they are not structured Food rows.
+- Delete uses the Food flow for structured Food rows and generic delete behavior for legacy unstructured rows.
 
 ### 3.2 BentoGrid / Home Widget Read Model
 
-- Shows selected-day total calories/value.
-- Shows unit from tracker config, commonly `kcal`.
-- Shows goal progress when `tracker.config.goal` exists.
+- Shows the latest structured food, its calories when present, and the selected-day Food summary.
+- Shows total calories from structured Food rows only.
+- Shows legacy Diet row count separately.
 - Must not imply macro tracking unless that data is present.
 
 ### 3.3 Tracker Detail / Entries Tab Read Model
 
-- Shows meal/item note, calories/value, timestamp, tags, and meal photo/asset when present.
-- Uses diet-oriented entry layout, but data remains generic.
+- Shows structured `foodName`, calories, meal type, timestamp, tags, and meal photo/asset when present.
+- Keeps legacy generic Diet rows visible as unstructured history.
 - Provides edit/delete controls.
 
 ### 3.4 Tracker Detail / Statistics Tab Read Model
 
-- May show total entries, meals this week/year, daily average, 30-day average, days since last meal, goal progress, and generic high/low values.
-- Last-time/count queries for remembered foods are Future stats support until food identity exists structurally.
+- Shows structured entry count, legacy entry count, total calories, structured food frequency, tag frequency, and calories over time.
+- Days-since-last-entry style summary is still available, but macro or nutrition analytics remain out of scope.
 
 ### 3.5 Tracker Detail / Graphs Tab Read Model
 
@@ -49,7 +49,8 @@ Diet tracks food/diet entries. Current file name is Diet-Calories, but product i
 
 ### 3.6 Calendar Selected-Day Summary Read Model
 
-- Shows calories/value, unit, meal/item note, timestamp, tags, and asset reference.
+- Shows structured `foodName`, calories, meal type, timestamp, tags, and asset reference.
+- Legacy generic Diet rows remain visible as unstructured entries.
 - Multiple meals on the same day should remain visible or be explicitly summarized.
 
 ### 3.7 Insights / Correlations Read Model
@@ -61,78 +62,75 @@ Diet tracks food/diet entries. Current file name is Diet-Calories, but product i
 
 ### 1. Backend Entry Point
 
-- Status: GENERIC_ENTRY_ONLY with CONTRACT_ONLY broader Food/Diet intent.
-- Implemented generic IPC/API methods: `add-entry`, `update-entry`, `delete-entry`, `get-entries`, `get-stats`, `get-correlation-result`, `get-calendar-month`.
-- There is no specialized Diet/Food service, food item endpoint, meal endpoint, macro endpoint, or nutrition table today.
-- The file name remains `Diet-Calories.md`, but the contract should not claim full Food/Diet backend support until structural data exists.
+- Status: STRUCTURED_FOOD_IMPLEMENTED with legacy generic Diet rows still readable.
+- Implemented generic IPC/API methods remain available for legacy entries, but structured Food now has dedicated IPC/API methods and dedicated read models.
+- Dedicated Food endpoints/service paths now exist for add, update, delete, and detail reads.
+- The contract should not claim macro/ingredient/nutrition table support.
 
 ### 2. Request Validation
 
-- Required current fields: `trackerId`, numeric `value` for calories/amount, `timestamp`.
-- Optional current fields: meal/item text in `note`, `assetId`, `tagIds`, generic metadata.
-- Future/contract-only fields: food identity, quantity/unit, macros, ingredients, inherited food tags, last-time/count food stats.
-- Current generic backend does not enforce calorie ranges, quantity units, macro totals, food tag existence beyond generic joins, tracker type, asset existence, or meal composition.
+- Required current fields for structured Food: `trackerId`, `foodName`, `timestamp`.
+- Optional current fields for structured Food: positive `calories`, `mealType`, `assetId`, `tagIds`.
+- Legacy generic Diet entries remain readable and editable as unstructured rows.
+- Current backend does not enforce macros, ingredients, inherited food tags, or nutrition lookup data.
 - Invalid request/DB failure returns `null` or `false`; reads return empty states.
 
 ### 3. Normalization
 
 - Backend computes `dateStr` from `timestamp`.
-- `note` defaults to `null` and is currently the only durable meal/item identity.
-- `metadata` defaults to `{}`; food analytics fields must not be considered reliable if only stored ad hoc in metadata.
+- Structured Food normalizes `foodName` and `foodKey`; calories must be positive when present.
+- Legacy `note` values remain available for unstructured Diet rows.
 - `assetId` defaults to `null`; `tagIds` replacement follows generic handler semantics.
-- Daily totals/grouping use `dateStr`; individual meal timestamps stay exact.
+- Daily totals/grouping use `dateStr`; individual food timestamps stay exact.
 
 ### 4. Persistence Plan
 
 Write flow:
 
 1. Insert/update base entry in `entries`.
-2. Insert/update specialized tracker table if needed: none exists for Diet/Food.
+2. Insert/update specialized Food row in `entry_food` for structured Food logs.
 3. Insert/update junction rows in `entries_to_tags` when `tagIds` is provided.
-4. Update related entity state if needed: none today.
-5. Return mapped `Entry` contract with tag IDs when available.
+4. Return mapped `Entry` contract with tag IDs when available.
 
-- Generic entry/tag writes are transactional.
-- Delete removes `entries` and tag joins; attached asset files remain in the asset library.
-- Calories/value are structural in `entries.value`; meal/item identity is free text in `entries.note`; macros/quantity should become structural before analytics depend on them.
+- Structured Food writes are transactional.
+- Delete removes `entries`, tags, and the specialized `entry_food` row.
+- Legacy Diet rows remain in `entries` without an `entry_food` record and continue to render as unstructured history.
 
 ### 5. Read / Query Plan
 
-- BentoGrid: filters generic entries by tracker/date, sums numeric `value`, reads unit/goal from tracker config, and computes progress if configured.
-- Entries tab: reads entries by tracker newest-first, renders diet-oriented note/value/assets/tags.
-- Statistics tab: generic stats can compute total entries, series, active days, average values, meals this week/year by entry count.
-- Graphs: plots or groups `entries.value`; macro graphs are unsupported.
-- Calendar selected-day: month query returns each meal entry with value, note, timestamp, asset, and `tagIds`.
-- Edit Entry prefill: generic entry response provides value, note, timestamp, asset, tags.
-- Correlation/Insight: generic correlation can use calories/value; mood/weight/ingredient correlations are FUTURE unless requested and structurally represented.
+- Home widget: reads structured Food history, selected-day meals, total calories, and legacy row count.
+- Entries tab: reads entries by tracker newest-first, renders structured Food rows first-class and keeps legacy Diet rows readable.
+- Statistics tab: structured stats compute total calories, structured counts, legacy counts, food frequency, tag frequency, and calorie series.
+- Graphs: plots structured calorie totals by day; macro graphs remain unsupported.
+- Calendar selected-day: month query returns each food entry with `foodName`, calories, meal type, timestamp, asset, and `tagIds`.
+- Edit Entry prefill: structured Food entry response provides `foodName`, calories, meal type, timestamp, asset, tags.
 - Empty state: no meals returns empty arrays and zero/null totals.
 
 ### 6. Computed Metrics
 
-- Implemented/generic: daily total calories/value, entry counts, active days, generic averages/series, generic correlation caveats.
-- Future/contract-only: macros, quantity normalization, food identity last-time/count, ingredient tag rollups, inherited tag aggregation, nutrition validation.
-- Minimum data for correlation follows generic correlation logic; insufficient data returns low confidence/caveat.
+- Implemented: daily total calories, structured entry counts, legacy entry counts, active days, structured food frequency, tag frequency, and calorie series.
+- Future/contract-only: macros, quantity normalization, ingredient tag rollups, inherited tag aggregation, nutrition validation, and external Health correlations.
 - Metrics are computed on read, not cached/denormalized.
 
 ### 7. Response Mapping
 
-- Flow: `entries` DB rows -> `mapEntry` -> shared `Entry` -> Diet surface read model.
+- Flow: `entries` DB rows plus `entry_food` rows -> `mapEntry` -> shared `Entry` -> Food surface read model.
 - Raw DB rows never return to renderer surfaces.
-- Missing note/asset/tags return `null` or `[]`.
-- Unit display uses tracker config (`kcal` where present); backend does not infer or convert food units.
+- Missing food/asset/tags return `null` or `[]`.
+- Unit display is no longer inferred from calories alone; structured food uses its dedicated read model.
 
 ### 8. Error Handling
 
 - Invalid create/update/DB failure returns `null`; delete failure returns `false`.
-- Missing tracker/entry/asset/tag is represented by generic null/empty fallback, not a typed Diet error.
+- Missing tracker/entry/asset/tag is represented by generic null/empty fallback, not a typed Food error.
 - Empty dataset is a valid empty state.
 - Unsupported macros/food identity/inherited tag requests should be marked CONTRACT_ONLY/FUTURE, not silently fabricated.
 
 ### 9. Transaction Rules
 
-- Generic add/update/delete are transactional for `entries` and `entries_to_tags`.
-- There are no specialized Diet/Food related rows today.
-- Current status: transaction safety is IMPLEMENTED for generic entry/tag writes.
+- Structured Food add/update/delete are transactional for `entries`, `entry_food`, and `entries_to_tags`.
+- Legacy generic Diet updates remain transactional for `entries` and `entries_to_tags`.
+- Current status: transaction safety is IMPLEMENTED for Food and legacy entry/tag writes.
 
 ### 10. Data Ownership Rules
 
@@ -143,22 +141,25 @@ Shared contracts own: request/response shapes, app-facing types, pure domain hel
 
 ### 11. Deep Contract Status
 
-- Status: GENERIC_ENTRY_ONLY for current runtime; CONTRACT_ONLY/FUTURE for broader Food/Diet semantics.
-- Implemented: numeric meal/calorie entries, generic tags/assets, calendar/detail/generic stats, generic correlation compatibility.
-- Gaps: food item schema, quantity/unit normalization, macros, ingredient/inherited tags, last-time/count food queries, and dedicated Food/Diet backend response shapes.
+- Status: STRUCTURED_FOOD_IMPLEMENTED on the Diet identity with legacy generic rows still readable.
+- Implemented: structured food entries, generic tags/assets, calendar/detail/home/stats, and generic legacy compatibility.
+- Gaps: food catalogs, quantity/unit normalization, macros, ingredient/inherited tags, last-time/count food queries, and external Health correlations.
 
 ## 5. Persistence and Schema / Database
 
 - `trackers`: seeded as Diet/Diet Calories, numeric, salad icon, config unit/goal where present.
-- `entries.value`: calories/value amount.
-- `entries.note`: meal/item/category/free text.
+- `entry_food`: structured food rows with `food_name`, `food_key`, `calories`, and `meal_type`.
+- `entries.value`: legacy calories/value amount for unstructured Diet rows and other generic entries.
+- `entries.note`: legacy meal/item/category/free text.
 - `entries.timestamp` and `entries.date_str`: meal time and calendar day.
 - `entries.metadata`: generic/empty today.
 - `entries.asset_id`: optional meal photo/asset.
 - `entries_to_tags`: explicit food/context tags.
 - No food, meal, macro, nutrition, or tag-inheritance rollup table exists today.
 
-## 6. Input / Output Contracts
+## 6. Legacy Input / Output Contracts
+
+The historical generic shapes below are kept for context. The active structured Food contracts now live in `packages/shared/src/contracts/app-types.ts`.
 
 ```ts
 type CreateDietEntryRequest = BaseEntryRequest & {

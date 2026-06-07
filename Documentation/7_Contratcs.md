@@ -13,6 +13,7 @@ This is the master index for current tracker/product contracts. It summarizes wh
 | TV / Media | Complete | TV and Media are now separate supported tracker identities. They share the generic entry infrastructure. Fresh defaults no longer create merged `Media/TV`. Populated legacy `Media/TV` is preserved non-destructively. No catalog/season/episode/status/progress model is implemented. |
 | Gaming | Complete | Structured Gaming entry foundation is implemented. New structured Gaming entries use `gameTitle`, normalized `gameKey`, and `estimatedHours`. Legacy generic Gaming entries remain readable but unstructured. Wins/losses, outcome gating, platform/mode, catalog/entity, Mood correlations, and item-level Timeline are deferred. |
 | Books | Complete | Structured Books lifecycle foundation is implemented. Books use a book entity plus reading activity records. Shelves/status, started/read/finished activities, reading streak from explicit read activities, finished counts from structured finish data, and rating as integer tenths are implemented. Rating visibility closeout is done. Pages/progress/author/genre/reviews/catalog/Mood correlations/rereads remain deferred or rejected. |
+| Diet / Food / Calories | Complete | Structured Food foundation is implemented on top of the Diet identity. Food entries use `foodName`, normalized `foodKey`, optional positive calories, optional meal type, tags, assets, detail/history/calendar/home surfaces, and legacy generic Diet rows remain readable as unstructured entries. No catalog/ingredients/macros/barcode/meal-plan/nutrition-db/Health correlation model is implemented. |
 
 ## Removed from active scope
 
@@ -26,7 +27,7 @@ This is the master index for current tracker/product contracts. It summarizes wh
 | --- | --- | --- |
 | Social / CRM | Partial | Client-confirmed and important, but still partial. Needs a structured contact interaction model, contact detail, birthdays, likes/dislikes/traits/notes, history per contact, and honest stats. |
 | Exercise / Gym | Partial | Client-confirmed and important, but still partial. Needs structured workouts/routines/exercises/sets/reps/load/history/statistics. |
-| Diet / Food / Calories | Partial | The current contract exists, but the broader food system remains incomplete. Client intent includes food eaten, ingredients, parent/child food tags, and links to Health/Weight. It should not be treated as only generic calories. |
+| Diet / Food / Calories | Complete | Structured Food logs are implemented on the Diet identity. Legacy generic Diet rows remain readable as unstructured history, but new Food flows should use the structured food contract instead of generic calories-only writes. |
 
 ## Requested but missing contracts
 
@@ -48,11 +49,10 @@ This is the master index for current tracker/product contracts. It summarizes wh
 1. Social / CRM structured contract and implementation.
 2. Exercise / Gym structured contract and implementation.
 3. Health / Symptoms contract creation.
-4. Diet / Food structured contract.
-5. Vitamins / Medications contract creation.
-6. Sleep contract creation.
-7. Meditation contract creation.
-8. Hydration only if reprioritized.
+4. Vitamins / Medications contract creation.
+5. Sleep contract creation.
+6. Meditation contract creation.
+7. Hydration only if reprioritized.
 
 Why this order:
 - Social and Exercise are confirmed deep systems.
