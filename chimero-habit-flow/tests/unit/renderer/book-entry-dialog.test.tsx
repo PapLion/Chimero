@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import type { Entry } from '@shared/store'
 
 const mocks = vi.hoisted(() => ({
@@ -98,6 +98,75 @@ describe('BookEntryDialog', () => {
       <BookEntryDialog entry={entry} open={true} onOpenChange={vi.fn()} />,
     )
 
-    expect(screen.getByText('4.3 / 5.0')).toBeTruthy()
+    expect(within(screen.getByRole('dialog')).getByText('4.3 / 5.0')).toBeTruthy()
+  })
+
+  it('does not render a fake rating when the finished book rating is null', () => {
+    const timestamp = Date.UTC(2026, 4, 22, 10, 0, 0)
+    const entry: Entry = {
+      id: 100,
+      trackerId: 5,
+      value: null,
+      note: 'Book smoke unrated',
+      metadata: {
+        trackerKind: 'books',
+        bookId: 43,
+        activityType: 'finished',
+      },
+      timestamp,
+      dateStr: '2026-05-22',
+      book: {
+        structured: true,
+        bookId: 43,
+        title: 'Book smoke unrated',
+        titleKey: 'book smoke unrated',
+        activityType: 'finished',
+      },
+    }
+
+    mocks.useBookMock.mockReturnValue({
+      data: {
+        book: {
+          id: 43,
+          title: 'Book smoke unrated',
+          titleKey: 'book smoke unrated',
+          shelf: 'finished',
+          status: 'completed',
+          startedDate: '2026-05-20',
+          finishedDate: '2026-05-22',
+          ratingTenths: null,
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    })
+
+    render(
+      <BookEntryDialog entry={entry} open={true} onOpenChange={vi.fn()} />,
+    )
+
+    expect(within(screen.getByRole('dialog')).queryByText('4.3 / 5.0')).toBeNull()
+  })
+
+  it('does not render a structured rating for legacy book entries', () => {
+    const timestamp = Date.UTC(2026, 4, 22, 10, 0, 0)
+    const entry: Entry = {
+      id: 101,
+      trackerId: 5,
+      value: null,
+      note: 'Legacy book smoke',
+      metadata: {},
+      timestamp,
+      dateStr: '2026-05-22',
+    }
+
+    render(
+      <BookEntryDialog entry={entry} open={true} onOpenChange={vi.fn()} />,
+    )
+
+    expect(within(screen.getByRole('dialog')).queryByText('4.3 / 5.0')).toBeNull()
   })
 })
