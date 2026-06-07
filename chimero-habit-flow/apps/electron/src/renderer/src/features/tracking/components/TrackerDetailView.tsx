@@ -580,11 +580,12 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const Icon = iconMap[tracker.icon ?? ""] || CheckSquare
 
   // Render based on tracker type
+  const trackerIdentity = getTrackerIdentity(tracker)
   const trackerNameLower = tracker.name.toLowerCase()
   const isMediaType = usesMediaStyleRendering(tracker)
   const isWeightType = isWeightTracker
   const isMoodType = isMoodTracker
-  const isTaskType = tracker.type === "list" || tracker.type === "binary" || trackerNameLower.includes("task")
+  const isTaskType = trackerIdentity === "tasks"
   const isDietType = trackerNameLower.includes("diet") || trackerNameLower.includes("calorie") || trackerNameLower.includes("food") || trackerNameLower.includes("meal") || tracker.icon === "salad"
   const isNumericType = tracker.type === "numeric" || tracker.type === "range" || tracker.type === "counter"
   const selectedDateStr = toDateStr(selectedDate)
@@ -1636,6 +1637,9 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                           {" · "}
                           {health.symptomKey}
                         </div>
+                      )}
+                      {health && entry.note && (
+                        <div className="mb-2 text-sm text-white/60">{entry.note}</div>
                       )}
                       {legacyHealth && (
                         <div className="mb-2 text-sm text-white/60">Unstructured legacy health entry</div>
