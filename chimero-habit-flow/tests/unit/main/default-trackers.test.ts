@@ -50,6 +50,7 @@ describe('default trackers', () => {
       'Gaming',
       'TV',
       'Media',
+      'Health',
       'Diet / Calories',
     ])
   })

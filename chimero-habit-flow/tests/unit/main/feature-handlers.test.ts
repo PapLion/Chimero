@@ -113,6 +113,18 @@ const featureCases = [
     ],
   },
   {
+    name: 'health',
+    modulePath: '../../../apps/electron/src/main/features/health/handler',
+    exportName: 'registerHealthHandlers',
+    channels: [
+      'add-health-symptom-entry',
+      'update-health-symptom-entry',
+      'delete-health-symptom-entry',
+      'get-health-detail',
+      'get-health-home',
+    ],
+  },
+  {
     name: 'books',
     modulePath: '../../../apps/electron/src/main/features/books/handler',
     exportName: 'registerBooksHandlers',

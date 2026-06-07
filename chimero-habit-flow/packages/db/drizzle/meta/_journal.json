@@ -43,6 +43,13 @@
       "when": 1779497000000,
       "tag": "0005_food_log_extension",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1779497200000,
+      "tag": "0006_health_symptom_entity_and_occurrence",
+      "breakpoints": true
     }
   ]
 }

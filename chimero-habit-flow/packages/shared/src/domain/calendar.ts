@@ -23,6 +23,14 @@ type CalendarDayEntryInput = {
     calories: number | null
     mealType: MealType | null
   }
+  health?: {
+    structured: true
+    symptomId: number
+    symptomName: string
+    symptomKey: string
+    category: 'physical' | 'mental' | 'general' | 'other'
+    severity: number | null
+  }
   task?: {
     state: Exclude<TaskDayState, 'hidden'>
     baseDate: string
@@ -53,6 +61,7 @@ export function buildCalendarDayEntry(input: CalendarDayEntryInput): CalendarDay
     tagIds: input.tagIds ?? [],
     gaming: input.gaming,
     food: input.food,
+    health: input.health,
     taskState: input.task?.state,
     taskBaseDate: input.task?.baseDate,
     taskActiveDate: input.task?.activeDate,

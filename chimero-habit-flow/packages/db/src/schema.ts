@@ -188,6 +188,29 @@ export const entryFood = sqliteTable("entry_food", {
   mealTypeIdx: index("entry_food_meal_type_idx").on(t.mealType),
 }));
 
+export const symptoms = sqliteTable("symptoms", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  trackerId: integer("tracker_id").references(() => trackers.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  symptomKey: text("symptom_key").notNull(),
+  category: text("category", { enum: ["physical", "mental", "general", "other"] }).notNull().default("general"),
+  createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
+  updatedAt: integer("updated_at").default(sql`(strftime('%s', 'now') * 1000)`),
+}, (t) => ({
+  trackerIdx: index("symptoms_tracker_idx").on(t.trackerId),
+  symptomKeyUnique: uniqueIndex("symptoms_tracker_key_unique").on(t.trackerId, t.symptomKey),
+  categoryIdx: index("symptoms_category_idx").on(t.category),
+}));
+
+export const entryHealth = sqliteTable("entry_health", {
+  entryId: integer("entry_id").primaryKey().references(() => entries.id, { onDelete: "cascade" }),
+  symptomId: integer("symptom_id").references(() => symptoms.id, { onDelete: "cascade" }).notNull(),
+  severity: integer("severity"),
+}, (t) => ({
+  symptomIdx: index("entry_health_symptom_idx").on(t.symptomId),
+  severityIdx: index("entry_health_severity_idx").on(t.severity),
+}));
+
 export const trackerGoals = sqliteTable("tracker_goals", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   trackerId: integer("tracker_id").references(() => trackers.id, { onDelete: "cascade" }).notNull(),

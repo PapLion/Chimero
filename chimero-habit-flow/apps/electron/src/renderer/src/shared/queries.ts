@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type { Tracker, Entry } from './store'
-import type { BaseEntryRequest, Book, BookActivityResponse, BookResponse, CreateBookActivityRequest, CreateBookRequest, CreateFoodEntryRequest, CreateGamingEntryRequest, CreateWeightEntryRequest, EntryUpdateRequest, FoodDetailResponse, FoodEntryResponse, GamingDetailResponse, GamingEntryResponse, SetTrackerGoalRequest, TrackerConfig, UpdateBookActivityRequest, UpdateBookRequest, UpdateFoodEntryRequest, UpdateGamingEntryRequest, UpdateWeightEntryRequest } from '@contracts/contracts'
+import type { BaseEntryRequest, Book, BookActivityResponse, BookResponse, CreateBookActivityRequest, CreateBookRequest, CreateFoodEntryRequest, CreateGamingEntryRequest, CreateHealthSymptomRequest, CreateWeightEntryRequest, EntryUpdateRequest, FoodDetailResponse, FoodEntryResponse, GamingDetailResponse, GamingEntryResponse, HealthDetailResponse, HealthHomeWidgetReadModel, HealthSymptomResponse, SetTrackerGoalRequest, TrackerConfig, UpdateBookActivityRequest, UpdateBookRequest, UpdateFoodEntryRequest, UpdateGamingEntryRequest, UpdateHealthSymptomRequest, UpdateWeightEntryRequest } from '@contracts/contracts'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
 export const queryKeys = {
@@ -36,6 +36,10 @@ export const queryKeys = {
   gamingDetailRoot: ['gaming-detail'] as const,
   foodDetail: (trackerId: number) => ['food-detail', trackerId] as const,
   foodDetailRoot: ['food-detail'] as const,
+  healthDetail: (trackerId: number) => ['health-detail', trackerId] as const,
+  healthDetailRoot: ['health-detail'] as const,
+  healthHome: (trackerId: number, selectedDate?: string) => ['health-home', trackerId, selectedDate] as const,
+  healthHomeRoot: ['health-home'] as const,
   booksRoot: ['books'] as const,
   book: (bookId: number) => ['book', bookId] as const,
   bookRoot: ['book'] as const,
@@ -169,6 +173,24 @@ export function useFoodDetail(trackerId: number, enabled = true) {
   return useQuery({
     queryKey: queryKeys.foodDetail(trackerId),
     queryFn: () => api.getFoodDetail(trackerId) as Promise<FoodDetailResponse>,
+    enabled: enabled && !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
+export function useHealthDetail(trackerId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.healthDetail(trackerId),
+    queryFn: () => api.getHealthDetail(trackerId) as Promise<HealthDetailResponse>,
+    enabled: enabled && !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
+export function useHealthHomeWidget(trackerId: number, selectedDate?: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.healthHome(trackerId, selectedDate),
+    queryFn: () => api.getHealthHomeWidget(trackerId, { selectedDate }) as Promise<HealthHomeWidgetReadModel>,
     enabled: enabled && !!trackerId,
     staleTime: 15_000,
   })
@@ -456,6 +478,55 @@ export function useDeleteFoodEntryMutation() {
       qc.invalidateQueries({ queryKey: queryKeys.stats })
       qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
       qc.invalidateQueries({ queryKey: queryKeys.foodDetailRoot })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useAddHealthSymptomEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateHealthSymptomRequest) => api.addHealthSymptomEntry(data) as Promise<HealthSymptomResponse | null>,
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.healthDetail(variables.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.healthHomeRoot })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useUpdateHealthSymptomEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ entryId, updates }: { entryId: number; updates: UpdateHealthSymptomRequest }) =>
+      api.updateHealthSymptomEntry(entryId, updates) as Promise<HealthSymptomResponse | null>,
+    onSuccess: (result) => {
+      const trackerId = result?.entry.trackerId
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      if (trackerId) qc.invalidateQueries({ queryKey: queryKeys.healthDetail(trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.healthHomeRoot })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useDeleteHealthSymptomEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (entryId: number) => api.deleteHealthSymptomEntry(entryId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.healthDetailRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.healthHomeRoot })
       qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
     },
   })

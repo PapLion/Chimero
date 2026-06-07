@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useBooks, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useAddFoodEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
+import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useBooks, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useAddFoodEntryMutation, useAddHealthSymptomEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
 import { cn } from "@shared/utils"
 import { getEntryConfig } from "../entry-config"
 import type { Entry, Tracker } from "@shared/store"
@@ -72,6 +72,7 @@ export function QuickEntry() {
   const addWeightEntryMutation = useAddWeightEntryMutation()
   const addGamingEntryMutation = useAddGamingEntryMutation()
   const addFoodEntryMutation = useAddFoodEntryMutation()
+  const addHealthSymptomEntryMutation = useAddHealthSymptomEntryMutation()
   const createBookMutation = useCreateBookMutation()
   const startBookMutation = useStartBookMutation()
   const readBookMutation = useReadBookMutation()
@@ -85,6 +86,8 @@ export function QuickEntry() {
   const [value, setValue] = useState("")
   const [waist, setWaist] = useState("")
   const [note, setNote] = useState("")
+  const [healthSymptomName, setHealthSymptomName] = useState("")
+  const [healthCategory, setHealthCategory] = useState<"physical" | "mental" | "general" | "other">("general")
   const [mealType, setMealType] = useState<MealType | "">("")
   const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null)
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([])
@@ -184,6 +187,8 @@ export function QuickEntry() {
       setValue("")
       setWaist("")
       setNote("")
+      setHealthSymptomName("")
+      setHealthCategory("general")
       setSelectedAssetId(null)
       setSelectedTagIds([])
       setAssetPickerOpen(false)
@@ -207,6 +212,8 @@ export function QuickEntry() {
       setValue("")
       setWaist("")
       setNote("")
+      setHealthSymptomName("")
+      setHealthCategory("general")
       setSelectedAssetId(null)
       setSelectedTagIds([])
       setAssetPickerOpen(false)
@@ -312,6 +319,7 @@ export function QuickEntry() {
       trackerData.icon === "smile" ||
       trackerData.name.toLowerCase().includes("mood") ||
       trackerData.name.toLowerCase().includes("feeling")
+    const isHealthTracker = getTrackerIdentity(trackerData) === "health"
     const isFoodTracker = getTrackerIdentity(trackerData) === "diet"
     const isGamingTracker = getTrackerIdentity(trackerData) === "gaming"
 
@@ -370,6 +378,28 @@ export function QuickEntry() {
         })
 
         toast.success("Food logged.", trackerData.name)
+        setQuickEntryOpen(false)
+        return
+      }
+
+      if (isHealthTracker) {
+        const symptomName = healthSymptomName.trim()
+        if (!symptomName) return
+        const severity = value.trim() ? parseFloat(value) : null
+        if (severity !== null && (!Number.isFinite(severity) || !Number.isInteger(severity) || severity < 1 || severity > 10)) return
+
+        await addHealthSymptomEntryMutation.mutateAsync({
+          trackerId: selectedTracker,
+          symptomName,
+          category: healthCategory,
+          severity,
+          note: note.trim() || null,
+          assetId: selectedAssetId,
+          tagIds: selectedTagIds,
+          timestamp: Date.now(),
+        })
+
+        toast.success("Symptom logged.", trackerData.name)
         setQuickEntryOpen(false)
         return
       }
@@ -475,8 +505,11 @@ export function QuickEntry() {
     addWeightEntryMutation,
     addGamingEntryMutation,
     addFoodEntryMutation,
+    addHealthSymptomEntryMutation,
     createContactInteractionMutation,
     isSubmitting,
+    healthCategory,
+    healthSymptomName,
     note,
     mealType,
     selectedAssetId,
@@ -611,6 +644,7 @@ export function QuickEntry() {
       selectedTrackerData.name.toLowerCase().includes("peso")
     : false
   const isFoodTracker = selectedTrackerData ? getTrackerIdentity(selectedTrackerData) === "diet" : false
+  const isHealthTracker = selectedTrackerData ? getTrackerIdentity(selectedTrackerData) === "health" : false
   const isBooksTrackerSelected = selectedTrackerData ? isBooksTracker(selectedTrackerData) : false
 
   const renderTrackerList = (trackerList: typeof trackers, title: string) => {
@@ -775,7 +809,7 @@ export function QuickEntry() {
                           {selectedTrackerData.name}
                         </div>
                         <div className="line-clamp-2 text-xs text-[hsl(var(--muted-foreground))]">
-                          {isBooksTrackerSelected ? "Log a book event" : isFoodTracker ? "Log a food entry" : "Enter new value"}
+                          {isBooksTrackerSelected ? "Log a book event" : isHealthTracker ? "Log a symptom" : isFoodTracker ? "Log a food entry" : "Enter new value"}
                         </div>
                       </div>
                     </>
@@ -995,6 +1029,66 @@ export function QuickEntry() {
                         ))}
                       </div>
                     )}
+                  </div>
+                ) : isHealthTracker ? (
+                  <div className="space-y-3 mb-4">
+                    <div>
+                      <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                        Symptom
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="What symptom are you logging?"
+                        value={healthSymptomName}
+                        onChange={(e) => setHealthSymptomName(e.target.value)}
+                        className="h-12 text-lg bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                          Severity (optional)
+                        </label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={10}
+                          step={1}
+                          placeholder="1-10"
+                          value={value}
+                          onChange={(e) => setValue(e.target.value)}
+                          className="h-12 text-lg bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                          Category
+                        </label>
+                        <select
+                          value={healthCategory}
+                          onChange={(e) => setHealthCategory(e.target.value as "physical" | "mental" | "general" | "other")}
+                          className="h-12 w-full rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-3 text-sm text-[hsl(var(--foreground))] outline-none transition-colors focus:border-[hsl(var(--border)/0.95)]"
+                        >
+                          <option value="general">General</option>
+                          <option value="physical">Physical</option>
+                          <option value="mental">Mental</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                        Context
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder={entryConfig?.notePlaceholder ?? "Optional note or context"}
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        className="bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                      />
+                    </div>
                   </div>
                 ) : entryConfig && entryConfig.mainType === "text" ? (
                   /* Text-based Trackers (Books, TV, Games, Tasks) */
@@ -1222,6 +1316,8 @@ export function QuickEntry() {
                           ? selectedExercises.length === 0 // Exercise trackers need at least one exercise selected
                           : isSocialTracker
                             ? selectedContacts.length === 0 // Social trackers need at least one contact selected
+                          : isHealthTracker
+                            ? !healthSymptomName.trim() || (value.trim() !== "" && (!Number.isFinite(parseFloat(value)) || !Number.isInteger(parseFloat(value)) || parseFloat(value) < 1 || parseFloat(value) > 10))
                             : isFoodTracker
                               ? !note.trim()
                             : selectedTrackerData?.type === "text" || selectedTrackerData?.type === "list"

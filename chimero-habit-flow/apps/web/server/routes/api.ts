@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createReadStream, existsSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import { getWebDb, getAssetsRoot, getWebDbPath, type WebDb } from '../db'
-import { books, bookActivities } from '../../../../packages/db/src/schema'
+import { books, bookActivities, entryHealth, symptoms } from '../../../../packages/db/src/schema'
 import { buildTagTree, resolveInheritedTagIds } from '../../../../packages/shared/src/domain/tags'
 import {
   buildCalendarDayEntry,
@@ -11,6 +11,8 @@ import {
   buildBookStatisticsReadModel,
   buildFoodDetailReadModel,
   buildGamingDetailReadModel,
+  buildHealthDetailReadModel,
+  buildHealthHomeWidgetReadModel,
   entryToFoodHistoryItem,
   entryToBookHistoryItem,
   entryToGamingReadModel,
@@ -22,10 +24,14 @@ import {
   normalizeGamingTitle,
   normalizeBookTitle,
   normalizeBookTitleKey,
+  normalizeSymptomKey,
+  normalizeSymptomName,
   validateEstimatedHours,
   validateBookRatingTenths,
   validateCaloriesOptional,
   validateMealType,
+  validateSeverityOptional,
+  validateSymptomCategory,
   isTaskTrackerLike,
   parseTaskStateMetadata,
 } from '../../../../packages/shared/src/domain'
@@ -51,12 +57,17 @@ import type {
   CreateFoodEntryRequest,
   CreateWeightEntryRequest,
   CreateGamingEntryRequest,
+  CreateHealthSymptomRequest,
   Entry,
   EntryUpdateRequest,
   BookActivityType,
   FoodDetailResponse,
   FoodEntryResponse,
   MealType,
+  HealthDetailResponse,
+  HealthHomeWidgetReadModel,
+  HealthSymptomResponse,
+  UpdateHealthSymptomRequest,
   UpdateFoodEntryRequest,
   GamingDetailResponse,
   GamingEntryResponse,
@@ -193,6 +204,12 @@ function mapEntry(row: JsonRecord): Entry {
   const foodKey = row.food_key ?? row.foodKey
   const calories = row.calories
   const mealType = row.meal_type ?? row.mealType
+  const healthStructured = row.health_structured ?? row.healthStructured
+  const symptomId = row.symptom_id ?? row.symptomId
+  const symptomName = row.symptom_name ?? row.symptomName
+  const symptomKey = row.symptom_key ?? row.symptomKey
+  const symptomCategory = row.category ?? row.symptomCategory ?? row.symptom_category
+  const symptomSeverity = row.severity ?? row.symptomSeverity ?? row.symptom_severity
   const bookStructured = row.book_structured ?? row.bookStructured
   const bookId = row.book_id ?? row.bookId
   const bookTitle = row.book_title ?? row.bookTitle
@@ -222,6 +239,16 @@ function mapEntry(row: JsonRecord): Entry {
           foodKey: String(foodKey ?? ''),
           calories: calories == null ? null : Number(calories),
           mealType: mealType == null ? null : mealType as MealType,
+        }
+      : undefined,
+    health: healthStructured
+      ? {
+          structured: true,
+          symptomId: Number(symptomId),
+          symptomName: String(symptomName ?? ''),
+          symptomKey: String(symptomKey ?? ''),
+          category: (symptomCategory ?? 'general') as 'physical' | 'mental' | 'general' | 'other',
+          severity: symptomSeverity == null ? null : Number(symptomSeverity),
         }
       : undefined,
     book: bookStructured
@@ -429,6 +456,12 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
           ef.food_key,
           ef.calories,
           ef.meal_type,
+          eh.entry_id AS health_structured,
+          eh.symptom_id,
+          s.name AS symptom_name,
+          s.symptom_key,
+          s.category,
+          eh.severity,
           ba.entry_id AS book_structured,
           ba.book_id,
           b.title AS book_title,
@@ -437,6 +470,8 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
         FROM entries e
         LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
         LEFT JOIN entry_food ef ON ef.entry_id = e.id
+        LEFT JOIN entry_health eh ON eh.entry_id = e.id
+        LEFT JOIN symptoms s ON s.id = eh.symptom_id
         LEFT JOIN book_activities ba ON ba.entry_id = e.id
         LEFT JOIN books b ON b.id = ba.book_id
         WHERE e.tracker_id = ?
@@ -457,6 +492,12 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
           ef.food_key,
           ef.calories,
           ef.meal_type,
+          eh.entry_id AS health_structured,
+          eh.symptom_id,
+          s.name AS symptom_name,
+          s.symptom_key,
+          s.category,
+          eh.severity,
           ba.entry_id AS book_structured,
           ba.book_id,
           b.title AS book_title,
@@ -465,6 +506,8 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
         FROM entries e
         LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
         LEFT JOIN entry_food ef ON ef.entry_id = e.id
+        LEFT JOIN entry_health eh ON eh.entry_id = e.id
+        LEFT JOIN symptoms s ON s.id = eh.symptom_id
         LEFT JOIN book_activities ba ON ba.entry_id = e.id
         LEFT JOIN books b ON b.id = ba.book_id
         ORDER BY e.timestamp DESC
@@ -1009,6 +1052,12 @@ function isFoodTracker(trackerId: number): boolean {
   return getTrackerIdentity(mapTracker(row as JsonRecord)) === 'diet'
 }
 
+function isHealthTracker(trackerId: number): boolean {
+  const row = getDb().prepare('SELECT * FROM trackers WHERE id = ? LIMIT 1').get(trackerId)
+  if (!row) return false
+  return getTrackerIdentity(mapTracker(row as JsonRecord)) === 'health'
+}
+
 function isGamingTracker(trackerId: number): boolean {
   const row = getDb().prepare('SELECT * FROM trackers WHERE id = ? LIMIT 1').get(trackerId)
   if (!row) return false
@@ -1051,6 +1100,232 @@ function getGamingEntryById(entryId: number): GamingEntryResponse | null {
     entry: entryToGamingReadModel(entry) as GamingEntryResponse['entry'],
     tags: tagsForEntry(entryId),
   }
+}
+
+function findOrCreateSymptom(trackerId: number, symptomName: string, category: 'physical' | 'mental' | 'general' | 'other'): number {
+  const symptomKey = normalizeSymptomKey(symptomName)
+  const existing = getDb()
+    .prepare('SELECT * FROM symptoms WHERE tracker_id = ? AND symptom_key = ? LIMIT 1')
+    .get(trackerId, symptomKey) as JsonRecord | undefined
+
+  if (existing) {
+    const set: JsonRecord = {}
+    if (String(existing.name ?? '') !== symptomName) set.name = symptomName
+    if (String(existing.category ?? 'general') !== category) set.category = category
+    if (Object.keys(set).length > 0) {
+      set.updatedAt = Date.now()
+      getDb()
+        .prepare('UPDATE symptoms SET name = @name, category = @category, updated_at = @updatedAt WHERE id = @id')
+        .run({ id: Number(existing.id), ...set })
+    }
+    return Number(existing.id)
+  }
+
+  const result = getDb()
+    .prepare(`
+      INSERT INTO symptoms (tracker_id, name, symptom_key, category, created_at, updated_at)
+      VALUES (@trackerId, @name, @symptomKey, @category, @createdAt, @updatedAt)
+    `)
+    .run({
+      trackerId,
+      name: symptomName,
+      symptomKey,
+      category,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+  return Number(result.lastInsertRowid)
+}
+
+function getHealthEntryById(entryId: number): HealthSymptomResponse | null {
+  const row = getDb()
+    .prepare(`
+      SELECT
+        e.*,
+        eh.entry_id AS health_structured,
+        eh.symptom_id,
+        s.name AS symptom_name,
+        s.symptom_key,
+        s.category,
+        eh.severity
+      FROM entries e
+      LEFT JOIN entry_health eh ON eh.entry_id = e.id
+      LEFT JOIN symptoms s ON s.id = eh.symptom_id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+  if (!row) return null
+  const entry = mapEntry(row)
+  if (!entry.health?.structured) return null
+  return {
+    entry: {
+      entryId: entry.id,
+      trackerId: entry.trackerId,
+      symptomId: entry.health.symptomId,
+      symptomName: entry.health.symptomName,
+      symptomKey: entry.health.symptomKey,
+      category: entry.health.category,
+      severity: entry.health.severity,
+      note: entry.note,
+      timestamp: entry.timestamp,
+      dateStr: entry.dateStr,
+      assetId: entry.assetId ?? null,
+      tagIds: entry.tagIds ?? [],
+      structured: true,
+    },
+    tags: tagsForEntry(entryId),
+  }
+}
+
+function addHealthSymptomEntry(data: CreateHealthSymptomRequest): HealthSymptomResponse | null {
+  if (!isHealthTracker(data.trackerId)) throw new Error('Health symptom entries can only be created for the Health tracker')
+  const symptomName = normalizeSymptomName(data.symptomName)
+  if (!symptomName) throw new Error('Symptom name is required')
+  const category = validateSymptomCategory(data.category)
+  const severity = validateSeverityOptional(data.severity)
+  const timestamp = data.timestamp ?? Date.now()
+  if (!Number.isFinite(timestamp)) throw new Error('Timestamp must be finite')
+  const dateStr = formatDateStr(timestamp)
+
+  const entryId = getDb().transaction(() => {
+    const symptomId = findOrCreateSymptom(data.trackerId, symptomName, category)
+    const result = getDb()
+      .prepare(`
+        INSERT INTO entries (tracker_id, value, note, metadata, asset_id, timestamp, date_str)
+        VALUES (@trackerId, @value, @note, @metadata, @assetId, @timestamp, @dateStr)
+      `)
+      .run({
+        trackerId: data.trackerId,
+        value: null,
+        note: data.note ?? null,
+        metadata: JSON.stringify({
+          trackerKind: 'health',
+          health: {
+            structured: true,
+            symptomName,
+            symptomKey: normalizeSymptomKey(symptomName),
+            category,
+            severity,
+          },
+        }),
+        assetId: data.assetId ?? null,
+        timestamp,
+        dateStr,
+      })
+    const insertedEntryId = Number(result.lastInsertRowid)
+    getDb()
+      .prepare('INSERT INTO entry_health (entry_id, symptom_id, severity) VALUES (?, ?, ?)')
+      .run(insertedEntryId, symptomId, severity)
+    replaceEntryTags(insertedEntryId, data.tagIds)
+    return insertedEntryId
+  })()
+
+  return getHealthEntryById(entryId)
+}
+
+function updateHealthSymptomEntry(entryId: number, updates: UpdateHealthSymptomRequest): HealthSymptomResponse | null {
+  const existing = getDb()
+    .prepare(`
+      SELECT
+        e.tracker_id,
+        eh.entry_id AS health_structured,
+        eh.symptom_id,
+        s.name AS symptom_name,
+        s.symptom_key,
+        s.category,
+        eh.severity
+      FROM entries e
+      LEFT JOIN entry_health eh ON eh.entry_id = e.id
+      LEFT JOIN symptoms s ON s.id = eh.symptom_id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+  if (!existing?.health_structured || !isHealthTracker(Number(existing.tracker_id))) {
+    throw new Error('Structured Health entries can only be updated through the Health flow')
+  }
+
+  const nextSymptomName = updates.symptomName !== undefined ? normalizeSymptomName(updates.symptomName) : String(existing.symptom_name ?? '')
+  if (updates.symptomName !== undefined && !nextSymptomName) throw new Error('Symptom name is required')
+  const nextCategory = updates.category !== undefined ? validateSymptomCategory(updates.category) : (String(existing.category ?? 'general') as 'physical' | 'mental' | 'general' | 'other')
+  const nextSeverity = updates.severity !== undefined ? validateSeverityOptional(updates.severity) : (existing.severity == null ? null : Number(existing.severity))
+  const nextTimestamp = updates.timestamp !== undefined ? Number(updates.timestamp) : null
+  if (nextTimestamp !== null && !Number.isFinite(nextTimestamp)) throw new Error('Timestamp must be finite')
+
+  getDb().transaction(() => {
+    const entrySet: string[] = []
+    const entryParams: JsonRecord = { entryId }
+    const severityParams: JsonRecord = { entryId }
+    let symptomId = Number(existing.symptom_id)
+
+    if (updates.symptomName !== undefined || updates.category !== undefined) {
+      symptomId = findOrCreateSymptom(Number(existing.tracker_id), nextSymptomName, nextCategory)
+    }
+    if (updates.note !== undefined) {
+      entrySet.push('note = @note')
+      entryParams.note = updates.note
+    }
+    if (updates.assetId !== undefined) {
+      entrySet.push('asset_id = @assetId')
+      entryParams.assetId = updates.assetId ?? null
+    }
+    if (nextTimestamp !== null) {
+      entrySet.push('timestamp = @timestamp')
+      entrySet.push('date_str = @dateStr')
+      entryParams.timestamp = nextTimestamp
+      entryParams.dateStr = formatDateStr(nextTimestamp)
+    }
+    if (entrySet.length > 0) {
+      getDb().prepare(`UPDATE entries SET ${entrySet.join(', ')} WHERE id = @entryId`).run(entryParams)
+    }
+    if (updates.severity !== undefined || symptomId !== Number(existing.symptom_id)) {
+      severityParams.severity = nextSeverity
+      severityParams.symptomId = symptomId
+      getDb().prepare('UPDATE entry_health SET symptom_id = @symptomId, severity = @severity WHERE entry_id = @entryId').run(severityParams)
+    }
+    if (updates.tagIds !== undefined) replaceEntryTags(entryId, updates.tagIds)
+  })()
+
+  return getHealthEntryById(entryId)
+}
+
+function deleteHealthSymptomEntry(entryId: number): boolean {
+  const existing = getDb()
+    .prepare(`
+      SELECT e.tracker_id, eh.entry_id AS health_structured
+      FROM entries e
+      LEFT JOIN entry_health eh ON eh.entry_id = e.id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+  if (!existing?.health_structured || !isHealthTracker(Number(existing.tracker_id))) {
+    throw new Error('Structured Health entries can only be deleted through the Health flow')
+  }
+
+  getDb().transaction(() => {
+    getDb().prepare('DELETE FROM entries_to_tags WHERE entry_id = ?').run(entryId)
+    getDb().prepare('DELETE FROM entry_health WHERE entry_id = ?').run(entryId)
+    getDb().prepare('DELETE FROM entries WHERE id = ?').run(entryId)
+  })()
+  return true
+}
+
+function getHealthDetail(trackerId: number, options: { limit?: number } = {}): HealthDetailResponse {
+  if (!isHealthTracker(trackerId)) throw new Error('Health detail can only be read for the Health tracker')
+  const entries = getEntries({ trackerId, limit: options.limit ?? 365 })
+  return buildHealthDetailReadModel(entries, getTags())
+}
+
+function getHealthHomeWidget(trackerId: number, options: { selectedDate?: string; limit?: number } = {}): HealthHomeWidgetReadModel {
+  if (!isHealthTracker(trackerId)) throw new Error('Health home can only be read for the Health tracker')
+  const entries = getEntries({ trackerId, limit: options.limit ?? 365 })
+  return buildHealthHomeWidgetReadModel(entries, {
+    trackerId,
+    title: 'Health',
+    selectedDate: options.selectedDate ?? new Date().toISOString().slice(0, 10),
+  }, getTags())
 }
 
 function addGamingEntry(data: CreateGamingEntryRequest): GamingEntryResponse | null {
@@ -1860,6 +2135,34 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
     return
   }
 
+  if (path === '/api/health/entries' && method === 'POST') {
+    json(res, 200, addHealthSymptomEntry(await readBody(req) as CreateHealthSymptomRequest))
+    return
+  }
+
+  const healthEntryMatch = path.match(/^\/api\/health\/entries\/(\d+)$/)
+  if (healthEntryMatch && method === 'PUT') {
+    json(res, 200, updateHealthSymptomEntry(Number(healthEntryMatch[1]), await readBody(req) as UpdateHealthSymptomRequest))
+    return
+  }
+
+  if (healthEntryMatch && method === 'DELETE') {
+    json(res, 200, deleteHealthSymptomEntry(Number(healthEntryMatch[1])))
+    return
+  }
+
+  const healthDetailMatch = path.match(/^\/api\/health\/trackers\/(\d+)\/detail$/)
+  if (healthDetailMatch && method === 'GET') {
+    json(res, 200, getHealthDetail(Number(healthDetailMatch[1]), { limit: optionalInt(url.searchParams.get('limit')) ?? 365 }))
+    return
+  }
+
+  const healthHomeMatch = path.match(/^\/api\/health\/trackers\/(\d+)\/home$/)
+  if (healthHomeMatch && method === 'GET') {
+    json(res, 200, getHealthHomeWidget(Number(healthHomeMatch[1]), { selectedDate: url.searchParams.get('selectedDate') ?? undefined, limit: optionalInt(url.searchParams.get('limit')) ?? 365 }))
+    return
+  }
+
   if (path === '/api/books' && method === 'POST') {
     json(res, 200, createBook(await readBody(req) as CreateBookRequest))
     return
@@ -1971,6 +2274,12 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
           ef.food_key,
           ef.calories,
           ef.meal_type,
+          eh.entry_id AS health_structured,
+          eh.symptom_id,
+          s.name AS symptom_name,
+          s.symptom_key,
+          s.category,
+          eh.severity,
           ew.weight_value,
           ew.weight_unit,
           ew.waist_value,
@@ -1979,6 +2288,8 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
         LEFT JOIN trackers t ON t.id = e.tracker_id
         LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
         LEFT JOIN entry_food ef ON ef.entry_id = e.id
+        LEFT JOIN entry_health eh ON eh.entry_id = e.id
+        LEFT JOIN symptoms s ON s.id = eh.symptom_id
         LEFT JOIN entry_weight ew ON ew.entry_id = e.id
         ORDER BY e.timestamp ASC
       `)
@@ -2035,6 +2346,16 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
               foodKey: entry.food.foodKey,
               calories: entry.food.calories,
               mealType: entry.food.mealType,
+            }
+          : undefined,
+        health: entry.health
+          ? {
+              structured: true,
+              symptomId: entry.health.symptomId,
+              symptomName: entry.health.symptomName,
+              symptomKey: entry.health.symptomKey,
+              category: entry.health.category,
+              severity: entry.health.severity,
             }
           : undefined,
         task: taskState === 'hidden' || !taskMetadata

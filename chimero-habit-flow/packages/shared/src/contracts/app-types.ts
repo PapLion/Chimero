@@ -55,6 +55,14 @@ export interface Entry {
     calories: number | null
     mealType: MealType | null
   }
+  health?: {
+    structured: true
+    symptomId: number
+    symptomName: string
+    symptomKey: string
+    category: SymptomCategory
+    severity: number | null
+  }
   book?: {
     structured: true
     bookId: number
@@ -246,6 +254,109 @@ export interface FoodHomeWidgetReadModel {
   totalCalories: number
   legacyEntryCount: number
   sparkline: Array<{ date: string; value: number }>
+}
+
+export type SymptomCategory = 'physical' | 'mental' | 'general' | 'other'
+
+export interface HealthSymptom {
+  id: number
+  trackerId: number
+  name: string
+  symptomKey: string
+  category: SymptomCategory
+  createdAt: number | null
+  updatedAt: number | null
+}
+
+export interface HealthSymptomEntryReadModel {
+  entryId: number
+  trackerId: number
+  symptomId: number
+  symptomName: string
+  symptomKey: string
+  category: SymptomCategory
+  severity: number | null
+  note: string | null
+  timestamp: number
+  dateStr: string
+  assetId?: number | null
+  tagIds?: number[]
+  structured: true
+}
+
+export interface LegacyHealthEntryReadModel {
+  entryId: number
+  trackerId: number
+  legacyText: string | null
+  legacyValue: number | null
+  timestamp: number
+  dateStr: string
+  assetId?: number | null
+  tagIds?: number[]
+  structured: false
+}
+
+export type HealthHistoryItem = HealthSymptomEntryReadModel | LegacyHealthEntryReadModel
+
+export interface HealthSeveritySummary {
+  averageSeverity: number | null
+  maxSeverity: number | null
+  severityCount: number
+  missingSeverityCount: number
+}
+
+export interface HealthStatisticsReadModel {
+  totalOccurrences: number
+  structuredEntryCount: number
+  legacyEntryCount: number
+  daysWithSymptoms: number
+  symptomFrequency: Array<{ symptomName: string; symptomKey: string; category: SymptomCategory; entryCount: number }>
+  severitySummary: HealthSeveritySummary
+  chartData: Array<{ date: string; value: number; count: number }>
+}
+
+export interface HealthDetailResponse extends HealthStatisticsReadModel {
+  current: HealthSymptomEntryReadModel | null
+  history: HealthHistoryItem[]
+}
+
+export interface HealthHomeWidgetReadModel {
+  trackerId: number
+  title: string
+  currentSymptomName: string | null
+  currentSymptomCategory: SymptomCategory | null
+  currentSeverity: number | null
+  selectedDayEntries: HealthHistoryItem[]
+  totalOccurrences: number
+  daysWithSymptoms: number
+  legacyEntryCount: number
+  sparkline: Array<{ date: string; value: number }>
+}
+
+export interface CreateHealthSymptomRequest {
+  trackerId: number
+  symptomName: string
+  category?: SymptomCategory
+  severity?: number | null
+  note?: string | null
+  timestamp?: number
+  tagIds?: number[]
+  assetId?: number | null
+}
+
+export interface UpdateHealthSymptomRequest {
+  symptomName?: string
+  category?: SymptomCategory
+  severity?: number | null
+  note?: string | null
+  timestamp?: number
+  tagIds?: number[]
+  assetId?: number | null
+}
+
+export interface HealthSymptomResponse {
+  entry: HealthSymptomEntryReadModel
+  tags: Tag[]
 }
 
 export type BookShelf = 'tbr' | 'reading' | 'finished' | 'paused' | 'dropped'

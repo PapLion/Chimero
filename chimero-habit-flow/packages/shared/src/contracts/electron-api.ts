@@ -13,6 +13,7 @@ import type {
   CreateGamingEntryRequest,
   CreateBookRequest,
   CreateBookActivityRequest,
+  CreateHealthSymptomRequest,
   Entry,
   Book,
   EntryUpdateRequest,
@@ -21,6 +22,9 @@ import type {
   BookResponse,
   BookSelectedDaySummaryReadModel,
   BookStatisticsReadModel,
+  HealthDetailResponse,
+  HealthHomeWidgetReadModel,
+  HealthSymptomResponse,
   FoodDetailResponse,
   FoodEntryResponse,
   Reminder,
@@ -41,6 +45,7 @@ import type {
   UpdateGamingEntryRequest,
   UpdateBookActivityRequest,
   UpdateBookRequest,
+  UpdateHealthSymptomRequest,
   WeightDetailResponse,
   WeightEntryResponse,
   GamingDetailResponse,
@@ -105,6 +110,11 @@ export interface ElectronApi {
   updateFoodEntry: (entryId: number, updates: UpdateFoodEntryRequest) => Promise<FoodEntryResponse | null>
   deleteFoodEntry: (entryId: number) => Promise<boolean>
   getFoodDetail: (trackerId: number, options?: { limit?: number }) => Promise<FoodDetailResponse>
+  addHealthSymptomEntry: (data: CreateHealthSymptomRequest) => Promise<HealthSymptomResponse | null>
+  updateHealthSymptomEntry: (entryId: number, updates: UpdateHealthSymptomRequest) => Promise<HealthSymptomResponse | null>
+  deleteHealthSymptomEntry: (entryId: number) => Promise<boolean>
+  getHealthDetail: (trackerId: number, options?: { limit?: number }) => Promise<HealthDetailResponse>
+  getHealthHomeWidget: (trackerId: number, options?: { selectedDate?: string; limit?: number }) => Promise<HealthHomeWidgetReadModel>
   getWeightGoal: (trackerId: number) => Promise<TrackerGoalResponse>
   setWeightGoal: (data: SetTrackerGoalRequest) => Promise<TrackerGoalResponse>
   addGamingEntry: (data: CreateGamingEntryRequest) => Promise<GamingEntryResponse | null>

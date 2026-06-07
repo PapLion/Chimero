@@ -77,6 +77,18 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
     }
   }
 
+  // 🩺 Health / Symptoms
+  if (identity === "health") {
+    return {
+      mainLabel: "Symptom",
+      mainPlaceholder: "What symptom are you logging?",
+      mainType: "text",
+      noteLabel: "Context",
+      notePlaceholder: "Optional note or context",
+      noteHint: "Add any extra detail you want to remember.",
+    }
+  }
+
   // 🏋️‍♀️ Exercise
   if (identity === "exercise") {
     return {

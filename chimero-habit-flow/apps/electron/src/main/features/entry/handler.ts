@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { and, desc, eq, sql } from 'drizzle-orm'
-import { books, bookActivities, entries, entriesToTags, entryFood, entryGaming, entryWeight, trackers } from '@packages/db'
+import { books, bookActivities, entries, entriesToTags, entryFood, entryGaming, entryHealth, entryWeight, symptoms, trackers } from '@packages/db'
 import { getDb as db } from '@packages/db/database'
 import { mapEntry, mapTracker } from '../../shared/mappers'
 import type { BaseEntryRequest, EntryUpdateRequest, QuickEntryContextResponse } from '@contracts/contracts'
@@ -46,6 +46,17 @@ async function isFoodTracker(trackerId: number): Promise<boolean> {
   return getTrackerIdentity(mapTracker(row as Record<string, unknown>)) === 'diet'
 }
 
+async function isHealthTracker(trackerId: number): Promise<boolean> {
+  const [row] = await db()
+    .select()
+    .from(trackers)
+    .where(eq(trackers.id, trackerId))
+    .limit(1)
+
+  if (!row) return false
+  return getTrackerIdentity(mapTracker(row as Record<string, unknown>)) === 'health'
+}
+
 const entryProjection = {
   id: entries.id,
   trackerId: entries.trackerId,
@@ -64,6 +75,12 @@ const entryProjection = {
   foodKey: entryFood.foodKey,
   calories: entryFood.calories,
   mealType: entryFood.mealType,
+  healthStructured: entryHealth.entryId,
+  symptomId: entryHealth.symptomId,
+  symptomName: symptoms.name,
+  symptomKey: symptoms.symptomKey,
+  category: symptoms.category,
+  severity: entryHealth.severity,
   bookStructured: bookActivities.entryId,
   bookId: bookActivities.bookId,
   bookTitle: books.title,
@@ -80,6 +97,8 @@ export function registerEntryHandlers(): void {
         .from(entries)
         .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
         .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
+        .leftJoin(entryHealth, eq(entryHealth.entryId, entries.id))
+        .leftJoin(symptoms, eq(symptoms.id, entryHealth.symptomId))
         .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
         .leftJoin(books, eq(bookActivities.bookId, books.id))
         .orderBy(desc(entries.timestamp))
@@ -90,6 +109,8 @@ export function registerEntryHandlers(): void {
           .from(entries)
           .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
           .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
+          .leftJoin(entryHealth, eq(entryHealth.entryId, entries.id))
+          .leftJoin(symptoms, eq(symptoms.id, entryHealth.symptomId))
           .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
           .leftJoin(books, eq(bookActivities.bookId, books.id))
           .where(eq(entries.trackerId, options.trackerId))
@@ -112,6 +133,9 @@ export function registerEntryHandlers(): void {
       }
       if (await isFoodTracker(data.trackerId)) {
         throw new Error('Use add-food-entry for Diet entries')
+      }
+      if (await isHealthTracker(data.trackerId)) {
+        throw new Error('Use add-health-symptom-entry for Health entries')
       }
       const dateStr = formatDateStr(data.timestamp)
       const candidateEntry = mapEntry({
@@ -206,11 +230,13 @@ export function registerEntryHandlers(): void {
           trackerId: entries.trackerId,
           gamingStructured: entryGaming.entryId,
           foodStructured: entryFood.entryId,
+          healthStructured: entryHealth.entryId,
           bookStructured: bookActivities.entryId,
         })
         .from(entries)
         .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
         .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
+        .leftJoin(entryHealth, eq(entryHealth.entryId, entries.id))
         .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
         .where(eq(entries.id, id))
         .limit(1)
@@ -221,6 +247,9 @@ export function registerEntryHandlers(): void {
       }
       if (existing.foodStructured && await isFoodTracker(existing.trackerId)) {
         throw new Error('Use the Food flow for structured Diet entries')
+      }
+      if (existing.healthStructured && await isHealthTracker(existing.trackerId)) {
+        throw new Error('Use the Health flow for structured Health entries')
       }
       if (existing.bookStructured && await isBooksTracker(existing.trackerId)) {
         throw new Error('Use the Books flow for structured Books entries')
@@ -261,11 +290,13 @@ export function registerEntryHandlers(): void {
           trackerId: entries.trackerId,
           gamingStructured: entryGaming.entryId,
           foodStructured: entryFood.entryId,
+          healthStructured: entryHealth.entryId,
           bookStructured: bookActivities.entryId,
         })
         .from(entries)
         .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
         .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
+        .leftJoin(entryHealth, eq(entryHealth.entryId, entries.id))
         .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
         .where(eq(entries.id, id))
         .limit(1)
@@ -275,6 +306,9 @@ export function registerEntryHandlers(): void {
       }
       if (existing?.foodStructured && await isFoodTracker(existing.trackerId)) {
         throw new Error('Use the Food flow for structured Diet entries')
+      }
+      if (existing?.healthStructured && await isHealthTracker(existing.trackerId)) {
+        throw new Error('Use the Health flow for structured Health entries')
       }
       if (existing?.bookStructured && await isBooksTracker(existing.trackerId)) {
         throw new Error('Use the Books flow for structured Books entries')
@@ -303,6 +337,8 @@ export function registerEntryHandlers(): void {
         .from(entries)
         .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
         .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
+        .leftJoin(entryHealth, eq(entryHealth.entryId, entries.id))
+        .leftJoin(symptoms, eq(symptoms.id, entryHealth.symptomId))
         .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
         .leftJoin(books, eq(bookActivities.bookId, books.id))
         .where(eq(entries.trackerId, trackerId))

@@ -62,6 +62,12 @@ export function mapEntry(row: Record<string, unknown>): Entry {
   const foodKey = row.foodKey ?? row.food_key
   const calories = row.calories ?? row.foodCalories ?? row.food_calories ?? row.value
   const mealType = row.mealType ?? row.meal_type
+  const healthStructured = row.healthStructured ?? row.health_structured
+  const symptomId = row.symptomId ?? row.symptom_id
+  const symptomName = row.symptomName ?? row.symptom_name
+  const symptomKey = row.symptomKey ?? row.symptom_key
+  const symptomCategory = row.category ?? row.symptomCategory ?? row.symptom_category
+  const symptomSeverity = row.severity ?? row.symptomSeverity ?? row.symptom_severity
   const bookStructured = row.bookStructured ?? row.book_structured
   const bookId = row.bookId ?? row.book_id
   const bookTitle = row.bookTitle ?? row.book_title
@@ -93,6 +99,17 @@ export function mapEntry(row: Record<string, unknown>): Entry {
             foodKey: (foodKey as string) ?? '',
             calories: calories == null ? null : Number(calories),
             mealType: (mealType as MealType | null) ?? null,
+          }
+        : undefined,
+    health:
+      healthStructured
+        ? {
+            structured: true,
+            symptomId: Number(symptomId),
+            symptomName: (symptomName as string) ?? '',
+            symptomKey: (symptomKey as string) ?? '',
+            category: (symptomCategory as 'physical' | 'mental' | 'general' | 'other') ?? 'general',
+            severity: symptomSeverity == null ? null : Number(symptomSeverity),
           }
         : undefined,
     book:

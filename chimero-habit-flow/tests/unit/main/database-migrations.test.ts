@@ -95,4 +95,21 @@ describe('database migration transition', () => {
     expect(migration).not.toMatch(/UPDATE `?entries`?/i)
     expect(migration).not.toMatch(/DELETE FROM `?entries`?/i)
   })
+
+  it('adds the health symptom entity and occurrence migration without backfilling legacy entries', () => {
+    const migration = readFileSync(
+      resolve(process.cwd(), 'packages/db/drizzle/0006_health_symptom_entity_and_occurrence.sql'),
+      'utf-8',
+    )
+
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS `symptoms`')
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS `entry_health`')
+    expect(migration).toContain('`severity` integer')
+    expect(migration).toContain('CREATE INDEX IF NOT EXISTS `symptoms_tracker_idx`')
+    expect(migration).toContain('CREATE UNIQUE INDEX IF NOT EXISTS `symptoms_tracker_key_unique`')
+    expect(migration).toContain('CREATE INDEX IF NOT EXISTS `entry_health_symptom_idx`')
+    expect(migration).not.toMatch(/INSERT INTO `?entries`?/i)
+    expect(migration).not.toMatch(/UPDATE `?entries`?/i)
+    expect(migration).not.toMatch(/DELETE FROM `?entries`?/i)
+  })
 })

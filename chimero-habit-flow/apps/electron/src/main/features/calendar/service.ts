@@ -1,5 +1,5 @@
 import { getDb } from '@packages/db/database'
-import { entries, entryFood, entryGaming, entryWeight, trackers } from '@packages/db'
+import { entries, entryFood, entryGaming, entryHealth, entryWeight, symptoms, trackers } from '@packages/db'
 import { eq } from 'drizzle-orm'
 import {
   buildCalendarDayEntry,
@@ -48,6 +48,12 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
       foodKey: entryFood.foodKey,
       calories: entryFood.calories,
       mealType: entryFood.mealType,
+      healthStructured: entryHealth.entryId,
+      symptomId: entryHealth.symptomId,
+      symptomName: symptoms.name,
+      symptomKey: symptoms.symptomKey,
+      category: symptoms.category,
+      severity: entryHealth.severity,
       trackerName: trackers.name,
       trackerType: trackers.type,
       trackerIcon: trackers.icon,
@@ -59,6 +65,8 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
     .from(entries)
     .leftJoin(entryWeight, eq(entryWeight.entryId, entries.id))
     .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
+    .leftJoin(entryHealth, eq(entryHealth.entryId, entries.id))
+    .leftJoin(symptoms, eq(symptoms.id, entryHealth.symptomId))
     .leftJoin(trackers, eq(trackers.id, entries.trackerId))
     .orderBy(entries.timestamp)
 
@@ -92,6 +100,16 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
             foodKey: String(r.foodKey ?? ''),
             calories: r.calories == null ? null : Number(r.calories),
             mealType: (r.mealType ?? null) as MealType | null,
+          }
+        : undefined,
+      health: r.healthStructured
+        ? {
+            structured: true,
+            symptomId: Number(r.symptomId ?? 0),
+            symptomName: String(r.symptomName ?? ''),
+            symptomKey: String(r.symptomKey ?? ''),
+            category: (r.category ?? 'general') as 'physical' | 'mental' | 'general' | 'other',
+            severity: r.severity == null ? null : Number(r.severity),
           }
         : undefined,
     }

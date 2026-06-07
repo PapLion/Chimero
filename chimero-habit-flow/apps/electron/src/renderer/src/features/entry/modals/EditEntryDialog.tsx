@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { useTrackers, useUpdateEntryMutation, useUpdateWeightEntryMutation, useUpdateGamingEntryMutation, useUpdateFoodEntryMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
+import { useTrackers, useUpdateEntryMutation, useUpdateWeightEntryMutation, useUpdateGamingEntryMutation, useUpdateFoodEntryMutation, useUpdateHealthSymptomEntryMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
 import { Dialog, DialogContent, DialogTitle } from "@packages/ui/dialog"
 import { Input } from "@packages/ui/input"
 import { format } from "date-fns"
@@ -46,12 +46,15 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     const updateWeightEntryMutation = useUpdateWeightEntryMutation()
     const updateGamingEntryMutation = useUpdateGamingEntryMutation()
     const updateFoodEntryMutation = useUpdateFoodEntryMutation()
+    const updateHealthSymptomEntryMutation = useUpdateHealthSymptomEntryMutation()
     const createTagMutation = useCreateTagMutation()
     const qc = useQueryClient()
     const toast = useToast()
 
     const [value, setValue] = useState("")
     const [note, setNote] = useState("")
+    const [healthSymptomName, setHealthSymptomName] = useState("")
+    const [healthCategory, setHealthCategory] = useState<"physical" | "mental" | "general" | "other">("general")
     const [mealType, setMealType] = useState<MealType | "">("")
     const [waist, setWaist] = useState("")
     const [date, setDate] = useState("")
@@ -93,8 +96,17 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                 setNote(entry.food.foodName)
                 setValue(entry.food.calories != null ? entry.food.calories.toString() : "")
                 setMealType(entry.food.mealType ?? "")
+                setHealthSymptomName("")
+                setHealthCategory("general")
+            } else if (entry.health?.structured) {
+                setHealthSymptomName(entry.health.symptomName)
+                setHealthCategory(entry.health.category)
+                setNote(entry.note || "")
+                setValue(entry.health.severity != null ? entry.health.severity.toString() : "")
             } else {
                 setMealType("")
+                setHealthSymptomName("")
+                setHealthCategory("general")
             }
             const metadata = readMetadata(entry.metadata)
             const metadataWaist = metadata.waist
@@ -110,6 +122,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     const tracker = entry ? trackers.find((t) => t.id === entry.trackerId) : null
     const isGamingTracker = tracker ? getTrackerIdentity(tracker) === "gaming" : false
     const isFoodTracker = tracker ? getTrackerIdentity(tracker) === "diet" : false
+    const isHealthTracker = tracker ? getTrackerIdentity(tracker) === "health" : false
 
     const handleSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault()
@@ -140,6 +153,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                 tracker.name.toLowerCase().includes("peso")
             const isStructuredGamingEntry = isGamingTracker && entry.gaming?.structured
             const isStructuredFoodEntry = isFoodTracker && entry.food?.structured
+            const isStructuredHealthEntry = isHealthTracker && entry.health?.structured
 
             if (isStructuredGamingEntry) {
                 const parsedHours = parseFloat(value)
@@ -164,6 +178,23 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                         foodName: note.trim(),
                         calories,
                         mealType: mealType || null,
+                        assetId: selectedAssetId,
+                        tagIds: selectedTagIds,
+                        timestamp,
+                    },
+                })
+            } else if (isStructuredHealthEntry) {
+                const symptomName = healthSymptomName.trim()
+                if (!symptomName) return
+                const severity = value.trim() ? parseFloat(value) : null
+                if (severity !== null && (!Number.isFinite(severity) || !Number.isInteger(severity) || severity < 1 || severity > 10)) return
+                await updateHealthSymptomEntryMutation.mutateAsync({
+                    entryId: entry.id,
+                    updates: {
+                        symptomName,
+                        category: healthCategory,
+                        severity,
+                        note: note.trim() || null,
                         assetId: selectedAssetId,
                         tagIds: selectedTagIds,
                         timestamp,
@@ -255,7 +286,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     }
 
     if (!tracker) return null
-    const isPending = updateEntryMutation.isPending || updateWeightEntryMutation.isPending || updateGamingEntryMutation.isPending || updateFoodEntryMutation.isPending
+    const isPending = updateEntryMutation.isPending || updateWeightEntryMutation.isPending || updateGamingEntryMutation.isPending || updateFoodEntryMutation.isPending || updateHealthSymptomEntryMutation.isPending
     const handleOpenChange = (nextOpen: boolean) => {
         if (!nextOpen && isPending) return
         onOpenChange(nextOpen)
@@ -280,6 +311,8 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
           ? !note.trim() || !value || !Number.isFinite(parseFloat(value))
         : isFoodTracker
           ? !note.trim()
+        : isHealthTracker
+          ? !healthSymptomName.trim() || (value.trim() !== "" && (!Number.isFinite(parseFloat(value)) || !Number.isInteger(parseFloat(value)) || parseFloat(value) < 1 || parseFloat(value) > 10))
         : isText ? !note.trim() && !value : !value && !note.trim()
 
     return (
@@ -321,7 +354,59 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                             </div>
                         </div>
 
-                        {isFoodTracker && entry?.food?.structured ? (
+                        {isHealthTracker && entry?.health?.structured ? (
+                            <div className="space-y-3">
+                                <div className="space-y-1">
+                                    <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Symptom</label>
+                                    <Input
+                                        type="text"
+                                        placeholder="What symptom are you logging?"
+                                        value={healthSymptomName}
+                                        onChange={(e) => setHealthSymptomName(e.target.value)}
+                                        className="h-11 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="space-y-1">
+                                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Severity (Optional)</label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            max={10}
+                                            step={1}
+                                            placeholder="1-10"
+                                            value={value}
+                                            onChange={(e) => setValue(e.target.value)}
+                                            className="h-11 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Category</label>
+                                        <select
+                                            value={healthCategory}
+                                            onChange={(e) => setHealthCategory(e.target.value as "physical" | "mental" | "general" | "other")}
+                                            className="h-11 w-full rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-3 text-sm text-[hsl(var(--foreground))] outline-none transition-colors focus:border-[hsl(var(--border)/0.95)]"
+                                        >
+                                            <option value="general">General</option>
+                                            <option value="physical">Physical</option>
+                                            <option value="mental">Mental</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Context</label>
+                                    <Input
+                                        type="text"
+                                        placeholder="Optional note or context"
+                                        value={note}
+                                        onChange={(e) => setNote(e.target.value)}
+                                        className="h-11 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                                    />
+                                </div>
+                            </div>
+                        ) : isFoodTracker && entry?.food?.structured ? (
                             <div className="space-y-3">
                                 <div className="space-y-1">
                                     <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Food Name</label>

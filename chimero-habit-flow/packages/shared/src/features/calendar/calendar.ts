@@ -25,6 +25,14 @@ export interface CalendarDayEntry {
     calories: number | null
     mealType: MealType | null
   }
+  health?: {
+    structured: true
+    symptomId: number
+    symptomName: string
+    symptomKey: string
+    category: 'physical' | 'mental' | 'general' | 'other'
+    severity: number | null
+  }
   taskState?: Exclude<TaskDayState, 'hidden'>
   taskBaseDate?: string
   taskActiveDate?: string

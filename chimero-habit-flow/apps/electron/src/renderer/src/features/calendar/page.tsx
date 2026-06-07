@@ -9,7 +9,7 @@ import { useTrackers, useCalendarMonth, useStats, useReminders, useEntries, useT
 import { TimelineView } from "./components/TimelineView"
 import { TagChips } from "@features/tags/components/TagChips"
 import type { CalendarDayEntry } from "@contracts/features/calendar"
-import { clampMoodScore, moodScoreToColor, moodScoreToLabel } from "@contracts/domain"
+import { clampMoodScore, formatSeverityDisplay, moodScoreToColor, moodScoreToLabel } from "@contracts/domain"
 import { getBookActionLabel, getBookLifecycleRecord } from "@contracts/features/books"
 import { getTrackerIdentity } from "@contracts/features/tracking"
 
@@ -463,11 +463,14 @@ export function CalendarPage() {
                             const isTaskEntry = !!entry.taskState
                             const isGamingTracker = tracker ? getTrackerIdentity(tracker) === "gaming" : false
                             const isFoodTracker = tracker ? getTrackerIdentity(tracker) === "diet" : false
+                            const isHealthTracker = tracker ? getTrackerIdentity(tracker) === "health" : false
                             const isBooksTracker = tracker ? getTrackerIdentity(tracker) === "books" : false
                             const gaming = entry.gaming?.structured ? entry.gaming : null
                             const food = entry.food?.structured ? entry.food : null
+                            const health = entry.health?.structured ? entry.health : null
                             const legacyGaming = isGamingTracker && !gaming
                             const legacyFood = isFoodTracker && !food
+                            const legacyHealth = isHealthTracker && !health
                             const book = isBooksTracker && detailedEntry ? getBookLifecycleRecord(detailedEntry as Entry) : null
                             const moodScore = isMoodEntry ? clampMoodScore(entry.value) : null
                             const entryTime = new Date(entry.timestamp).toLocaleTimeString(undefined, {
@@ -569,13 +572,30 @@ export function CalendarPage() {
                                 {legacyFood && entry.note && (
                                   <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
                                 )}
+                                {health && (
+                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                    {health.category}
+                                    {health.severity != null ? ` · ${formatSeverityDisplay(health.severity)}` : ""}
+                                  </p>
+                                )}
+                                {health && entry.note && (
+                                  <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                )}
+                                {legacyHealth && (
+                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                    Unstructured legacy health entry
+                                  </p>
+                                )}
+                                {legacyHealth && entry.note && (
+                                  <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                )}
                                 {(entry as CalendarDayEntry).waist != null && (
                                   <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
                                     Waist {(entry as CalendarDayEntry).waist}
                                     {(entry as CalendarDayEntry).waistUnit ? ` ${(entry as CalendarDayEntry).waistUnit}` : ""}
                                   </p>
                                 )}
-                                {entry.note && !gaming && !legacyGaming && !isBooksTracker && !food && !legacyFood && (
+                                {entry.note && !gaming && !legacyGaming && !isBooksTracker && !food && !legacyFood && !health && !legacyHealth && (
                                   <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
                                 )}
                                 {gaming && (
