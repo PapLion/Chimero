@@ -4,12 +4,12 @@ import { useMemo } from "react"
 import { cn } from "@shared/utils"
 import { type Widget, type Tracker, type Entry } from "@shared/store"
 import { useBooks, useMoodDailyAggregates, useUpdateEntryMutation, useWeightDetail } from "@shared/queries"
-import { buildFoodHomeWidgetReadModel, buildGamingHomeWidgetReadModel, buildHealthHomeWidgetReadModel, buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, formatSeverityDisplay, moodScoreToColor, postponeTaskToNextDay, unpostponeTask } from "@contracts/domain"
+import { buildFoodHomeWidgetReadModel, buildGamingHomeWidgetReadModel, buildHealthHomeWidgetReadModel, buildIntakeHomeWidgetReadModel, buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, formatIntakeDosageDisplay, formatSeverityDisplay, moodScoreToColor, postponeTaskToNextDay, unpostponeTask } from "@contracts/domain"
 import { buildBooksTrackerReadModel, formatBookRatingDisplay, getBookActionLabel } from "@contracts/features/books"
 import { getTrackerIdentity, isBooksTracker, usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, Salad, CalendarPlus, Undo2, Square, Tv, type LucideIcon } from "lucide-react"
+import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, GripVertical, TrendingUp, TrendingDown, Minus, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, Salad, CalendarPlus, Undo2, Square, Tv, Pill, type LucideIcon } from "lucide-react"
 import {
   LineChart,
   Line,
@@ -41,6 +41,7 @@ const iconMap: Record<string, LucideIcon> = {
   camera: Camera,
   "gamepad-2": Gamepad2,
   salad: Salad,
+  pill: Pill,
 }
 
 // Premium card classes for the Bento Grid
@@ -556,6 +557,122 @@ function HealthWidget({
 
       <div className="mt-auto text-xs text-[hsl(var(--muted-foreground))]">
         {healthHome.totalOccurrences} total occurrences · {healthHome.daysWithSymptoms} days with symptoms
+      </div>
+    </div>
+  )
+}
+
+function IntakeWidget({
+  entries,
+  tracker,
+  selectedDate,
+}: {
+  entries: Entry[]
+  tracker: Tracker
+  selectedDate: Date
+}) {
+  const intakeHome = buildIntakeHomeWidgetReadModel(entries, {
+    trackerId: tracker.id,
+    title: tracker.name,
+    selectedDate: dateToDateStr(selectedDate),
+  })
+  const iconKey = (tracker.icon ?? "").trim() || "pill"
+  const Icon = iconMap[iconKey] || Pill
+  const hasStructuredEntries = intakeHome.currentItemName != null || intakeHome.selectedDayEntries.some((entry) => entry.structured)
+
+  if (!hasStructuredEntries && intakeHome.legacyEntryCount === 0) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="surface-chip p-2">
+            <Icon className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />
+          </div>
+          <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">{tracker.name}</span>
+        </div>
+        <p className="text-sm text-[hsl(var(--muted-foreground))]">No structured intake logs yet</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="mb-3 flex items-center gap-3">
+        <div className="surface-chip p-2">
+          <Icon className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />
+        </div>
+        <span className="text-sm font-medium text-[hsl(var(--muted-foreground))]">{tracker.name}</span>
+      </div>
+
+      <div className="mb-3 grid grid-cols-3 gap-2">
+        <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Latest</div>
+          <div className="mt-1 truncate text-sm font-semibold text-[hsl(var(--foreground))]">
+            {intakeHome.currentItemName ?? "--"}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Dose</div>
+          <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">
+            {formatIntakeDosageDisplay(intakeHome.currentDosage, intakeHome.currentUnit)}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Legacy</div>
+          <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{intakeHome.legacyEntryCount}</div>
+        </div>
+      </div>
+
+      {intakeHome.selectedDayEntries.length > 0 && (
+        <div className="mb-3 rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-3">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[hsl(var(--muted-foreground))]">
+            Selected day
+          </div>
+          <div className="mt-2 space-y-2">
+            {intakeHome.selectedDayEntries.slice(0, 3).map((entry) => (
+              <div key={entry.entryId} className="rounded-xl border border-[hsl(var(--border)/0.5)] bg-white/[0.02] p-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-[hsl(var(--foreground))]">
+                      {entry.structured ? entry.itemName : "Legacy intake entry"}
+                    </div>
+                    <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                      {entry.structured
+                        ? `${entry.itemType}${entry.variant ? ` · ${entry.variant}` : ""}`
+                        : entry.legacyText || "No structured fields"}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-xs text-[hsl(var(--muted-foreground))]">
+                    {new Date(entry.timestamp).toLocaleDateString()}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mb-3 h-20">
+        {intakeHome.sparkline.length > 1 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={intakeHome.sparkline}>
+              <defs>
+                <linearGradient id={`intakeWidgetGradient-${tracker.id}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(173 80% 32%)" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="hsl(173 80% 32%)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Area type="monotone" dataKey="value" stroke="hsl(173 80% 32%)" fill={`url(#intakeWidgetGradient-${tracker.id})`} strokeWidth={2} dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex h-full items-center justify-center rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] text-xs text-[hsl(var(--muted-foreground))]">
+            Not enough data for a trend yet
+          </div>
+        )}
+      </div>
+
+      <div className="mt-auto text-xs text-[hsl(var(--muted-foreground))]">
+        {intakeHome.intakeCount} total intakes · {intakeHome.daysWithIntakes} days with intakes
       </div>
     </div>
   )
@@ -1551,6 +1668,10 @@ export function WidgetCard({ widget, tracker, entries, assets, selectedDate }: W
 
     if (getTrackerIdentity(tracker) === "health") {
       return <HealthWidget entries={entries} tracker={tracker} selectedDate={selectedDate} />
+    }
+
+    if (getTrackerIdentity(tracker) === "intake") {
+      return <IntakeWidget entries={entries} tracker={tracker} selectedDate={selectedDate} />
     }
 
     // Media Widget: TV, Games, Media, Apps

@@ -1,4 +1,4 @@
-import type { MealType, TaskDayState, TaskPostponement } from '../../contracts/app-types'
+import type { IntakeItemType, MealType, TaskDayState, TaskPostponement } from '../../contracts/app-types'
 
 export interface CalendarDayEntry {
   id: number
@@ -32,6 +32,16 @@ export interface CalendarDayEntry {
     symptomKey: string
     category: 'physical' | 'mental' | 'general' | 'other'
     severity: number | null
+  }
+  intake?: {
+    structured: true
+    itemId: number
+    itemName: string
+    itemKey: string
+    itemType: IntakeItemType
+    variant: string | null
+    dosage: number | null
+    unit: string | null
   }
   taskState?: Exclude<TaskDayState, 'hidden'>
   taskBaseDate?: string

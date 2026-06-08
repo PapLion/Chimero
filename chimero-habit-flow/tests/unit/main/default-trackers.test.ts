@@ -51,6 +51,7 @@ describe('default trackers', () => {
       'TV',
       'Media',
       'Health',
+      'Vitamins & Medications',
       'Diet / Calories',
     ])
   })

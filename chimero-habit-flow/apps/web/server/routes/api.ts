@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createReadStream, existsSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import { getWebDb, getAssetsRoot, getWebDbPath, type WebDb } from '../db'
-import { books, bookActivities, entryHealth, symptoms } from '../../../../packages/db/src/schema'
+import { books, bookActivities, entryHealth, entryIntake, intakeItems, symptoms } from '../../../../packages/db/src/schema'
 import { buildTagTree, resolveInheritedTagIds } from '../../../../packages/shared/src/domain/tags'
 import {
   buildCalendarDayEntry,
@@ -13,13 +13,19 @@ import {
   buildGamingDetailReadModel,
   buildHealthDetailReadModel,
   buildHealthHomeWidgetReadModel,
+  buildIntakeDetailReadModel,
+  buildIntakeHomeWidgetReadModel,
   entryToFoodHistoryItem,
   entryToBookHistoryItem,
   entryToGamingReadModel,
+  entryToIntakeHistoryItem,
   getTaskActiveDate,
   getTaskStateForDate,
   normalizeFoodKey,
   normalizeFoodName,
+  normalizeIntakeItemKey,
+  normalizeIntakeItemName,
+  normalizeIntakeItemVariant,
   normalizeGameKey,
   normalizeGamingTitle,
   normalizeBookTitle,
@@ -30,8 +36,11 @@ import {
   validateBookRatingTenths,
   validateCaloriesOptional,
   validateMealType,
+  validateDosageOptional,
+  validateIntakeItemType,
   validateSeverityOptional,
   validateSymptomCategory,
+  validateUnitOptional,
   isTaskTrackerLike,
   parseTaskStateMetadata,
 } from '../../../../packages/shared/src/domain'
@@ -55,6 +64,7 @@ import type {
   CreateBookActivityRequest,
   CreateBookRequest,
   CreateFoodEntryRequest,
+  CreateIntakeEntryRequest,
   CreateWeightEntryRequest,
   CreateGamingEntryRequest,
   CreateHealthSymptomRequest,
@@ -63,12 +73,16 @@ import type {
   BookActivityType,
   FoodDetailResponse,
   FoodEntryResponse,
+  IntakeDetailResponse,
+  IntakeEntryResponse,
+  IntakeHomeWidgetReadModel,
   MealType,
   HealthDetailResponse,
   HealthHomeWidgetReadModel,
   HealthSymptomResponse,
   UpdateHealthSymptomRequest,
   UpdateFoodEntryRequest,
+  UpdateIntakeEntryRequest,
   GamingDetailResponse,
   GamingEntryResponse,
   Reminder,
@@ -210,6 +224,14 @@ function mapEntry(row: JsonRecord): Entry {
   const symptomKey = row.symptom_key ?? row.symptomKey
   const symptomCategory = row.category ?? row.symptomCategory ?? row.symptom_category
   const symptomSeverity = row.severity ?? row.symptomSeverity ?? row.symptom_severity
+  const intakeStructured = row.intake_structured ?? row.intakeStructured
+  const itemId = row.item_id ?? row.itemId
+  const itemName = row.item_name ?? row.itemName
+  const itemKey = row.item_key ?? row.itemKey
+  const itemType = row.item_type ?? row.itemType
+  const variant = row.variant ?? row.itemVariant ?? row.item_variant
+  const dosage = row.dosage ?? row.itemDosage ?? row.item_dosage
+  const unit = row.unit ?? row.itemUnit ?? row.item_unit
   const bookStructured = row.book_structured ?? row.bookStructured
   const bookId = row.book_id ?? row.bookId
   const bookTitle = row.book_title ?? row.bookTitle
@@ -249,6 +271,18 @@ function mapEntry(row: JsonRecord): Entry {
           symptomKey: String(symptomKey ?? ''),
           category: (symptomCategory ?? 'general') as 'physical' | 'mental' | 'general' | 'other',
           severity: symptomSeverity == null ? null : Number(symptomSeverity),
+        }
+      : undefined,
+    intake: intakeStructured
+      ? {
+          structured: true,
+          itemId: Number(itemId),
+          itemName: String(itemName ?? ''),
+          itemKey: String(itemKey ?? ''),
+          itemType: (itemType ?? 'other') as 'vitamin' | 'medication' | 'supplement' | 'other',
+          variant: variant == null ? null : String(variant),
+          dosage: dosage == null ? null : Number(dosage),
+          unit: unit == null ? null : String(unit),
         }
       : undefined,
     book: bookStructured
@@ -462,6 +496,14 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
           s.symptom_key,
           s.category,
           eh.severity,
+          ei.entry_id AS intake_structured,
+          ei.item_id,
+          ii.item_name,
+          ii.item_key,
+          ii.item_type,
+          ii.variant,
+          ei.dosage,
+          ei.unit,
           ba.entry_id AS book_structured,
           ba.book_id,
           b.title AS book_title,
@@ -471,6 +513,8 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
         LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
         LEFT JOIN entry_food ef ON ef.entry_id = e.id
         LEFT JOIN entry_health eh ON eh.entry_id = e.id
+        LEFT JOIN entry_intake ei ON ei.entry_id = e.id
+        LEFT JOIN intake_items ii ON ii.id = ei.item_id
         LEFT JOIN symptoms s ON s.id = eh.symptom_id
         LEFT JOIN book_activities ba ON ba.entry_id = e.id
         LEFT JOIN books b ON b.id = ba.book_id
@@ -498,6 +542,14 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
           s.symptom_key,
           s.category,
           eh.severity,
+          ei.entry_id AS intake_structured,
+          ei.item_id,
+          ii.item_name,
+          ii.item_key,
+          ii.item_type,
+          ii.variant,
+          ei.dosage,
+          ei.unit,
           ba.entry_id AS book_structured,
           ba.book_id,
           b.title AS book_title,
@@ -507,6 +559,8 @@ function getEntries(options: { limit?: number; trackerId?: number } = {}): Entry
         LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
         LEFT JOIN entry_food ef ON ef.entry_id = e.id
         LEFT JOIN entry_health eh ON eh.entry_id = e.id
+        LEFT JOIN entry_intake ei ON ei.entry_id = e.id
+        LEFT JOIN intake_items ii ON ii.id = ei.item_id
         LEFT JOIN symptoms s ON s.id = eh.symptom_id
         LEFT JOIN book_activities ba ON ba.entry_id = e.id
         LEFT JOIN books b ON b.id = ba.book_id
@@ -522,6 +576,7 @@ function addEntry(data: BaseEntryRequest): Entry | null {
   if (!Number.isFinite(data.timestamp)) throw new Error('Invalid timestamp')
   if (isGamingTracker(data.trackerId)) throw new Error('Use add-gaming-entry for Gaming entries')
   if (isFoodTracker(data.trackerId)) throw new Error('Use add-food-entry for structured Food entries')
+  if (isIntakeTracker(data.trackerId)) throw new Error('Use add-intake-entry for structured intake entries')
   const dateStr = formatDateStr(data.timestamp)
   const candidateEntry = mapEntry({
     id: 0,
@@ -600,10 +655,12 @@ function updateEntry(id: number, updates: EntryUpdateRequest): Entry | null {
         e.tracker_id,
         eg.entry_id AS gaming_structured,
         ef.entry_id AS food_structured,
+        ei.entry_id AS intake_structured,
         ba.entry_id AS book_structured
       FROM entries e
       LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
       LEFT JOIN entry_food ef ON ef.entry_id = e.id
+      LEFT JOIN entry_intake ei ON ei.entry_id = e.id
       LEFT JOIN book_activities ba ON ba.entry_id = e.id
       WHERE e.id = ?
       LIMIT 1
@@ -614,6 +671,9 @@ function updateEntry(id: number, updates: EntryUpdateRequest): Entry | null {
   }
   if (existing?.food_structured && isFoodTracker(Number(existing.tracker_id))) {
     throw new Error('Use the Food flow for structured Food entries')
+  }
+  if (existing?.intake_structured && isIntakeTracker(Number(existing.tracker_id))) {
+    throw new Error('Use the Vitamins & Medications flow for structured intake entries')
   }
   if (existing?.book_structured && isBooksTracker(Number(existing.tracker_id))) {
     throw new Error('Use the Books flow for structured Books entries')
@@ -664,10 +724,12 @@ function deleteEntry(id: number): boolean {
         e.tracker_id,
         eg.entry_id AS gaming_structured,
         ef.entry_id AS food_structured,
+        ei.entry_id AS intake_structured,
         ba.entry_id AS book_structured
       FROM entries e
       LEFT JOIN entry_gaming eg ON eg.entry_id = e.id
       LEFT JOIN entry_food ef ON ef.entry_id = e.id
+      LEFT JOIN entry_intake ei ON ei.entry_id = e.id
       LEFT JOIN book_activities ba ON ba.entry_id = e.id
       WHERE e.id = ?
       LIMIT 1
@@ -679,6 +741,9 @@ function deleteEntry(id: number): boolean {
   if (existing?.food_structured && isFoodTracker(Number(existing.tracker_id))) {
     throw new Error('Use the Food flow for structured Food entries')
   }
+  if (existing?.intake_structured && isIntakeTracker(Number(existing.tracker_id))) {
+    throw new Error('Use the Vitamins & Medications flow for structured intake entries')
+  }
   if (existing?.book_structured && isBooksTracker(Number(existing.tracker_id))) {
     throw new Error('Use the Books flow for structured Books entries')
   }
@@ -687,6 +752,7 @@ function deleteEntry(id: number): boolean {
     getDb().prepare('DELETE FROM entries_to_tags WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM entry_gaming WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM entry_food WHERE entry_id = ?').run(id)
+    getDb().prepare('DELETE FROM entry_intake WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM book_activities WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM entry_weight WHERE entry_id = ?').run(id)
     getDb().prepare('DELETE FROM entries WHERE id = ?').run(id)
@@ -1058,6 +1124,12 @@ function isHealthTracker(trackerId: number): boolean {
   return getTrackerIdentity(mapTracker(row as JsonRecord)) === 'health'
 }
 
+function isIntakeTracker(trackerId: number): boolean {
+  const row = getDb().prepare('SELECT * FROM trackers WHERE id = ? LIMIT 1').get(trackerId)
+  if (!row) return false
+  return getTrackerIdentity(mapTracker(row as JsonRecord)) === 'intake'
+}
+
 function isGamingTracker(trackerId: number): boolean {
   const row = getDb().prepare('SELECT * FROM trackers WHERE id = ? LIMIT 1').get(trackerId)
   if (!row) return false
@@ -1324,6 +1396,243 @@ function getHealthHomeWidget(trackerId: number, options: { selectedDate?: string
   return buildHealthHomeWidgetReadModel(entries, {
     trackerId,
     title: 'Health',
+    selectedDate: options.selectedDate ?? new Date().toISOString().slice(0, 10),
+  }, getTags())
+}
+
+function findOrCreateIntakeItem(
+  trackerId: number,
+  itemName: string,
+  itemType: 'vitamin' | 'medication' | 'supplement' | 'other',
+  variant: string | null,
+): number {
+  const itemKey = normalizeIntakeItemKey(itemName, itemType, variant)
+  const existing = getDb()
+    .prepare('SELECT * FROM intake_items WHERE tracker_id = ? AND item_key = ? LIMIT 1')
+    .get(trackerId, itemKey) as JsonRecord | undefined
+
+  if (existing) {
+    const set: JsonRecord = {}
+    if (String(existing.item_name ?? '') !== itemName) set.itemName = itemName
+    if (String(existing.item_type ?? 'other') !== itemType) set.itemType = itemType
+    if ((existing.variant ?? null) !== variant) set.variant = variant
+    if (Object.keys(set).length > 0) {
+      set.updatedAt = Date.now()
+      getDb()
+        .prepare('UPDATE intake_items SET item_name = @itemName, item_type = @itemType, variant = @variant, updated_at = @updatedAt WHERE id = @id')
+        .run({ id: Number(existing.id), ...set })
+    }
+    return Number(existing.id)
+  }
+
+  const result = getDb()
+    .prepare(`
+      INSERT INTO intake_items (tracker_id, item_name, item_key, item_type, variant, created_at, updated_at)
+      VALUES (@trackerId, @itemName, @itemKey, @itemType, @variant, @createdAt, @updatedAt)
+    `)
+    .run({
+      trackerId,
+      itemName,
+      itemKey,
+      itemType,
+      variant,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+  return Number(result.lastInsertRowid)
+}
+
+function getIntakeEntryById(entryId: number): IntakeEntryResponse | null {
+  const row = getDb()
+    .prepare(`
+      SELECT
+        e.*,
+        ei.entry_id AS intake_structured,
+        ei.item_id,
+        ii.item_name,
+        ii.item_key,
+        ii.item_type,
+        ii.variant,
+        ei.dosage,
+        ei.unit
+      FROM entries e
+      LEFT JOIN entry_intake ei ON ei.entry_id = e.id
+      LEFT JOIN intake_items ii ON ii.id = ei.item_id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+  if (!row) return null
+  const entry = mapEntry(row)
+  if (!entry.intake?.structured) return null
+  return {
+    entry: entryToIntakeHistoryItem(entry) as IntakeEntryResponse['entry'],
+    tags: tagsForEntry(entryId),
+  }
+}
+
+function addIntakeEntry(data: CreateIntakeEntryRequest): IntakeEntryResponse | null {
+  if (!isIntakeTracker(data.trackerId)) throw new Error('Intake entries can only be created for the Vitamins & Medications tracker')
+  const itemName = normalizeIntakeItemName(data.itemName)
+  if (!itemName) throw new Error('Item name is required')
+  const itemType = validateIntakeItemType(data.itemType)
+  const variant = normalizeIntakeItemVariant(data.variant)
+  const dosage = validateDosageOptional(data.dosage)
+  const unit = validateUnitOptional(data.unit)
+  const timestamp = data.timestamp
+  if (!Number.isFinite(timestamp)) throw new Error('Timestamp must be finite')
+  const dateStr = formatDateStr(timestamp)
+  const itemKey = normalizeIntakeItemKey(itemName, itemType, variant)
+
+  const entryId = getDb().transaction(() => {
+    const itemId = findOrCreateIntakeItem(data.trackerId, itemName, itemType, variant)
+    const result = getDb()
+      .prepare(`
+        INSERT INTO entries (tracker_id, value, note, metadata, asset_id, timestamp, date_str)
+        VALUES (@trackerId, @value, @note, @metadata, @assetId, @timestamp, @dateStr)
+      `)
+      .run({
+        trackerId: data.trackerId,
+        value: null,
+        note: data.note ?? null,
+        metadata: JSON.stringify({
+          trackerKind: 'intake',
+          intake: {
+            structured: true,
+            itemName,
+            itemKey,
+            itemType,
+            variant,
+            dosage,
+            unit,
+          },
+        }),
+        assetId: data.assetId ?? null,
+        timestamp,
+        dateStr,
+      })
+    const insertedEntryId = Number(result.lastInsertRowid)
+    getDb()
+      .prepare('INSERT INTO entry_intake (entry_id, item_id, dosage, unit) VALUES (?, ?, ?, ?)')
+      .run(insertedEntryId, itemId, dosage, unit)
+    replaceEntryTags(insertedEntryId, data.tagIds)
+    return insertedEntryId
+  })()
+
+  return getIntakeEntryById(entryId)
+}
+
+function updateIntakeEntry(entryId: number, updates: UpdateIntakeEntryRequest): IntakeEntryResponse | null {
+  const existing = getDb()
+    .prepare(`
+      SELECT
+        e.tracker_id,
+        ei.entry_id AS intake_structured,
+        ei.item_id,
+        ii.item_name,
+        ii.item_key,
+        ii.item_type,
+        ii.variant,
+        ei.dosage,
+        ei.unit
+      FROM entries e
+      LEFT JOIN entry_intake ei ON ei.entry_id = e.id
+      LEFT JOIN intake_items ii ON ii.id = ei.item_id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+
+  if (!existing?.intake_structured || !isIntakeTracker(Number(existing.tracker_id))) {
+    throw new Error('Structured intake entries can only be updated through the Vitamins & Medications flow')
+  }
+
+  const nextItemName = updates.itemName !== undefined ? normalizeIntakeItemName(updates.itemName) : String(existing.item_name ?? '')
+  if (updates.itemName !== undefined && !nextItemName) throw new Error('Item name is required')
+  const nextItemType = updates.itemType !== undefined ? validateIntakeItemType(updates.itemType) : (String(existing.item_type ?? 'other') as 'vitamin' | 'medication' | 'supplement' | 'other')
+  const nextVariant = updates.variant !== undefined ? normalizeIntakeItemVariant(updates.variant) : (existing.variant == null ? null : String(existing.variant))
+  const nextDosage = updates.dosage !== undefined ? validateDosageOptional(updates.dosage) : (existing.dosage == null ? null : Number(existing.dosage))
+  const nextUnit = updates.unit !== undefined ? validateUnitOptional(updates.unit) : (existing.unit == null ? null : String(existing.unit))
+  const nextTimestamp = updates.timestamp !== undefined ? Number(updates.timestamp) : null
+  if (nextTimestamp !== null && !Number.isFinite(nextTimestamp)) throw new Error('Timestamp must be finite')
+
+  getDb().transaction(() => {
+    let itemId = Number(existing.item_id)
+    if (updates.itemName !== undefined || updates.itemType !== undefined || updates.variant !== undefined) {
+      itemId = findOrCreateIntakeItem(Number(existing.tracker_id), nextItemName, nextItemType, nextVariant)
+    }
+
+    const entrySet: string[] = []
+    const entryParams: JsonRecord = { entryId }
+    if (updates.note !== undefined) {
+      entrySet.push('note = @note')
+      entryParams.note = updates.note
+    }
+    if (updates.assetId !== undefined) {
+      entrySet.push('asset_id = @assetId')
+      entryParams.assetId = updates.assetId ?? null
+    }
+    if (nextTimestamp !== null) {
+      entrySet.push('timestamp = @timestamp')
+      entrySet.push('date_str = @dateStr')
+      entryParams.timestamp = nextTimestamp
+      entryParams.dateStr = formatDateStr(nextTimestamp)
+    }
+    if (entrySet.length > 0) {
+      getDb().prepare(`UPDATE entries SET ${entrySet.join(', ')} WHERE id = @entryId`).run(entryParams)
+    }
+
+    if (updates.itemName !== undefined || updates.itemType !== undefined || updates.variant !== undefined || updates.dosage !== undefined || updates.unit !== undefined) {
+      getDb()
+        .prepare('UPDATE entry_intake SET item_id = @itemId, dosage = @dosage, unit = @unit WHERE entry_id = @entryId')
+        .run({
+          entryId,
+          itemId,
+          dosage: nextDosage,
+          unit: nextUnit,
+        })
+    }
+
+    if (updates.tagIds !== undefined) replaceEntryTags(entryId, updates.tagIds)
+  })()
+
+  return getIntakeEntryById(entryId)
+}
+
+function deleteIntakeEntry(entryId: number): boolean {
+  const existing = getDb()
+    .prepare(`
+      SELECT e.tracker_id, ei.entry_id AS intake_structured
+      FROM entries e
+      LEFT JOIN entry_intake ei ON ei.entry_id = e.id
+      WHERE e.id = ?
+      LIMIT 1
+    `)
+    .get(entryId) as JsonRecord | undefined
+  if (!existing?.intake_structured || !isIntakeTracker(Number(existing.tracker_id))) {
+    throw new Error('Structured intake entries can only be deleted through the Vitamins & Medications flow')
+  }
+
+  getDb().transaction(() => {
+    getDb().prepare('DELETE FROM entries_to_tags WHERE entry_id = ?').run(entryId)
+    getDb().prepare('DELETE FROM entry_intake WHERE entry_id = ?').run(entryId)
+    getDb().prepare('DELETE FROM entries WHERE id = ?').run(entryId)
+  })()
+  return true
+}
+
+function getIntakeDetail(trackerId: number, options: { limit?: number } = {}): IntakeDetailResponse {
+  if (!isIntakeTracker(trackerId)) throw new Error('Intake detail can only be read for the Vitamins & Medications tracker')
+  const entries = getEntries({ trackerId, limit: options.limit ?? 365 })
+  return buildIntakeDetailReadModel(entries, getTags())
+}
+
+function getIntakeHomeWidget(trackerId: number, options: { selectedDate?: string; limit?: number } = {}): IntakeHomeWidgetReadModel {
+  if (!isIntakeTracker(trackerId)) throw new Error('Intake home can only be read for the Vitamins & Medications tracker')
+  const entries = getEntries({ trackerId, limit: options.limit ?? 365 })
+  return buildIntakeHomeWidgetReadModel(entries, {
+    trackerId,
+    title: 'Vitamins & Medications',
     selectedDate: options.selectedDate ?? new Date().toISOString().slice(0, 10),
   }, getTags())
 }
@@ -2160,6 +2469,34 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
   const healthHomeMatch = path.match(/^\/api\/health\/trackers\/(\d+)\/home$/)
   if (healthHomeMatch && method === 'GET') {
     json(res, 200, getHealthHomeWidget(Number(healthHomeMatch[1]), { selectedDate: url.searchParams.get('selectedDate') ?? undefined, limit: optionalInt(url.searchParams.get('limit')) ?? 365 }))
+    return
+  }
+
+  if (path === '/api/intake/entries' && method === 'POST') {
+    json(res, 200, addIntakeEntry(await readBody(req) as CreateIntakeEntryRequest))
+    return
+  }
+
+  const intakeEntryMatch = path.match(/^\/api\/intake\/entries\/(\d+)$/)
+  if (intakeEntryMatch && method === 'PUT') {
+    json(res, 200, updateIntakeEntry(Number(intakeEntryMatch[1]), await readBody(req) as UpdateIntakeEntryRequest))
+    return
+  }
+
+  if (intakeEntryMatch && method === 'DELETE') {
+    json(res, 200, deleteIntakeEntry(Number(intakeEntryMatch[1])))
+    return
+  }
+
+  const intakeDetailMatch = path.match(/^\/api\/intake\/trackers\/(\d+)\/detail$/)
+  if (intakeDetailMatch && method === 'GET') {
+    json(res, 200, getIntakeDetail(Number(intakeDetailMatch[1]), { limit: optionalInt(url.searchParams.get('limit')) ?? 365 }))
+    return
+  }
+
+  const intakeHomeMatch = path.match(/^\/api\/intake\/trackers\/(\d+)\/home$/)
+  if (intakeHomeMatch && method === 'GET') {
+    json(res, 200, getIntakeHomeWidget(Number(intakeHomeMatch[1]), { selectedDate: url.searchParams.get('selectedDate') ?? undefined, limit: optionalInt(url.searchParams.get('limit')) ?? 365 }))
     return
   }
 

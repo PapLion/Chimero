@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { useTrackers, useUpdateEntryMutation, useUpdateWeightEntryMutation, useUpdateGamingEntryMutation, useUpdateFoodEntryMutation, useUpdateHealthSymptomEntryMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
+import { useTrackers, useUpdateEntryMutation, useUpdateWeightEntryMutation, useUpdateGamingEntryMutation, useUpdateFoodEntryMutation, useUpdateIntakeEntryMutation, useUpdateHealthSymptomEntryMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
 import { Dialog, DialogContent, DialogTitle } from "@packages/ui/dialog"
 import { Input } from "@packages/ui/input"
 import { format } from "date-fns"
@@ -12,7 +12,7 @@ import { TagSelector } from "@features/tags/components/TagChips"
 import type { Entry } from "@shared/store"
 import { formatToastError, useToast } from "@shared/components/toast"
 import type { AssetWithUrls } from "@contracts/features/assets"
-import type { MealType, MeasurementUnit, Tracker, WeightUnit } from "@contracts/contracts"
+import type { IntakeItemType, MealType, MeasurementUnit, Tracker, WeightUnit } from "@contracts/contracts"
 import { clampMoodScore } from "@contracts/domain"
 import { getTrackerIdentity } from "@contracts/features/tracking"
 import { getEntryConfig } from "../entry-config"
@@ -46,6 +46,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     const updateWeightEntryMutation = useUpdateWeightEntryMutation()
     const updateGamingEntryMutation = useUpdateGamingEntryMutation()
     const updateFoodEntryMutation = useUpdateFoodEntryMutation()
+    const updateIntakeEntryMutation = useUpdateIntakeEntryMutation()
     const updateHealthSymptomEntryMutation = useUpdateHealthSymptomEntryMutation()
     const createTagMutation = useCreateTagMutation()
     const qc = useQueryClient()
@@ -55,6 +56,11 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     const [note, setNote] = useState("")
     const [healthSymptomName, setHealthSymptomName] = useState("")
     const [healthCategory, setHealthCategory] = useState<"physical" | "mental" | "general" | "other">("general")
+    const [intakeItemName, setIntakeItemName] = useState("")
+    const [intakeItemType, setIntakeItemType] = useState<IntakeItemType>("vitamin")
+    const [intakeVariant, setIntakeVariant] = useState("")
+    const [intakeDosage, setIntakeDosage] = useState("")
+    const [intakeUnit, setIntakeUnit] = useState("")
     const [mealType, setMealType] = useState<MealType | "">("")
     const [waist, setWaist] = useState("")
     const [date, setDate] = useState("")
@@ -98,6 +104,22 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                 setMealType(entry.food.mealType ?? "")
                 setHealthSymptomName("")
                 setHealthCategory("general")
+                setIntakeItemName("")
+                setIntakeItemType("vitamin")
+                setIntakeVariant("")
+                setIntakeDosage("")
+                setIntakeUnit("")
+            } else if (entry.intake?.structured) {
+                setIntakeItemName(entry.intake.itemName)
+                setIntakeItemType(entry.intake.itemType)
+                setIntakeVariant(entry.intake.variant ?? "")
+                setIntakeDosage(entry.intake.dosage != null ? entry.intake.dosage.toString() : "")
+                setIntakeUnit(entry.intake.unit ?? "")
+                setNote(entry.note || "")
+                setValue("")
+                setMealType("")
+                setHealthSymptomName("")
+                setHealthCategory("general")
             } else if (entry.health?.structured) {
                 setHealthSymptomName(entry.health.symptomName)
                 setHealthCategory(entry.health.category)
@@ -107,6 +129,11 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                 setMealType("")
                 setHealthSymptomName("")
                 setHealthCategory("general")
+                setIntakeItemName("")
+                setIntakeItemType("vitamin")
+                setIntakeVariant("")
+                setIntakeDosage("")
+                setIntakeUnit("")
             }
             const metadata = readMetadata(entry.metadata)
             const metadataWaist = metadata.waist
@@ -122,6 +149,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     const tracker = entry ? trackers.find((t) => t.id === entry.trackerId) : null
     const isGamingTracker = tracker ? getTrackerIdentity(tracker) === "gaming" : false
     const isFoodTracker = tracker ? getTrackerIdentity(tracker) === "diet" : false
+    const isIntakeTracker = tracker ? getTrackerIdentity(tracker) === "intake" : false
     const isHealthTracker = tracker ? getTrackerIdentity(tracker) === "health" : false
 
     const handleSubmit = async (e?: React.FormEvent) => {
@@ -153,6 +181,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                 tracker.name.toLowerCase().includes("peso")
             const isStructuredGamingEntry = isGamingTracker && entry.gaming?.structured
             const isStructuredFoodEntry = isFoodTracker && entry.food?.structured
+            const isStructuredIntakeEntry = isIntakeTracker && entry.intake?.structured
             const isStructuredHealthEntry = isHealthTracker && entry.health?.structured
 
             if (isStructuredGamingEntry) {
@@ -178,6 +207,25 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                         foodName: note.trim(),
                         calories,
                         mealType: mealType || null,
+                        assetId: selectedAssetId,
+                        tagIds: selectedTagIds,
+                        timestamp,
+                    },
+                })
+            } else if (isStructuredIntakeEntry) {
+                const itemName = intakeItemName.trim()
+                if (!itemName) return
+                const dosage = intakeDosage.trim() ? parseFloat(intakeDosage) : null
+                if (dosage !== null && !Number.isFinite(dosage)) return
+                await updateIntakeEntryMutation.mutateAsync({
+                    entryId: entry.id,
+                    updates: {
+                        itemName,
+                        itemType: intakeItemType,
+                        variant: intakeVariant.trim() || null,
+                        dosage,
+                        unit: intakeUnit.trim() || null,
+                        note: note.trim() || null,
                         assetId: selectedAssetId,
                         tagIds: selectedTagIds,
                         timestamp,
@@ -286,7 +334,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     }
 
     if (!tracker) return null
-    const isPending = updateEntryMutation.isPending || updateWeightEntryMutation.isPending || updateGamingEntryMutation.isPending || updateFoodEntryMutation.isPending || updateHealthSymptomEntryMutation.isPending
+    const isPending = updateEntryMutation.isPending || updateWeightEntryMutation.isPending || updateGamingEntryMutation.isPending || updateFoodEntryMutation.isPending || updateIntakeEntryMutation.isPending || updateHealthSymptomEntryMutation.isPending
     const handleOpenChange = (nextOpen: boolean) => {
         if (!nextOpen && isPending) return
         onOpenChange(nextOpen)
@@ -311,6 +359,8 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
           ? !note.trim() || !value || !Number.isFinite(parseFloat(value))
         : isFoodTracker
           ? !note.trim()
+        : isIntakeTracker
+          ? !intakeItemName.trim() || (intakeDosage.trim() !== "" && (!Number.isFinite(parseFloat(intakeDosage)) || parseFloat(intakeDosage) <= 0))
         : isHealthTracker
           ? !healthSymptomName.trim() || (value.trim() !== "" && (!Number.isFinite(parseFloat(value)) || !Number.isInteger(parseFloat(value)) || parseFloat(value) < 1 || parseFloat(value) > 10))
         : isText ? !note.trim() && !value : !value && !note.trim()
@@ -445,6 +495,79 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                                             <option value="other">Other</option>
                                         </select>
                                     </div>
+                                </div>
+                            </div>
+                        ) : isIntakeTracker && entry?.intake?.structured ? (
+                            <div className="space-y-3">
+                                <div className="space-y-1">
+                                    <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Item Name</label>
+                                    <Input
+                                        type="text"
+                                        placeholder="Vitamin D, Ibuprofen, etc."
+                                        value={intakeItemName}
+                                        onChange={(e) => setIntakeItemName(e.target.value)}
+                                        className="h-11 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="space-y-1">
+                                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Type</label>
+                                        <select
+                                            value={intakeItemType}
+                                            onChange={(e) => setIntakeItemType(e.target.value as IntakeItemType)}
+                                            className="h-11 w-full rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-3 text-sm text-[hsl(var(--foreground))] outline-none transition-colors focus:border-[hsl(var(--border)/0.95)]"
+                                        >
+                                            <option value="vitamin">Vitamin</option>
+                                            <option value="medication">Medication</option>
+                                            <option value="supplement">Supplement</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Dosage (Optional)</label>
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            step="any"
+                                            placeholder="Amount"
+                                            value={intakeDosage}
+                                            onChange={(e) => setIntakeDosage(e.target.value)}
+                                            className="h-11 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="space-y-1">
+                                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Unit (Optional)</label>
+                                        <Input
+                                            type="text"
+                                            placeholder="mg, IU, tablets..."
+                                            value={intakeUnit}
+                                            onChange={(e) => setIntakeUnit(e.target.value)}
+                                            className="h-11 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Variant / Brand (Optional)</label>
+                                        <Input
+                                            type="text"
+                                            placeholder="Brand, formula, or variant"
+                                            value={intakeVariant}
+                                            onChange={(e) => setIntakeVariant(e.target.value)}
+                                            className="h-11 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Context</label>
+                                    <Input
+                                        type="text"
+                                        placeholder="Optional note or context"
+                                        value={note}
+                                        onChange={(e) => setNote(e.target.value)}
+                                        className="h-11 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                                    />
                                 </div>
                             </div>
                         ) : tracker.type === "rating" ? (

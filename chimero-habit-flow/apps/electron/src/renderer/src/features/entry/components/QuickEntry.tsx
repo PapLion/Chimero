@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useBooks, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useAddFoodEntryMutation, useAddHealthSymptomEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
+import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useBooks, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useAddFoodEntryMutation, useAddIntakeEntryMutation, useAddHealthSymptomEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
 import { cn } from "@shared/utils"
 import { getEntryConfig } from "../entry-config"
 import type { Entry, Tracker } from "@shared/store"
@@ -22,7 +22,7 @@ import { formatToastError, useToast } from "@shared/components/toast"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Activity, Calendar, Flame, Book, Gamepad2, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, ImageIcon, X, Tv, BookmarkPlus, BookOpen, BookMarked, CheckCheck, type LucideIcon } from "lucide-react"
 import { clampMoodScore } from "@contracts/domain"
 import { getTrackerIdentity, isBooksTracker } from "@contracts/features/tracking"
-import type { MealType } from "@contracts/contracts"
+import type { IntakeItemType, MealType } from "@contracts/contracts"
 
 const iconMap: Record<string, LucideIcon> = {
   scale: Scale,
@@ -72,6 +72,7 @@ export function QuickEntry() {
   const addWeightEntryMutation = useAddWeightEntryMutation()
   const addGamingEntryMutation = useAddGamingEntryMutation()
   const addFoodEntryMutation = useAddFoodEntryMutation()
+  const addIntakeEntryMutation = useAddIntakeEntryMutation()
   const addHealthSymptomEntryMutation = useAddHealthSymptomEntryMutation()
   const createBookMutation = useCreateBookMutation()
   const startBookMutation = useStartBookMutation()
@@ -88,6 +89,11 @@ export function QuickEntry() {
   const [note, setNote] = useState("")
   const [healthSymptomName, setHealthSymptomName] = useState("")
   const [healthCategory, setHealthCategory] = useState<"physical" | "mental" | "general" | "other">("general")
+  const [intakeItemName, setIntakeItemName] = useState("")
+  const [intakeItemType, setIntakeItemType] = useState<IntakeItemType>("vitamin")
+  const [intakeVariant, setIntakeVariant] = useState("")
+  const [intakeDosage, setIntakeDosage] = useState("")
+  const [intakeUnit, setIntakeUnit] = useState("")
   const [mealType, setMealType] = useState<MealType | "">("")
   const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null)
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([])
@@ -189,6 +195,11 @@ export function QuickEntry() {
       setNote("")
       setHealthSymptomName("")
       setHealthCategory("general")
+      setIntakeItemName("")
+      setIntakeItemType("vitamin")
+      setIntakeVariant("")
+      setIntakeDosage("")
+      setIntakeUnit("")
       setSelectedAssetId(null)
       setSelectedTagIds([])
       setAssetPickerOpen(false)
@@ -214,6 +225,11 @@ export function QuickEntry() {
       setNote("")
       setHealthSymptomName("")
       setHealthCategory("general")
+      setIntakeItemName("")
+      setIntakeItemType("vitamin")
+      setIntakeVariant("")
+      setIntakeDosage("")
+      setIntakeUnit("")
       setSelectedAssetId(null)
       setSelectedTagIds([])
       setAssetPickerOpen(false)
@@ -320,6 +336,7 @@ export function QuickEntry() {
       trackerData.name.toLowerCase().includes("mood") ||
       trackerData.name.toLowerCase().includes("feeling")
     const isHealthTracker = getTrackerIdentity(trackerData) === "health"
+    const isIntakeTracker = getTrackerIdentity(trackerData) === "intake"
     const isFoodTracker = getTrackerIdentity(trackerData) === "diet"
     const isGamingTracker = getTrackerIdentity(trackerData) === "gaming"
 
@@ -378,6 +395,30 @@ export function QuickEntry() {
         })
 
         toast.success("Food logged.", trackerData.name)
+        setQuickEntryOpen(false)
+        return
+      }
+
+      if (isIntakeTracker) {
+        const itemName = intakeItemName.trim()
+        if (!itemName) return
+        const dosage = intakeDosage.trim() ? parseFloat(intakeDosage) : null
+        if (dosage !== null && !Number.isFinite(dosage)) return
+
+        await addIntakeEntryMutation.mutateAsync({
+          trackerId: selectedTracker,
+          itemName,
+          itemType: intakeItemType,
+          variant: intakeVariant.trim() || null,
+          dosage,
+          unit: intakeUnit.trim() || null,
+          note: note.trim() || null,
+          assetId: selectedAssetId,
+          tagIds: selectedTagIds,
+          timestamp: Date.now(),
+        })
+
+        toast.success("Intake logged.", trackerData.name)
         setQuickEntryOpen(false)
         return
       }
@@ -645,6 +686,7 @@ export function QuickEntry() {
     : false
   const isFoodTracker = selectedTrackerData ? getTrackerIdentity(selectedTrackerData) === "diet" : false
   const isHealthTracker = selectedTrackerData ? getTrackerIdentity(selectedTrackerData) === "health" : false
+  const isIntakeTracker = selectedTrackerData ? getTrackerIdentity(selectedTrackerData) === "intake" : false
   const isBooksTrackerSelected = selectedTrackerData ? isBooksTracker(selectedTrackerData) : false
 
   const renderTrackerList = (trackerList: typeof trackers, title: string) => {
@@ -809,7 +851,7 @@ export function QuickEntry() {
                           {selectedTrackerData.name}
                         </div>
                         <div className="line-clamp-2 text-xs text-[hsl(var(--muted-foreground))]">
-                          {isBooksTrackerSelected ? "Log a book event" : isHealthTracker ? "Log a symptom" : isFoodTracker ? "Log a food entry" : "Enter new value"}
+                          {isBooksTrackerSelected ? "Log a book event" : isHealthTracker ? "Log a symptom" : isIntakeTracker ? "Log an intake" : isFoodTracker ? "Log a food entry" : "Enter new value"}
                         </div>
                       </div>
                     </>
@@ -950,6 +992,98 @@ export function QuickEntry() {
                           <option value="other">Other</option>
                         </select>
                       </div>
+                    </div>
+                  </div>
+                ) : isIntakeTracker ? (
+                  <div className="mb-4 space-y-3">
+                    <div>
+                      <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                        Item Name
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="Vitamin D, Ibuprofen, etc."
+                        value={intakeItemName}
+                        onChange={(e) => setIntakeItemName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            void handleSubmit()
+                          }
+                        }}
+                        className="h-12 text-lg bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                          Type
+                        </label>
+                        <select
+                          value={intakeItemType}
+                          onChange={(e) => setIntakeItemType(e.target.value as IntakeItemType)}
+                          className="h-12 w-full rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-3 text-sm text-[hsl(var(--foreground))] outline-none transition-colors focus:border-[hsl(var(--border)/0.95)]"
+                        >
+                          <option value="vitamin">Vitamin</option>
+                          <option value="medication">Medication</option>
+                          <option value="supplement">Supplement</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                          Dosage (optional)
+                        </label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="any"
+                          placeholder="Amount"
+                          value={intakeDosage}
+                          onChange={(e) => setIntakeDosage(e.target.value)}
+                          className="h-12 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                          Unit (optional)
+                        </label>
+                        <Input
+                          type="text"
+                          placeholder="mg, IU, tablets..."
+                          value={intakeUnit}
+                          onChange={(e) => setIntakeUnit(e.target.value)}
+                          className="h-12 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                          Variant / brand (optional)
+                        </label>
+                        <Input
+                          type="text"
+                          placeholder="Brand, formula, or variant"
+                          value={intakeVariant}
+                          onChange={(e) => setIntakeVariant(e.target.value)}
+                          className="h-12 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                        Context
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="Optional note or context"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        className="bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                      />
                     </div>
                   </div>
                 ) : isSocialTracker ? (
@@ -1318,6 +1452,8 @@ export function QuickEntry() {
                             ? selectedContacts.length === 0 // Social trackers need at least one contact selected
                           : isHealthTracker
                             ? !healthSymptomName.trim() || (value.trim() !== "" && (!Number.isFinite(parseFloat(value)) || !Number.isInteger(parseFloat(value)) || parseFloat(value) < 1 || parseFloat(value) > 10))
+                            : isIntakeTracker
+                              ? !intakeItemName.trim() || (intakeDosage.trim() !== "" && (!Number.isFinite(parseFloat(intakeDosage)) || parseFloat(intakeDosage) <= 0))
                             : isFoodTracker
                               ? !note.trim()
                             : selectedTrackerData?.type === "text" || selectedTrackerData?.type === "list"

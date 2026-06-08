@@ -34,7 +34,7 @@ This is the master index for current tracker/product contracts. It summarizes wh
 | Tracker | Status | Current contract state |
 | --- | --- | --- |
 | Health / Symptoms | Missing | Client-requested. Create a dedicated contract later. Should support physical/mental symptoms, custom tags, and future correlations with Food/Exercise/Vitamins/Mood/Weight. |
-| Vitamins / Medications | Missing | Client-requested. Create a dedicated contract later. Should support vitamins/medications, dosage/unit/time, variants/ingredients/tags, and future Health/Mood correlations. |
+| Vitamins / Medications | Partial | Combined `Vitamins & Medications` foundation is implemented on the shared intake identity. Structured item/item-event rows, item normalization, optional dosage/unit, tags/assets, detail/history/calendar/home surfaces, and legacy generic row readability are implemented. Adherence, schedules, reminders, prescription management, and correlations remain deferred. |
 | Sleep | Missing | Client-requested, below core deep systems in priority. Create a dedicated contract later. Likely supports bedtime/wake time, hours, subjective quality, awakenings/bathroom wakes, dreams/nightmares, and weekly trends. |
 | Meditation | Missing | Client-requested but low priority. Create a dedicated contract later. Likely supports meditation days, duration, streaks, and small feeling tags. |
 
@@ -49,14 +49,15 @@ This is the master index for current tracker/product contracts. It summarizes wh
 1. Social / CRM structured contract and implementation.
 2. Exercise / Gym structured contract and implementation.
 3. Health / Symptoms contract creation.
-4. Vitamins / Medications contract creation.
-5. Sleep contract creation.
-6. Meditation contract creation.
+4. Sleep contract creation.
+5. Meditation contract creation.
+6. Vitamins / Medications deep follow-up for any future adherence or correlation work.
 7. Hydration only if reprioritized.
 
 Why this order:
 - Social and Exercise are confirmed deep systems.
 - Health should exist before deep Food/Vitamins correlations.
+- Vitamins / Medications now has a structured combined foundation, but correlation/advice/schedule work remains future.
 - Hydration remains backburner.
 
 ## Notes for maintainers

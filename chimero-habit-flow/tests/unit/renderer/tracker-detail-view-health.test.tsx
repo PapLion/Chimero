@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   useEntriesMock: vi.fn(),
   useDeleteEntryMutationMock: vi.fn(),
   useDeleteFoodEntryMutationMock: vi.fn(),
+  useDeleteIntakeEntryMutationMock: vi.fn(),
   useDeleteHealthSymptomEntryMutationMock: vi.fn(),
   useUpdateEntryMutationMock: vi.fn(),
   useWeightDetailMock: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock('@shared/queries', () => ({
   useEntries: mocks.useEntriesMock,
   useDeleteEntryMutation: mocks.useDeleteEntryMutationMock,
   useDeleteFoodEntryMutation: mocks.useDeleteFoodEntryMutationMock,
+  useDeleteIntakeEntryMutation: mocks.useDeleteIntakeEntryMutationMock,
   useDeleteHealthSymptomEntryMutation: mocks.useDeleteHealthSymptomEntryMutationMock,
   useUpdateEntryMutation: mocks.useUpdateEntryMutationMock,
   useWeightDetail: mocks.useWeightDetailMock,
@@ -94,6 +96,7 @@ describe('TrackerDetailView health surface', () => {
     mocks.useEntriesMock.mockReturnValue({ data: [], isPending: false })
     mocks.useDeleteEntryMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useDeleteFoodEntryMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mocks.useDeleteIntakeEntryMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useDeleteHealthSymptomEntryMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useUpdateEntryMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useWeightDetailMock.mockReturnValue({ data: undefined })

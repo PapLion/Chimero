@@ -1,5 +1,5 @@
 import { getDb } from '@packages/db/database'
-import { entries, entryFood, entryGaming, entryHealth, entryWeight, symptoms, trackers } from '@packages/db'
+import { entries, entryFood, entryGaming, entryHealth, entryIntake, entryWeight, intakeItems, symptoms, trackers } from '@packages/db'
 import { eq } from 'drizzle-orm'
 import {
   buildCalendarDayEntry,
@@ -54,6 +54,14 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
       symptomKey: symptoms.symptomKey,
       category: symptoms.category,
       severity: entryHealth.severity,
+      intakeStructured: entryIntake.entryId,
+      itemId: entryIntake.itemId,
+      itemName: intakeItems.itemName,
+      itemKey: intakeItems.itemKey,
+      itemType: intakeItems.itemType,
+      variant: intakeItems.variant,
+      dosage: entryIntake.dosage,
+      unit: entryIntake.unit,
       trackerName: trackers.name,
       trackerType: trackers.type,
       trackerIcon: trackers.icon,
@@ -66,6 +74,8 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
     .leftJoin(entryWeight, eq(entryWeight.entryId, entries.id))
     .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
     .leftJoin(entryHealth, eq(entryHealth.entryId, entries.id))
+    .leftJoin(entryIntake, eq(entryIntake.entryId, entries.id))
+    .leftJoin(intakeItems, eq(intakeItems.id, entryIntake.itemId))
     .leftJoin(symptoms, eq(symptoms.id, entryHealth.symptomId))
     .leftJoin(trackers, eq(trackers.id, entries.trackerId))
     .orderBy(entries.timestamp)
@@ -112,6 +122,18 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
             severity: r.severity == null ? null : Number(r.severity),
           }
         : undefined,
+      intake: r.intakeStructured
+        ? {
+            structured: true,
+            itemId: Number(r.itemId ?? 0),
+            itemName: String(r.itemName ?? ''),
+            itemKey: String(r.itemKey ?? ''),
+            itemType: (r.itemType ?? 'other') as 'vitamin' | 'medication' | 'supplement' | 'other',
+            variant: r.variant == null ? null : String(r.variant),
+            dosage: r.dosage == null ? null : Number(r.dosage),
+            unit: r.unit == null ? null : String(r.unit),
+          }
+        : undefined,
     }
     const tracker: Pick<Tracker, 'name' | 'type' | 'icon'> = {
       name: r.trackerName ?? '',
@@ -145,16 +167,17 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
       dateStr,
       assetId: r.assetId,
       tagIds: tagIdsByEntry.get(r.id) ?? [],
-        food: entry.food,
-        task: taskState === 'hidden' || !taskMetadata
-            ? null
-            : {
-              state: taskState,
-              baseDate: r.dateStr,
-              activeDate: taskMetadata.activeDate,
-              completed: (r.value ?? 0) >= 1,
-              postponements: taskMetadata.postponements,
-            },
+      food: entry.food,
+      intake: entry.intake,
+      task: taskState === 'hidden' || !taskMetadata
+        ? null
+        : {
+          state: taskState,
+          baseDate: r.dateStr,
+          activeDate: taskMetadata.activeDate,
+          completed: (r.value ?? 0) >= 1,
+          postponements: taskMetadata.postponements,
+        },
       weight: r.weightValue != null
         ? {
             weight: r.weightValue,

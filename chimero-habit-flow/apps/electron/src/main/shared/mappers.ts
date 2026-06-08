@@ -68,6 +68,14 @@ export function mapEntry(row: Record<string, unknown>): Entry {
   const symptomKey = row.symptomKey ?? row.symptom_key
   const symptomCategory = row.category ?? row.symptomCategory ?? row.symptom_category
   const symptomSeverity = row.severity ?? row.symptomSeverity ?? row.symptom_severity
+  const intakeStructured = row.intakeStructured ?? row.intake_structured
+  const itemId = row.itemId ?? row.item_id
+  const itemName = row.itemName ?? row.item_name
+  const itemKey = row.itemKey ?? row.item_key
+  const itemType = row.itemType ?? row.item_type
+  const variant = row.variant ?? row.itemVariant ?? row.item_variant
+  const dosage = row.dosage ?? row.itemDosage ?? row.item_dosage
+  const unit = row.unit ?? row.itemUnit ?? row.item_unit
   const bookStructured = row.bookStructured ?? row.book_structured
   const bookId = row.bookId ?? row.book_id
   const bookTitle = row.bookTitle ?? row.book_title
@@ -110,6 +118,19 @@ export function mapEntry(row: Record<string, unknown>): Entry {
             symptomKey: (symptomKey as string) ?? '',
             category: (symptomCategory as 'physical' | 'mental' | 'general' | 'other') ?? 'general',
             severity: symptomSeverity == null ? null : Number(symptomSeverity),
+          }
+        : undefined,
+    intake:
+      intakeStructured
+        ? {
+            structured: true,
+            itemId: Number(itemId),
+            itemName: (itemName as string) ?? '',
+            itemKey: (itemKey as string) ?? '',
+            itemType: (itemType as 'vitamin' | 'medication' | 'supplement' | 'other') ?? 'other',
+            variant: (variant as string | null) ?? null,
+            dosage: dosage == null ? null : Number(dosage),
+            unit: (unit as string | null) ?? null,
           }
         : undefined,
     book:

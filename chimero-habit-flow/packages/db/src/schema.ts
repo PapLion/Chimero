@@ -188,6 +188,31 @@ export const entryFood = sqliteTable("entry_food", {
   mealTypeIdx: index("entry_food_meal_type_idx").on(t.mealType),
 }));
 
+export const intakeItems = sqliteTable("intake_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  trackerId: integer("tracker_id").references(() => trackers.id, { onDelete: "cascade" }).notNull(),
+  itemName: text("item_name").notNull(),
+  itemKey: text("item_key").notNull(),
+  itemType: text("item_type", { enum: ["vitamin", "medication", "supplement", "other"] }).notNull().default("other"),
+  variant: text("variant"),
+  createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
+  updatedAt: integer("updated_at").default(sql`(strftime('%s', 'now') * 1000)`),
+}, (t) => ({
+  trackerIdx: index("intake_items_tracker_idx").on(t.trackerId),
+  intakeItemKeyUnique: uniqueIndex("intake_items_tracker_key_unique").on(t.trackerId, t.itemKey),
+  itemTypeIdx: index("intake_items_item_type_idx").on(t.itemType),
+}));
+
+export const entryIntake = sqliteTable("entry_intake", {
+  entryId: integer("entry_id").primaryKey().references(() => entries.id, { onDelete: "cascade" }),
+  itemId: integer("item_id").references(() => intakeItems.id, { onDelete: "cascade" }).notNull(),
+  dosage: real("dosage"),
+  unit: text("unit"),
+}, (t) => ({
+  itemIdx: index("entry_intake_item_idx").on(t.itemId),
+  unitIdx: index("entry_intake_unit_idx").on(t.unit),
+}));
+
 export const symptoms = sqliteTable("symptoms", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   trackerId: integer("tracker_id").references(() => trackers.id, { onDelete: "cascade" }).notNull(),

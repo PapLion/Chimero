@@ -125,6 +125,18 @@ const featureCases = [
     ],
   },
   {
+    name: 'intake',
+    modulePath: '../../../apps/electron/src/main/features/intake/handler',
+    exportName: 'registerIntakeHandlers',
+    channels: [
+      'add-intake-entry',
+      'update-intake-entry',
+      'delete-intake-entry',
+      'get-intake-detail',
+      'get-intake-home',
+    ],
+  },
+  {
     name: 'books',
     modulePath: '../../../apps/electron/src/main/features/books/handler',
     exportName: 'registerBooksHandlers',

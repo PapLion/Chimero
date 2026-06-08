@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type { Tracker, Entry } from './store'
-import type { BaseEntryRequest, Book, BookActivityResponse, BookResponse, CreateBookActivityRequest, CreateBookRequest, CreateFoodEntryRequest, CreateGamingEntryRequest, CreateHealthSymptomRequest, CreateWeightEntryRequest, EntryUpdateRequest, FoodDetailResponse, FoodEntryResponse, GamingDetailResponse, GamingEntryResponse, HealthDetailResponse, HealthHomeWidgetReadModel, HealthSymptomResponse, SetTrackerGoalRequest, TrackerConfig, UpdateBookActivityRequest, UpdateBookRequest, UpdateFoodEntryRequest, UpdateGamingEntryRequest, UpdateHealthSymptomRequest, UpdateWeightEntryRequest } from '@contracts/contracts'
+import type { BaseEntryRequest, Book, BookActivityResponse, BookResponse, CreateBookActivityRequest, CreateBookRequest, CreateFoodEntryRequest, CreateGamingEntryRequest, CreateHealthSymptomRequest, CreateIntakeEntryRequest, CreateWeightEntryRequest, EntryUpdateRequest, FoodDetailResponse, FoodEntryResponse, GamingDetailResponse, GamingEntryResponse, HealthDetailResponse, HealthHomeWidgetReadModel, HealthSymptomResponse, IntakeDetailResponse, IntakeEntryResponse, IntakeHomeWidgetReadModel, SetTrackerGoalRequest, TrackerConfig, UpdateBookActivityRequest, UpdateBookRequest, UpdateFoodEntryRequest, UpdateGamingEntryRequest, UpdateHealthSymptomRequest, UpdateIntakeEntryRequest, UpdateWeightEntryRequest } from '@contracts/contracts'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
 export const queryKeys = {
@@ -36,6 +36,10 @@ export const queryKeys = {
   gamingDetailRoot: ['gaming-detail'] as const,
   foodDetail: (trackerId: number) => ['food-detail', trackerId] as const,
   foodDetailRoot: ['food-detail'] as const,
+  intakeDetail: (trackerId: number) => ['intake-detail', trackerId] as const,
+  intakeDetailRoot: ['intake-detail'] as const,
+  intakeHome: (trackerId: number, selectedDate?: string) => ['intake-home', trackerId, selectedDate] as const,
+  intakeHomeRoot: ['intake-home'] as const,
   healthDetail: (trackerId: number) => ['health-detail', trackerId] as const,
   healthDetailRoot: ['health-detail'] as const,
   healthHome: (trackerId: number, selectedDate?: string) => ['health-home', trackerId, selectedDate] as const,
@@ -173,6 +177,24 @@ export function useFoodDetail(trackerId: number, enabled = true) {
   return useQuery({
     queryKey: queryKeys.foodDetail(trackerId),
     queryFn: () => api.getFoodDetail(trackerId) as Promise<FoodDetailResponse>,
+    enabled: enabled && !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
+export function useIntakeDetail(trackerId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.intakeDetail(trackerId),
+    queryFn: () => api.getIntakeDetail(trackerId) as Promise<IntakeDetailResponse>,
+    enabled: enabled && !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
+export function useIntakeHomeWidget(trackerId: number, selectedDate?: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.intakeHome(trackerId, selectedDate),
+    queryFn: () => api.getIntakeHomeWidget(trackerId, { selectedDate }) as Promise<IntakeHomeWidgetReadModel>,
     enabled: enabled && !!trackerId,
     staleTime: 15_000,
   })
@@ -321,6 +343,22 @@ export function useAddFoodEntryMutation() {
   })
 }
 
+export function useAddIntakeEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateIntakeEntryRequest) => api.addIntakeEntry(data) as Promise<IntakeEntryResponse | null>,
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.intakeDetail(variables.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.intakeHomeRoot })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
 export function useCreateBookMutation() {
   const qc = useQueryClient()
   return useMutation({
@@ -463,6 +501,39 @@ export function useUpdateFoodEntryMutation() {
       qc.invalidateQueries({ queryKey: queryKeys.stats })
       qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
       if (trackerId) qc.invalidateQueries({ queryKey: queryKeys.foodDetail(trackerId) })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useUpdateIntakeEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ entryId, updates }: { entryId: number; updates: UpdateIntakeEntryRequest }) =>
+      api.updateIntakeEntry(entryId, updates) as Promise<IntakeEntryResponse | null>,
+    onSuccess: (result) => {
+      const trackerId = result?.entry.trackerId
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      if (trackerId) qc.invalidateQueries({ queryKey: queryKeys.intakeDetail(trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.intakeHomeRoot })
+      qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useDeleteIntakeEntryMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (entryId: number) => api.deleteIntakeEntry(entryId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.stats })
+      qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.intakeDetailRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.intakeHomeRoot })
       qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
     },
   })

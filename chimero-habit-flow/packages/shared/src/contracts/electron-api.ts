@@ -8,6 +8,7 @@ import type {
   ContactInteractionInsert,
   CorrelationQueryRequest,
   CorrelationResultResponse,
+  CreateIntakeEntryRequest,
   CreateFoodEntryRequest,
   CreateWeightEntryRequest,
   CreateGamingEntryRequest,
@@ -27,6 +28,9 @@ import type {
   HealthSymptomResponse,
   FoodDetailResponse,
   FoodEntryResponse,
+  IntakeDetailResponse,
+  IntakeEntryResponse,
+  IntakeHomeWidgetReadModel,
   Reminder,
   ReminderInsert,
   QuickEntryContextResponse,
@@ -41,6 +45,7 @@ import type {
   TrackerConfig,
   TrackerGoalResponse,
   UpdateFoodEntryRequest,
+  UpdateIntakeEntryRequest,
   UpdateWeightEntryRequest,
   UpdateGamingEntryRequest,
   UpdateBookActivityRequest,
@@ -110,6 +115,11 @@ export interface ElectronApi {
   updateFoodEntry: (entryId: number, updates: UpdateFoodEntryRequest) => Promise<FoodEntryResponse | null>
   deleteFoodEntry: (entryId: number) => Promise<boolean>
   getFoodDetail: (trackerId: number, options?: { limit?: number }) => Promise<FoodDetailResponse>
+  addIntakeEntry: (data: CreateIntakeEntryRequest) => Promise<IntakeEntryResponse | null>
+  updateIntakeEntry: (entryId: number, updates: UpdateIntakeEntryRequest) => Promise<IntakeEntryResponse | null>
+  deleteIntakeEntry: (entryId: number) => Promise<boolean>
+  getIntakeDetail: (trackerId: number, options?: { limit?: number }) => Promise<IntakeDetailResponse>
+  getIntakeHomeWidget: (trackerId: number, options?: { selectedDate?: string; limit?: number }) => Promise<IntakeHomeWidgetReadModel>
   addHealthSymptomEntry: (data: CreateHealthSymptomRequest) => Promise<HealthSymptomResponse | null>
   updateHealthSymptomEntry: (entryId: number, updates: UpdateHealthSymptomRequest) => Promise<HealthSymptomResponse | null>
   deleteHealthSymptomEntry: (entryId: number) => Promise<boolean>

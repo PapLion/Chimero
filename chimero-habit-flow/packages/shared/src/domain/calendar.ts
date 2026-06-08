@@ -31,6 +31,16 @@ type CalendarDayEntryInput = {
     category: 'physical' | 'mental' | 'general' | 'other'
     severity: number | null
   }
+  intake?: {
+    structured: true
+    itemId: number
+    itemName: string
+    itemKey: string
+    itemType: import('../contracts/app-types').IntakeItemType
+    variant: string | null
+    dosage: number | null
+    unit: string | null
+  }
   task?: {
     state: Exclude<TaskDayState, 'hidden'>
     baseDate: string
@@ -62,6 +72,7 @@ export function buildCalendarDayEntry(input: CalendarDayEntryInput): CalendarDay
     gaming: input.gaming,
     food: input.food,
     health: input.health,
+    intake: input.intake,
     taskState: input.task?.state,
     taskBaseDate: input.task?.baseDate,
     taskActiveDate: input.task?.activeDate,

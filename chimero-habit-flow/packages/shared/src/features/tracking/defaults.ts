@@ -12,6 +12,7 @@ export type TrackerIdentity =
   | 'media'
   | 'legacy-media-tv'
   | 'health'
+  | 'intake'
   | 'diet'
   | 'generic'
 
@@ -35,7 +36,8 @@ export const DEFAULT_TRACKERS: readonly DefaultTrackerDefinition[] = [
   { name: 'TV', type: 'text', icon: 'tv', color: '#0ea5e9', order: 7, config: { identity: 'tv' } },
   { name: 'Media', type: 'text', icon: 'music', color: '#38bdf8', order: 8, config: { identity: 'media' } },
   { name: 'Health', type: 'text', icon: 'heart', color: '#f43f5e', order: 9, config: { identity: 'health' } },
-  { name: 'Diet / Calories', type: 'numeric', icon: 'salad', color: '#22c55e', order: 10, config: { unit: 'kcal', goal: 2200, identity: 'diet' } },
+  { name: 'Vitamins & Medications', type: 'text', icon: 'pill', color: '#0f766e', order: 10, config: { identity: 'intake' } },
+  { name: 'Diet / Calories', type: 'numeric', icon: 'salad', color: '#22c55e', order: 11, config: { unit: 'kcal', goal: 2200, identity: 'diet' } },
 ] as const
 
 type ExistingTrackerSeedRow = Pick<Tracker, 'name'> & {
@@ -83,6 +85,7 @@ export function getTrackerIdentity(tracker: Pick<Tracker, 'name' | 'icon' | 'con
   if (configuredIdentity === 'books') return 'books'
   if (configuredIdentity === 'gaming') return 'gaming'
   if (configuredIdentity === 'health') return 'health'
+  if (configuredIdentity === 'intake') return 'intake'
 
   const name = normalizeTrackerName(tracker.name)
   const icon = tracker.icon?.toLowerCase() ?? ''
@@ -98,6 +101,16 @@ export function getTrackerIdentity(tracker: Pick<Tracker, 'name' | 'icon' | 'con
   if (name.includes('social') || name.includes('connection') || icon === 'users') return 'social'
   if (name.includes('task') || name.includes('todo') || icon === 'check-square') return 'tasks'
   if (name.includes('health') || name.includes('symptom') || name.includes('illness') || name.includes('sick') || name.includes('injur') || name.includes('pain') || icon === 'heart') return 'health'
+  if (
+    name.includes('vitamin') ||
+    name.includes('medication') ||
+    name.includes('supplement') ||
+    name.includes('pill') ||
+    name.includes('capsule') ||
+    name.includes('tablet') ||
+    name.includes('dose') ||
+    icon === 'pill'
+  ) return 'intake'
   if (name.includes('diet') || name.includes('calorie') || name.includes('food') || name.includes('meal') || icon === 'salad') return 'diet'
 
   return 'generic'
@@ -110,6 +123,10 @@ export function usesMediaStyleRendering(tracker: Pick<Tracker, 'name' | 'icon' |
 
 export function isBooksTracker(tracker: Pick<Tracker, 'name' | 'icon' | 'config'>): boolean {
   return getTrackerIdentity(tracker) === 'books'
+}
+
+export function isIntakeTracker(tracker: Pick<Tracker, 'name' | 'icon' | 'config'>): boolean {
+  return getTrackerIdentity(tracker) === 'intake'
 }
 
 export function planDefaultTrackerSeedActions(input: {

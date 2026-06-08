@@ -63,6 +63,16 @@ export interface Entry {
     category: SymptomCategory
     severity: number | null
   }
+  intake?: {
+    structured: true
+    itemId: number
+    itemName: string
+    itemKey: string
+    itemType: IntakeItemType
+    variant: string | null
+    dosage: number | null
+    unit: string | null
+  }
   book?: {
     structured: true
     bookId: number
@@ -331,6 +341,132 @@ export interface HealthHomeWidgetReadModel {
   daysWithSymptoms: number
   legacyEntryCount: number
   sparkline: Array<{ date: string; value: number }>
+}
+
+export type IntakeItemType = 'vitamin' | 'medication' | 'supplement' | 'other'
+
+export interface IntakeItem {
+  id: number
+  trackerId: number
+  itemName: string
+  itemKey: string
+  itemType: IntakeItemType
+  variant: string | null
+  createdAt: number | null
+  updatedAt: number | null
+}
+
+export interface IntakeEntryReadModel {
+  entryId: number
+  trackerId: number
+  itemId: number
+  itemName: string
+  itemKey: string
+  itemType: IntakeItemType
+  variant: string | null
+  dosage: number | null
+  unit: string | null
+  note: string | null
+  timestamp: number
+  dateStr: string
+  assetId?: number | null
+  tagIds?: number[]
+  structured: true
+}
+
+export interface LegacyIntakeEntryReadModel {
+  entryId: number
+  trackerId: number
+  legacyText: string | null
+  legacyValue: number | null
+  timestamp: number
+  dateStr: string
+  assetId?: number | null
+  tagIds?: number[]
+  structured: false
+}
+
+export type IntakeHistoryItem = IntakeEntryReadModel | LegacyIntakeEntryReadModel
+
+export interface IntakeItemFrequency {
+  itemName: string
+  itemKey: string
+  itemType: IntakeItemType
+  variant: string | null
+  entryCount: number
+  daysWithIntakes: number
+}
+
+export interface IntakeDoseSummary {
+  itemName: string
+  itemKey: string
+  itemType: IntakeItemType
+  variant: string | null
+  unit: string | null
+  totalDosage: number | null
+  dosageCount: number
+  missingDosageCount: number
+  entryCount: number
+}
+
+export interface IntakeStatisticsReadModel {
+  intakeCount: number
+  structuredEntryCount: number
+  legacyEntryCount: number
+  daysWithIntakes: number
+  itemFrequency: IntakeItemFrequency[]
+  doseSummary: IntakeDoseSummary[]
+  chartData: Array<{ date: string; value: number; count: number }>
+}
+
+export interface IntakeDetailResponse extends IntakeStatisticsReadModel {
+  current: IntakeEntryReadModel | null
+  history: IntakeHistoryItem[]
+}
+
+export interface IntakeHomeWidgetReadModel {
+  trackerId: number
+  title: string
+  currentItemName: string | null
+  currentItemType: IntakeItemType | null
+  currentVariant: string | null
+  currentDosage: number | null
+  currentUnit: string | null
+  selectedDayEntries: IntakeHistoryItem[]
+  intakeCount: number
+  daysWithIntakes: number
+  legacyEntryCount: number
+  sparkline: Array<{ date: string; value: number }>
+}
+
+export interface CreateIntakeEntryRequest {
+  trackerId: number
+  itemName: string
+  itemType?: IntakeItemType
+  variant?: string | null
+  dosage?: number | null
+  unit?: string | null
+  note?: string | null
+  timestamp: number
+  assetId?: number | null
+  tagIds?: number[]
+}
+
+export interface UpdateIntakeEntryRequest {
+  itemName?: string
+  itemType?: IntakeItemType
+  variant?: string | null
+  dosage?: number | null
+  unit?: string | null
+  note?: string | null
+  timestamp?: number
+  assetId?: number | null
+  tagIds?: number[]
+}
+
+export interface IntakeEntryResponse {
+  entry: IntakeEntryReadModel
+  tags: Tag[]
 }
 
 export interface CreateHealthSymptomRequest {

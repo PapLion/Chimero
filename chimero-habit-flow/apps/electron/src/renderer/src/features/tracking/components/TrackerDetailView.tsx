@@ -9,9 +9,11 @@ import {
   buildMoodStatisticsReadModel,
   buildGamingStatisticsReadModel,
   buildFoodDetailReadModel,
+  buildIntakeDetailReadModel,
   buildHealthDetailReadModel,
   buildTaskDayReadModel,
   buildWeightEntriesTabReadModel,
+  formatIntakeDosageDisplay,
   buildWeightStatisticsReadModel,
   formatSeverityDisplay,
   postponeTaskToNextDay,
@@ -20,7 +22,7 @@ import {
 import { buildBooksTrackerReadModel, formatBookRatingDisplay, getBookActionLabel, getBookLifecycleRecord } from "@contracts/features/books"
 import { getTrackerIdentity, isBooksTracker, usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useEntries, useDeleteEntryMutation, useDeleteFoodEntryMutation, useDeleteHealthSymptomEntryMutation, useUpdateEntryMutation, useWeightDetail, useTags, useBook } from "@shared/queries"
+import { useTrackers, useEntries, useDeleteEntryMutation, useDeleteFoodEntryMutation, useDeleteIntakeEntryMutation, useDeleteHealthSymptomEntryMutation, useUpdateEntryMutation, useWeightDetail, useTags, useBook } from "@shared/queries"
 import { filterEntriesByDate, cn } from "@shared/utils"
 import type { Entry } from "@shared/store"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, CalendarPlus, Undo2, Square, Tv, type LucideIcon } from "lucide-react"
@@ -142,6 +144,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const { data: tags = [] } = useTags()
   const deleteEntryMutation = useDeleteEntryMutation()
   const deleteFoodEntryMutation = useDeleteFoodEntryMutation()
+  const deleteIntakeEntryMutation = useDeleteIntakeEntryMutation()
   const deleteHealthSymptomEntryMutation = useDeleteHealthSymptomEntryMutation()
   const updateEntryMutation = useUpdateEntryMutation()
   const toast = useToast()
@@ -192,6 +195,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const isGamingTracker = !!tracker && getTrackerIdentity(tracker) === "gaming"
   const isFoodTrackerType = !!tracker && getTrackerIdentity(tracker) === "diet"
   const isHealthTracker = !!tracker && getTrackerIdentity(tracker) === "health"
+  const isIntakeTracker = !!tracker && getTrackerIdentity(tracker) === "intake"
   const { data: weightDetail } = useWeightDetail(trackerId, isWeightTracker)
   const weightEntriesReadModel = useMemo(
     () => weightDetail ? buildWeightEntriesTabReadModel(weightDetail) : { entries: [] },
@@ -225,6 +229,10 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const foodDetailReadModel = useMemo(
     () => (isFoodTrackerType ? buildFoodDetailReadModel(trackerEntries, tags) : null),
     [isFoodTrackerType, trackerEntries, tags],
+  )
+  const intakeDetailReadModel = useMemo(
+    () => (isIntakeTracker ? buildIntakeDetailReadModel(trackerEntries, tags) : null),
+    [isIntakeTracker, trackerEntries, tags],
   )
   const healthDetailReadModel = useMemo(
     () => (isHealthTracker ? buildHealthDetailReadModel(trackerEntries, tags) : null),
@@ -273,6 +281,8 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
       ? (isToday ? moodStatisticsReadModel.count : moodHistoryEntries.length)
     : isHealthTracker
       ? (isToday ? healthDetailReadModel?.totalOccurrences ?? 0 : selectedDateEntries.length)
+    : isIntakeTracker
+      ? (isToday ? intakeDetailReadModel?.intakeCount ?? 0 : selectedDateEntries.length)
     : isGamingTracker
       ? (isToday ? gamingStatisticsReadModel.entryCount : selectedDateEntries.length)
     : isToday ? trackerEntries.length : selectedDateEntries.length
@@ -426,7 +436,30 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
               : date.toLocaleDateString("en", { month: "short", day: "numeric" }),
           fullDate: point.date,
         }
-      })
+        })
+    }
+
+    if (isIntakeTracker && intakeDetailReadModel?.chartData) {
+      const referenceDate = new Date(selectedDate.getTime())
+      referenceDate.setHours(23, 59, 59, 999)
+      const daysBack = chartTimeFilter === "1M" ? 30 : chartTimeFilter === "3M" ? 90 : 365
+      const cutoffDate = new Date(referenceDate.getTime())
+      cutoffDate.setDate(cutoffDate.getDate() - daysBack)
+      const cutoffStr = toDateStr(cutoffDate)
+      const refStr = toDateStr(referenceDate)
+
+      return intakeDetailReadModel.chartData
+        .filter((point) => point.date >= cutoffStr && point.date <= refStr)
+        .map((point) => {
+          const date = new Date(point.date)
+          return {
+            value: point.value,
+            date: chartTimeFilter === "1Y"
+              ? date.toLocaleDateString("en", { month: "short" })
+              : date.toLocaleDateString("en", { month: "short", day: "numeric" }),
+            fullDate: point.date,
+          }
+        })
     }
 
     if (isHealthTracker && healthDetailReadModel?.chartData) {
@@ -502,7 +535,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
         fullDate: dateStr,
       }
     })
-  }, [trackerEntries, tracker, chartTimeFilter, selectedDate, isWeightTracker, isGamingTracker, isFoodTrackerType, gamingStatisticsReadModel.chartData, weightDetail?.chartData, foodDetailReadModel?.chartData])
+  }, [trackerEntries, tracker, chartTimeFilter, selectedDate, isWeightTracker, isGamingTracker, isFoodTrackerType, isIntakeTracker, gamingStatisticsReadModel.chartData, weightDetail?.chartData, foodDetailReadModel?.chartData, intakeDetailReadModel?.chartData])
 
   // Heatmap data: "Year in Pixels"
   const heatmapData = useMemo(() => {
@@ -922,6 +955,33 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                     <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Latest Severity</div>
                     <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
                       {formatSeverityDisplay(healthDetailReadModel?.current?.severity ?? null)}
+                    </div>
+                  </div>
+                </>
+              ) : isIntakeTracker ? (
+                <>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Structured Entries</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {intakeDetailReadModel?.structuredEntryCount ?? 0}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Legacy Entries</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {intakeDetailReadModel?.legacyEntryCount ?? 0}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Days With Intakes</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {intakeDetailReadModel?.daysWithIntakes ?? 0}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Top Item</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {intakeDetailReadModel?.itemFrequency[0]?.itemName ?? "--"}
                     </div>
                   </div>
                 </>
@@ -1732,6 +1792,72 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                   )
                 })}
               </div>
+            ) : isIntakeTracker ? (
+              /* History - Intake: structured item events with legacy fallback */
+              <div className="space-y-4">
+                {historyEntries.map((entry) => {
+                  const intake = entry.intake?.structured ? entry.intake : null
+                  const legacyIntake = isIntakeTracker && !intake
+                  const asset = entry.assetId != null ? assets.get(entry.assetId) : null
+                  return (
+                    <div
+                      key={entry.id}
+                      className={entryCardBase}
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
+                    >
+                      <div className="absolute right-3 top-3 z-10 flex gap-1.5 opacity-0 translate-y-1 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+                        <button className={actionButtonBase} onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button className={actionButtonBase} onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <div className="text-sm text-white/60">
+                          {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                          {" · "}
+                          {new Date(entry.timestamp).toLocaleDateString()}
+                        </div>
+                        <div className="text-lg font-semibold text-white">
+                          {intake ? formatIntakeDosageDisplay(intake.dosage, intake.unit) : "--"}
+                        </div>
+                      </div>
+                      <div className="text-sm text-white/90 mb-1">
+                        {intake?.itemName || entry.note || "Intake"}
+                      </div>
+                      {intake && (
+                        <div className="mb-2 text-xs text-white/50">
+                          {intake.itemType}
+                          {intake.variant ? ` · ${intake.variant}` : ""}
+                          {intake.itemKey ? ` · ${intake.itemKey}` : ""}
+                        </div>
+                      )}
+                      {intake && entry.note && (
+                        <div className="mb-2 text-sm text-white/60">{entry.note}</div>
+                      )}
+                      {legacyIntake && (
+                        <div className="mb-2 text-sm text-white/60">Unstructured legacy intake entry</div>
+                      )}
+                      {legacyIntake && entry.note && (
+                        <div className="text-sm text-white/60 mb-2">{entry.note}</div>
+                      )}
+                      {renderEntryTags(entry.tagIds)}
+                      {asset && (
+                        <div className="mt-3 rounded-xl overflow-hidden border border-white/10 max-h-[300px] bg-white/[0.04]">
+                          <img
+                            src={asset.thumbnailUrl || asset.assetUrl}
+                            alt=""
+                            className="w-full h-auto max-h-[300px] object-contain"
+                            title={intake?.itemName || entry.note || "Intake photo"}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             ) : isNumericType ? (
               /* History - Generic numeric with large inline attachments */
               <div className="space-y-4">
@@ -1849,11 +1975,14 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
 
           const entry = deletingEntry
           const isStructuredFoodEntry = isFoodTrackerType && entry.food?.structured
+          const isStructuredIntakeEntry = isIntakeTracker && entry.intake?.structured
           const isStructuredHealthEntry = isHealthTracker && entry.health?.structured
 
           try {
             if (isStructuredFoodEntry) {
               await deleteFoodEntryMutation.mutateAsync(entry.id)
+            } else if (isStructuredIntakeEntry) {
+              await deleteIntakeEntryMutation.mutateAsync(entry.id)
             } else if (isStructuredHealthEntry) {
               await deleteHealthSymptomEntryMutation.mutateAsync(entry.id)
             } else {
@@ -1864,6 +1993,8 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
               "Entry deleted.",
               entry.food?.structured
                 ? entry.food.foodName
+                : entry.intake?.structured
+                  ? entry.intake.itemName
                 : entry.health?.structured
                   ? entry.health.symptomName
                   : entry.note?.trim() || tracker?.name || "Tracker entry",

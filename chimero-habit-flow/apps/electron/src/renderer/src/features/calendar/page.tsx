@@ -9,7 +9,7 @@ import { useTrackers, useCalendarMonth, useStats, useReminders, useEntries, useT
 import { TimelineView } from "./components/TimelineView"
 import { TagChips } from "@features/tags/components/TagChips"
 import type { CalendarDayEntry } from "@contracts/features/calendar"
-import { clampMoodScore, formatSeverityDisplay, moodScoreToColor, moodScoreToLabel } from "@contracts/domain"
+import { clampMoodScore, formatIntakeDosageDisplay, formatSeverityDisplay, moodScoreToColor, moodScoreToLabel } from "@contracts/domain"
 import { getBookActionLabel, getBookLifecycleRecord } from "@contracts/features/books"
 import { getTrackerIdentity } from "@contracts/features/tracking"
 
@@ -464,13 +464,16 @@ export function CalendarPage() {
                             const isGamingTracker = tracker ? getTrackerIdentity(tracker) === "gaming" : false
                             const isFoodTracker = tracker ? getTrackerIdentity(tracker) === "diet" : false
                             const isHealthTracker = tracker ? getTrackerIdentity(tracker) === "health" : false
+                            const isIntakeTracker = tracker ? getTrackerIdentity(tracker) === "intake" : false
                             const isBooksTracker = tracker ? getTrackerIdentity(tracker) === "books" : false
                             const gaming = entry.gaming?.structured ? entry.gaming : null
                             const food = entry.food?.structured ? entry.food : null
                             const health = entry.health?.structured ? entry.health : null
+                            const intake = entry.intake?.structured ? entry.intake : null
                             const legacyGaming = isGamingTracker && !gaming
                             const legacyFood = isFoodTracker && !food
                             const legacyHealth = isHealthTracker && !health
+                            const legacyIntake = isIntakeTracker && !intake
                             const book = isBooksTracker && detailedEntry ? getBookLifecycleRecord(detailedEntry as Entry) : null
                             const moodScore = isMoodEntry ? clampMoodScore(entry.value) : null
                             const entryTime = new Date(entry.timestamp).toLocaleTimeString(undefined, {
@@ -579,24 +582,43 @@ export function CalendarPage() {
                                   </p>
                                 )}
                                 {health && entry.note && (
-                                  <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                    <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
                                 )}
                                 {legacyHealth && (
-                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                    <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
                                     Unstructured legacy health entry
                                   </p>
                                 )}
                                 {legacyHealth && entry.note && (
-                                  <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                    <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                )}
+                                {intake && (
+                                    <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                        {intake.itemType}
+                                        {intake.variant ? ` · ${intake.variant}` : ""}
+                                    </p>
+                                )}
+                                {intake && (
+                                    <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                        {formatIntakeDosageDisplay(intake.dosage, intake.unit)}
+                                    </p>
+                                )}
+                                {legacyIntake && (
+                                    <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                        Unstructured legacy intake entry
+                                    </p>
+                                )}
+                                {legacyIntake && entry.note && (
+                                    <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
                                 )}
                                 {(entry as CalendarDayEntry).waist != null && (
-                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                    Waist {(entry as CalendarDayEntry).waist}
-                                    {(entry as CalendarDayEntry).waistUnit ? ` ${(entry as CalendarDayEntry).waistUnit}` : ""}
-                                  </p>
+                                    <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                        Waist {(entry as CalendarDayEntry).waist}
+                                        {(entry as CalendarDayEntry).waistUnit ? ` ${(entry as CalendarDayEntry).waistUnit}` : ""}
+                                    </p>
                                 )}
-                                {entry.note && !gaming && !legacyGaming && !isBooksTracker && !food && !legacyFood && !health && !legacyHealth && (
-                                  <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                {entry.note && !gaming && !legacyGaming && !isBooksTracker && !food && !legacyFood && !health && !legacyHealth && !intake && !legacyIntake && (
+                                    <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
                                 )}
                                 {gaming && (
                                   <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{gaming.gameTitle}</p>
