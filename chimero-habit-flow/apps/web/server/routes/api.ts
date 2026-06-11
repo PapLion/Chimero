@@ -88,6 +88,7 @@ import type {
   Reminder,
   ReminderInsert,
   SetTrackerGoalRequest,
+  SocialMethod,
   StatsQueryRequest,
   Tag,
   TagRelationship,
@@ -366,11 +367,18 @@ function mapContact(row: JsonRecord): Contact {
 }
 
 function mapContactInteraction(row: JsonRecord): ContactInteraction {
+  const moodImpact = (row.mood_impact ?? row.mood ?? 'neutral') as ContactInteraction['moodImpact']
+  const methodRaw = row.method
+  const method = typeof methodRaw === 'string' && ['in-person', 'call', 'text', 'video', 'other'].includes(methodRaw)
+    ? methodRaw as SocialMethod
+    : null
   return {
     id: Number(row.id),
     contactId: Number(row.contact_id),
     entryId: row.entry_id == null ? null : Number(row.entry_id),
-    mood: (row.mood as ContactInteraction['mood']) ?? 'neutral',
+    method,
+    moodImpact,
+    mood: moodImpact,
     timestamp: Number(row.timestamp),
     notes: row.notes == null ? null : String(row.notes),
   }

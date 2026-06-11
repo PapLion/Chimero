@@ -3,7 +3,11 @@ import type {
   BaseEntryRequest,
   Contact,
   ContactInteraction,
+  ContactProfileBlock,
+  ContactProfileBlockInput,
   ContactInsert,
+  ContactReminderSettings,
+  ContactReminderSettingsInput,
   ContactUpdate,
   ContactInteractionInsert,
   CorrelationQueryRequest,
@@ -142,13 +146,20 @@ export interface ElectronApi {
   getBookHistory: (trackerId: number, options?: { limit?: number }) => Promise<BookHistoryItem[]>
   getBookStats: (trackerId: number, options?: { limit?: number }) => Promise<BookStatisticsReadModel>
   getBookSelectedDaySummary: (trackerId: number, selectedDate: string, options?: { limit?: number }) => Promise<BookSelectedDaySummaryReadModel>
-  getContacts: () => Promise<Contact[]>
+  getContacts: (options?: { sortBy?: 'name' | 'most-talked-to' | 'least-talked-to' }) => Promise<Contact[]>
   getContact: (id: number) => Promise<Contact | null>
   createContact: (data: ContactInsert) => Promise<Contact | null>
   updateContact: (id: number, updates: ContactUpdate) => Promise<Contact | null>
   deleteContact: (id: number) => Promise<{ success: boolean }>
   createContactInteraction: (data: ContactInteractionInsert) => Promise<ContactInteraction | null>
   getContactInteractions: (contactId: number) => Promise<ContactInteraction[]>
+  getContactReminderSettings: (contactId: number) => Promise<ContactReminderSettings | null>
+  upsertContactReminderSettings: (data: ContactReminderSettingsInput) => Promise<ContactReminderSettings | null>
+  getContactProfileBlocks: (contactId: number) => Promise<ContactProfileBlock[]>
+  createContactProfileBlock: (data: ContactProfileBlockInput) => Promise<ContactProfileBlock | null>
+  updateContactProfileBlock: (id: number, updates: Partial<ContactProfileBlockInput>) => Promise<ContactProfileBlock | null>
+  deleteContactProfileBlock: (id: number) => Promise<boolean>
+  reorderContactProfileBlocks: (contactId: number, ids: number[]) => Promise<ContactProfileBlock[]>
   searchExercises: (query: string, limit?: number) => Promise<Exercise[]>
   getAllExercises: (limit?: number) => Promise<Exercise[]>
   getExerciseDbStatus: () => Promise<ExerciseDbSnapshot>

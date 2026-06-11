@@ -60,7 +60,7 @@ export const useAppStore = create<AppState>((set) => ({
   isNotificationsOpen: false,
   selectedDate: new Date(),
   setActiveTracker: (id) => set({ activeTracker: id }),
-  setCurrentPage: (page) => set({ currentPage: page, selectedContactId: page === "contact" ? null : null }),
+  setCurrentPage: (page) => set((state) => ({ currentPage: page, selectedContactId: page === "contact" ? state.selectedContactId : null })),
   setSelectedContactId: (id) => set({ selectedContactId: id }),
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   toggleCommandBar: () => set((state) => ({ commandBarOpen: !state.commandBarOpen })),

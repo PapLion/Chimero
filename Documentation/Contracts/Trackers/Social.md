@@ -2,223 +2,239 @@
 
 ## 1. Purpose
 
-Social is both a personal CRM-adjacent tracker and an interaction tracker. It must distinguish contact profile data from social interaction entry data: contacts live in the Contacts domain, while Social tracker entries use the generic entries table plus optional contact-interaction writes.
+Social is both a tracker for logged interactions and a small personal CRM surface. New structured Social entries must preserve a durable link between the generic entry row and one or more contact interaction rows. Contact profile data belongs to the Contacts domain; Social tracker entries own the interaction event.
 
 ## 2. Current Implementation Status
 
-- Status: PARTIAL_GENERIC_TRACKER_PLUS_CONTACT_INTERACTIONS.
-- Quick Entry can select contacts through `ContactBubblesGrid`.
-- Quick Entry saves a generic Social entry, then attempts contact interaction writes.
-- Current contact interactions are created with `entryId: null`, so they are not structurally joined back to the generic entry.
-- BentoGrid has a Social widget that summarizes selected-day satisfaction/value and extracts people names from notes.
-- Contact profile CRUD and interaction history exist outside the tracker contract.
+- Status: LINKED_SOCIAL_CRM_FOUNDATION_PARTIAL.
+- New Quick Entry Social submissions write the base `entries` row and linked `contact_interactions` rows transactionally through `add-entry`.
+- New structured interactions are created with `entryId` set to the new Social entry ID. New Quick Entry Social writes must not create `entryId: null` interactions.
+- Existing `contact_interactions.entryId = null` rows remain readable legacy/unstructured interaction history. They are not backfilled, guessed, or deleted.
+- Contact profile fields now include birthday, date met, last talked, likes, dislikes, traits, notes, has kids, kids notes, and avatar asset ID.
+- Contact reminder/attention settings are persisted as a lightweight foundation: birthday awareness days before, and check-in attention after N days.
+- Contact profile blocks are persisted with title, body, type, and order. The renderer supports create/edit/delete and move up/down reorder. There is no draggable or masonry layout guarantee.
+- Contact sorting supports name, most talked to, and least talked to using linked structured interactions. Legacy null-entry interactions do not count toward structured frequency metrics.
+- Web parity is limited to existing web API mapper compatibility for contacts/interactions. No new web-only architecture is introduced.
+- No Mood correlation UI, AI suggestions, OS-level notifications, complex scheduling, contact import/sync, enterprise CRM, or unsafe legacy backfill is implemented.
 
 ## 3. Surface Contract / Frontend
 
 ### 3.1 Quick Entry / Edit Entry Input
 
-- Quick Entry requires at least one selected contact for Social trackers in the current UI.
-- Quick Entry captures selected contact IDs and per-contact mood (`positive|negative|neutral`) for contact interaction writes.
-- Quick Entry captures generic value as satisfaction/hours depending tracker config.
-- Quick Entry captures optional note/context.
-- Quick Entry captures optional tags/assets through the generic entry path.
-- Edit Entry can update only the generic Social entry fields today. It does not currently edit associated contact interactions.
-- Delete removes the generic entry; contact interactions with `entryId: null` are not automatically removed through tracker delete behavior.
+- Quick Entry requires at least one selected contact for Social trackers.
+- Quick Entry captures selected contact IDs and per-contact mood impact (`positive | negative | neutral`).
+- Quick Entry currently saves interaction method as `other` for the generic Social flow and stores note/context on each linked interaction.
+- Quick Entry captures generic value, note/context, tags, and assets through the existing entry path.
+- Edit Entry still primarily edits generic entry fields. Full structured Social interaction editing is not guaranteed in this foundation.
+- Delete Entry removes linked structured contact interactions for that entry and refreshes affected contacts' last-talked state. Legacy `entryId: null` interactions remain legacy and are not removed by entry delete.
 
 ### 3.2 BentoGrid / Home Widget Read Model
 
-- Shows selected-day satisfaction/value when present.
-- Shows people/context extracted from notes.
-- May summarize selected-day interaction count generically.
-- Must not imply contact-linked relational integrity until `entryId` linkage is implemented.
+- The existing Social widget remains generic/compact.
+- It can summarize selected-day generic Social values/counts.
+- It must not imply Mood correlations, reminders delivered by the OS, or full relationship intelligence.
+- Legacy generic Social entries may still appear as unstructured activity.
 
 ### 3.3 Tracker Detail / Entries Tab Read Model
 
-- Shows generic Social entries with value, note/context, timestamp, tags, asset indicator, edit, and delete.
-- Contact profile details may be linked by future read models but are not guaranteed in current tracker entries.
+- Generic Social entries remain readable with value, note/context, timestamp, tags, asset indicator, edit, and delete.
+- Structured linked interaction data is persisted in `contact_interactions` and available through contact history endpoints.
+- Legacy rows are explicitly unstructured when no linked interaction data exists.
 
 ### 3.4 Tracker Detail / Statistics Tab Read Model
 
-- May show total entries, current streak, average value, days since last social entry, entries this week/year, and generic stats.
-- Contact frequency summaries are PRODUCT_REQUESTED_NOT_FULLY_IMPLEMENTED unless based on Contacts interaction history outside this tracker detail.
+- Shared Social/contact helpers support structured frequency metrics:
+  - contact frequency
+  - method frequency
+  - mood impact distribution
+  - days with Social contact
+  - days since last talked
+  - birthday awareness
+- Structured frequency helpers count linked interactions only. Legacy `entryId: null` interactions are readable history but excluded from structured Social entry metrics.
+- No Mood correlation UI or AI relationship suggestions are implemented.
 
 ### 3.5 Tracker Detail / Graphs Tab Read Model
 
-- Relevant.
-- Graphs generic Social value/count over time.
-- Per-contact frequency graphs are Future until entry/contact linkage is first-class.
+- Generic Social value/count graphs may continue to use generic entries.
+- Per-contact or per-method graphs are not guaranteed by this foundation.
+- No masonry/draggable analytics surface is implemented.
 
 ### 3.6 Calendar Selected-Day Summary Read Model
 
-- Shows selected-day Social entries with value, note/context, timestamp, tags, and asset reference.
-- Contact names can appear from note/context; linked contact summaries are Future because current interaction rows are not structurally joined to entries.
+- Calendar continues to show selected-day generic Social entries through the existing entry/calendar path.
+- New linked interactions share the Social entry timestamp, so future selected-day enrichment can join by `entryId` without note parsing.
+- Legacy/null-entry interaction rows are not inferred from notes.
 
-### 3.7 Insights / Correlations Read Model
+### 3.7 Contact Page / CRM
 
-- Generic correlations can use Social values by tracker ID.
-- Relationship-quality or per-contact correlations are Future and need client-approved semantics.
+- Contact list supports frequency sorting using linked structured interactions, with alphabetical fallback.
+- Selecting a contact opens profile mode instead of create mode.
+- Contact profile supports editing approved CRM fields.
+- Contact history shows interaction date, mood impact, method, and notes.
+- Avatar asset fallback uses contact photo when available, otherwise initials/avatar placeholder.
+
+### 3.8 Contact Reminders / Attention
+
+- Reminder settings are persisted, not scheduled.
+- Birthday awareness computes days until birthday inside the app surface.
+- Check-in attention computes days since last talked against the persisted threshold.
+- There are no OS notifications, background schedulers, or complex calendar reminders.
+
+### 3.9 Profile Grid / Blocks
+
+- Profile blocks are persisted per contact with stable order indexes.
+- Renderer supports create, inline edit on blur, delete, and move up/down reorder.
+- This is the safe foundation for a profile grid. It is not a draggable/masonry engine.
+
+### 3.10 Insights / Correlations
+
+- Generic correlations can still use Social tracker values by tracker ID.
+- Mood correlation UI and per-contact relationship correlations are not implemented.
+- No notes are parsed to infer contacts, methods, or moods.
 
 ## 4. Deep Contract / Backend-Service
 
 ### 1. Backend Entry Point
 
-- Status: PARTIAL.
 - Implemented generic Social entry methods: `add-entry`, `update-entry`, `delete-entry`, `get-entries`, `get-calendar-month`.
 - Implemented contact-domain methods: `get-contacts`, `get-contact`, `create-contact`, `update-contact`, `delete-contact`, `create-contact-interaction`, `get-contact-interactions`.
-- Social tracker entry + contact interaction linkage is PARTIAL because current Quick Entry writes a generic entry and then writes contact interactions separately, with interaction `entryId` nullable.
-- Contact CRUD is implemented, but not a specialized Social tracker detail service.
+- Implemented CRM foundation methods: `get-contact-reminder-settings`, `upsert-contact-reminder-settings`, `get-contact-profile-blocks`, `create-contact-profile-block`, `update-contact-profile-block`, `delete-contact-profile-block`, `reorder-contact-profile-blocks`.
 
 ### 2. Request Validation
 
-- Generic Social entry fields: `trackerId`, optional numeric `value`, optional `note`, `timestamp`, optional `assetId`, optional `tagIds`.
-- Contact interaction fields: `contactId`, mood enum `positive|negative|neutral`, optional notes, optional `entryId`.
-- Current backend validates non-empty contact name on create and basic `contactId`/`mood` presence for interaction.
-- Current backend does not strongly validate selected contact existence before all Social entry writes, multi-contact atomicity, mood effect semantics, avatar asset existence, birthday/date formats beyond storage, or relation between entry and interaction.
-- Missing/invalid writes return `null` or `{ success: false }`.
+- Social methods are limited to `in-person`, `call`, `text`, `video`, and `other`.
+- Social mood impact is limited to `positive`, `negative`, and `neutral`.
+- New structured Social interactions require valid positive contact IDs and are persisted with `entryId`.
+- The contact-domain `create-contact-interaction` endpoint rejects new interaction writes without `entryId`; existing null-entry rows remain legacy.
+- The implementation does not infer contacts, method, or mood from notes.
 
 ### 3. Normalization
 
-- Generic entry path computes `dateStr` from entry `timestamp`.
-- `create-contact-interaction` currently sets its own `timestamp = Date.now()` and updates contact `dateLastTalked` to today's `YYYY-MM-DD`.
-- Contact `traits` are JSON-stringified on update when provided.
-- `note`, `assetId`, birthday/date fields, and optional contact fields normalize to `null`.
-- Sorting: contacts by name ascending; interactions by timestamp descending; entries newest-first.
+- Entry flow computes `dateStr` from entry `timestamp`.
+- New linked interactions use the Social entry timestamp.
+- `lastTalkedAt` and `dateLastTalked` are refreshed from the newest remaining interaction for a contact.
+- Likes, dislikes, and traits are stored as JSON string arrays.
+- Unknown legacy method values map to `null` at the API boundary instead of widening the shared contract.
 
 ### 4. Persistence Plan
 
-Write flow:
+Write flow for structured Social entry:
 
-1. Insert/update base Social entry in `entries`.
-2. Insert/update specialized tracker table if needed: none exists for Social entries.
-3. Insert/update junction rows in `entries_to_tags` when `tagIds` is provided.
-4. Update related entity state if needed: create `contact_interactions` and update `contacts.date_last_talked`.
-5. Return mapped generic `Entry` and/or mapped `ContactInteraction`/`Contact` contract.
+1. Insert/update the base Social entry in `entries`.
+2. Replace entry tags when `tagIds` is provided.
+3. Insert/reconcile linked rows in `contact_interactions` with the created/updated `entryId`.
+4. Persist `method`, `moodImpact`, timestamp, and notes on each interaction.
+5. Refresh affected contacts' `lastTalkedAt` and `dateLastTalked`.
+6. Return mapped shared contracts.
 
-- Generic entry/tag writes are transactional.
-- Contact interaction + `dateLastTalked` update are not currently wrapped in a transaction in the contact handler.
-- Quick Entry entry write + one or more contact interaction writes are not one atomic backend transaction.
-- Delete Social entry removes `entries` and tag joins; existing `contact_interactions` with `entryId: null` or set-null FK are not removed by tracker delete.
-- Current status includes `IMPLEMENTATION_GAP_TRANSACTION_SAFETY` for create interaction + update contact and for multi-contact Social entry writes.
+- Entry plus linked interaction create/update/delete is handled transactionally in the Electron entry handler.
+- Delete removes linked interactions for the deleted entry.
+- Legacy `entryId: null` interactions are not backfilled or deleted.
+- Contact reminder settings and profile blocks have dedicated additive tables.
 
 ### 5. Read / Query Plan
 
-- BentoGrid: reads generic Social entries by tracker/selected date; extracts people/context from note and selected-day values.
-- Entries tab: reads generic Social entries newest-first with note, value, timestamp, tags, and assets.
-- Statistics tab: generic stats can compute total entries, averages, active days, entries this week/year, and days since last Social entry.
-- Graphs: plots generic Social value/count; per-contact graphs are FUTURE.
-- Calendar selected-day: returns each Social entry from month query with value, note, asset, tag IDs.
-- Contact profile: reads `contacts` and `contact_interactions` through contact-domain endpoints, not tracker detail.
-- Edit Entry prefill: generic entry fields only; associated contact interactions are not currently edited through entry edit.
-- Correlation/Insight: generic correlation can use Social values; per-contact relationship correlation is FUTURE.
-- Empty state: no entries/interactions returns empty arrays or null values.
+- Contacts list reads contacts and can sort by structured linked interaction frequency.
+- Contact profile reads contact fields, reminder settings, profile blocks, and interaction history.
+- Social tracker entries remain readable through generic entry queries.
+- Calendar and Home continue to use existing generic entry read models; linked interactions are persisted for future enrichment.
+- Web API contact interaction mapping returns `method`, `moodImpact`, and legacy-compatible `mood`.
 
 ### 6. Computed Metrics
 
-- Implemented/generic: selected-day value/count, entry count, generic averages, active days, generic correlation caveats.
-- Implemented contact state update: `dateLastTalked` set when an interaction is created.
-- Future/partial: contact frequency in tracker detail, mood effect summaries, multi-contact interaction aggregation, birthday age calculations in tracker surfaces, per-contact graphs.
-- Metrics are computed on read or in surfaces; no Social tracker metric cache exists.
+- Implemented shared helpers:
+  - `getInitials` / `getContactInitials`
+  - `validateSocialMethod`
+  - `validateSocialMoodImpact`
+  - `computeContactFrequency`
+  - `sortContactsByTalkFrequency`
+  - `computeMethodFrequency`
+  - `computeMoodImpactDistribution`
+  - `computeDaysWithSocialContact`
+  - `computeDaysSinceLastTalked`
+  - `computeBirthdayAwareness`
+  - `sortProfileBlocksByOrder`
+  - `reorderProfileBlocks`
+  - legacy/structured Social entry separation
+- Structured metrics intentionally exclude legacy/null-entry interactions.
 
 ### 7. Response Mapping
 
-- Entry flow: `entries` DB rows -> `mapEntry` -> shared `Entry` -> Social surface read model.
-- Contact flow: `contacts` / `contact_interactions` DB rows -> `mapContact` / `mapContactInteraction` -> shared contact contracts.
-- Raw DB rows never return to renderer surfaces.
-- Missing entry-contact linkage is represented as `entryId: null`, not guessed from note text.
+- Entry flow: `entries` DB rows -> `mapEntry` -> shared `Entry`.
+- Contact flow: `contacts` / `contact_interactions` DB rows -> shared `Contact` / `ContactInteraction`.
+- Reminder flow: `contact_reminder_settings` DB rows -> shared `ContactReminderSettings`.
+- Profile block flow: `contact_profile_blocks` DB rows -> shared `ContactProfileBlock`.
+- Raw DB rows do not return to renderer surfaces.
 
 ### 8. Error Handling
 
-- Invalid generic entry/DB failure returns `null` or `false`.
-- Invalid contact create/interaction returns `null`; delete contact returns `{ success: false }` on failure.
-- Missing contact/entry returns `null` or empty arrays.
-- Delete conflicts are currently handled by FK cascade/set-null behavior; Social entry delete does not clean unlinked interactions.
-- Unsupported per-contact tracker stats should be marked Future/Partial.
+- Invalid generic entry/contact operations return existing null/false fallbacks.
+- Invalid block title is rejected.
+- Unknown Social method values map to `null` for legacy compatibility.
+- Missing contacts/interactions return null or empty arrays.
 
 ### 9. Transaction Rules
 
-- Generic Social entry writes are transactional for `entries` and tag joins.
-- Contact interaction + contact `dateLastTalked` update is not transactionally guaranteed today.
-- Social entry + multiple interaction creation is not atomic today.
-- Current status: IMPLEMENTATION_GAP_TRANSACTION_SAFETY.
+- New structured Social entry create/update/delete runs in the entry transaction with linked interactions and tag replacement.
+- Contact profile/reminder/block CRUD is independent.
+- Legacy null-entry interactions remain readable and are not altered by structured entry transactions.
 
 ### 10. Data Ownership Rules
 
-Frontend owns: capture, display, UI state, visual formatting.
-Backend owns: validation, normalization, derived metrics, relation resolution, persistence orchestration, response mapping.
-Database owns: durable storage, relational integrity, queryable structure.
-Shared contracts own: request/response shapes, app-facing types, pure domain helpers when reusable.
+Frontend owns: capture, display, UI state, visual formatting, move up/down profile block actions.
+Backend owns: validation, normalization, linked interaction persistence, last-talked refresh, response mapping.
+Database owns: durable additive CRM fields, linked interaction rows, reminder settings, profile blocks.
+Shared contracts own: request/response shapes and reusable Social/contact domain helpers.
 
 ### 11. Deep Contract Status
 
-- Status: PARTIAL.
-- Implemented: contacts CRUD, interactions, `dateLastTalked` update, generic Social entries, generic calendar/stats/correlation compatibility.
-- Gaps: first-class entry/contact join, atomic multi-contact Social writes, contact frequency tracker detail, edit/delete behavior for related interactions, age/birthday surface model, avatar asset read model consistency.
+- Status: PARTIAL_FOUNDATION_IMPLEMENTED.
+- Implemented: linked Social interaction foundation, expanded contact CRM fields, persisted reminder/attention settings, persisted profile blocks, structured frequency helper foundation, legacy/null-entry preservation.
+- Remaining gaps: full Edit Entry structured interaction editor, dedicated Social tracker read models for every surface, richer Calendar/Home enrichment, renderer tests for all Social surfaces, browser smoke, OS notifications, Mood correlations, import/sync, and advanced draggable/masonry layout.
 
 ## 5. Persistence and Schema / Database
 
-- `contacts`: profile data including name, avatar, birthday/date fields, traits, and notes.
-- `contact_interactions`: `contact_id`, nullable `entry_id`, mood, timestamp, notes.
-- `entries.value`: generic satisfaction/hours/count value.
-- `entries.note`: social context/people text.
-- `entries.timestamp` and `entries.date_str`: social event time/day.
-- `entries.asset_id`: optional attachment.
-- `entries_to_tags`: explicit tags.
+- `contacts`: adds `last_talked_at`, `likes`, `dislikes`, `has_kids`, and `kids_notes` to existing profile data.
+- `contact_interactions`: adds `method` and `mood_impact`; `entry_id` remains nullable only for legacy rows.
+- `contact_reminder_settings`: stores birthday awareness and check-in attention settings per contact.
+- `contact_profile_blocks`: stores contact profile blocks with stable order indexes.
+- `entries`: continues to store the base Social entry.
+- `entries_to_tags`: continues to store explicit tags.
 
 ## 6. Input / Output Contracts
 
 ```ts
-type ContactProfileResponse = Contact
+type SocialMethod = "in-person" | "call" | "text" | "video" | "other"
+type SocialMoodImpact = "positive" | "negative" | "neutral"
 
 type CreateSocialEntryRequest = BaseEntryRequest & {
-  trackerId: number
-  value?: number | null
-  note?: string | null
-  timestamp: number
-  assetId?: number | null
-  tagIds?: number[]
-  contactInteractions?: Array<{
+  socialInteractions: Array<{
     contactId: number
-    mood: "positive" | "negative" | "neutral"
+    method?: SocialMethod | null
+    moodImpact?: SocialMoodImpact | null
     notes?: string | null
   }>
 }
 
-type UpdateSocialEntryRequest = Partial<Omit<CreateSocialEntryRequest, "trackerId" | "contactInteractions">>
-
-type SocialEntryResponse = BaseEntryResponse
-
-type SocialDetailResponse = {
-  entries: BaseEntryResponse["entry"][]
-  contacts?: ContactProfileResponse[]
+type UpdateSocialEntryRequest = EntryUpdateRequest & {
+  socialInteractions?: CreateSocialEntryRequest["socialInteractions"]
 }
 
-type SocialBentoWidgetResponse = {
-  trackerId: number
-  selectedDateValue: number | null
-  people: string[]
-  interactionCount: number
+type ContactReminderSettings = {
+  contactId: number
+  birthdayReminderEnabled: boolean
+  birthdayReminderDaysBefore: number
+  checkInReminderEnabled: boolean
+  checkInAfterDays: number
 }
 
-type SocialEntriesTabResponse = {
-  entries: Array<BaseEntryResponse["entry"] & { tags?: TagSummary[]; assets?: AssetSummary[] }>
-}
-
-type SocialStatisticsResponse = {
-  totalEntries: number
-  currentStreak?: number
-  averageValue?: number | null
-  daysSinceLastEntry?: number | null
-  contactFrequency?: Future<Array<{ contactId: number; count: number; lastTalked?: string | null }>>
-}
-
-type SocialCalendarDayResponse = TimelineEvent & {
-  entryId: number
-  trackerId: number
-  value?: number | null
-  note?: string | null
-  people?: string[]
-  tagIds?: number[]
-  assets?: AssetSummary[]
+type ContactProfileBlock = {
+  id: number
+  contactId: number
+  title: string
+  body: string
+  orderIndex: number
+  blockType: "text" | "list" | "note"
 }
 ```
 
@@ -226,41 +242,40 @@ type SocialCalendarDayResponse = TimelineEvent & {
 
 | Field | Quick Entry | Edit Entry | DB | Backend Computed | BentoGrid | Entries Tab | Statistics Tab | Graphs Tab | Calendar | Insights/Correlations |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| contact profile | Yes | No | Yes | Optional | Optional | Future | Optional | Future | Future | Future |
-| selected contactIds | Yes | Future | Optional | No | Optional | Future | Future | Future | Future | Future |
-| contact mood | Yes | Future | Yes | Optional | No | Future | Future | Future | Future | Future |
-| social value/satisfaction | Yes | Yes | Yes | Optional | Yes | Yes | Yes | Yes | Yes | Yes |
+| contact profile | Yes | Contact page | Yes | Optional | Optional | Future | Optional | Future | Future | Future |
+| selected contactIds | Yes | Partial | Yes | No | Optional | Future | Yes | Future | Future | Future |
+| method | Default `other` | Partial | Yes | Validated | Optional | Future | Yes | Future | Future | No |
+| mood impact | Yes | Partial | Yes | Validated | Optional | Future | Yes | Future | Future | No |
 | note/context | Optional | Optional | Yes | No | Optional | Yes | Optional | No | Optional | Optional |
-| contact frequency | No | No | Yes | Computed | Optional | No | Future | Future | Future | Future |
-| tagIds | Optional | Optional | Yes | Optional | No | Yes | Future | Future | Optional | Future |
-| assets | Optional | Optional | Optional | Optional | No | Optional | No | No | Optional | Future |
-| entry-contact join | No | No | Optional | No | No | No | Future | Future | No | Future |
+| tags/assets | Optional | Optional | Yes | Optional | Optional | Yes | Future | Future | Optional | Future |
+| contact frequency | No | No | Yes | Yes | Optional | Future | Yes | Future | Future | No |
+| reminders/attention | Contact page | Contact page | Yes | Yes | No | No | No | No | No | No |
+| profile blocks | Contact page | Contact page | Yes | Order only | No | No | No | No | No | No |
+| Mood correlations | No | No | No | No | No | No | No | No | No | No |
 
 ## 8. Completeness Checklist
 
-- [x] Quick Entry / Edit Entry input is documented.
-- [x] Backend request path is documented.
-- [x] Database persistence shape is documented.
-- [x] Backend computed response is documented.
-- [x] BentoGrid read model is documented.
-- [x] Entries tab read model is documented.
-- [x] Statistics tab read model is documented.
-- [x] Graphs tab relevance is documented.
-- [x] Calendar selected-day summary is documented.
-- [x] Edit/Delete behavior is documented.
-- [x] Future Insights/Correlations are limited to explicit/generic scope.
+- [x] Quick Entry linked interaction foundation is documented.
+- [x] Contact CRM fields are documented.
+- [x] Reminder/attention foundation is documented.
+- [x] Profile blocks are documented.
+- [x] Legacy/null-entry interactions are documented as legacy.
+- [x] Frequency sorting and structured-only metrics are documented.
+- [x] Excluded Mood correlations, OS notifications, unsafe backfill, and draggable/masonry guarantees are documented.
+- [ ] Full Social read models for every renderer surface are implemented.
+- [ ] Full structured Social Edit Entry is implemented.
+- [ ] Browser smoke is verified.
 
 ## 9. Deep Contract Checklist
 
-- [x] Does backend have a clear entry point?
-- [ ] Does backend validate all request fields? Contact existence/linkage and Social semantics are partial.
+- [x] Does backend have clear entry points?
+- [x] Does backend validate Social method/mood impact?
 - [x] Does backend normalize timestamp/dateStr/defaults?
 - [x] Does backend know which tables to write?
-- [ ] Does backend write related rows transactionally? IMPLEMENTATION_GAP_TRANSACTION_SAFETY for interactions/dateLastTalked and multi-contact writes.
-- [x] Does backend know which tables to read for each surface?
-- [ ] Does backend compute metrics instead of frontend? Contact frequency/mood effect are not tracker backend metrics today.
+- [x] Does backend write structured Social entries and interactions transactionally?
+- [x] Does backend preserve legacy null-entry interactions?
 - [x] Does backend map DB rows into shared contracts?
 - [x] Does backend handle empty/insufficient data?
-- [ ] Does backend return clear errors/warnings? Current path uses generic fallbacks.
-- [ ] Does delete/update affect related rows safely? Unlinked contact interactions are not cleaned by Social entry delete.
-- [x] Is current implementation status honest?
+- [ ] Does every surface use a dedicated Social read model? Partial.
+- [ ] Does Edit Entry fully edit structured Social interactions? Partial.
+- [ ] Are OS reminders/notifications implemented? No, intentionally excluded.

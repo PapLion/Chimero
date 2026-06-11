@@ -57,6 +57,13 @@
       "when": 1779497300000,
       "tag": "0007_intake_item_and_event",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1781016000000,
+      "tag": "0008_social_crm_foundation",
+      "breakpoints": true
     }
   ]
 }

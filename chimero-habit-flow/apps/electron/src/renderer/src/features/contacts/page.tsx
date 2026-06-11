@@ -2,15 +2,16 @@
 
 import { createElement, useState, useMemo, useEffect } from "react"
 import { useAppStore } from "@shared/store"
-import { useContact, useContactInteractions, useCreateContactMutation, useUpdateContactMutation, useDeleteContactMutation, useAssets } from "@shared/queries"
+import { useContact, useContactInteractions, useContactProfileBlocks, useContactReminderSettings, useCreateContactMutation, useCreateContactProfileBlockMutation, useDeleteContactMutation, useDeleteContactProfileBlockMutation, useReorderContactProfileBlocksMutation, useUpdateContactMutation, useUpdateContactProfileBlockMutation, useUpsertContactReminderSettingsMutation, useAssets } from "@shared/queries"
 import { Input } from "@packages/ui/input"
 import { Button } from "@packages/ui/button"
 import { cn } from "@shared/utils"
 import { api } from "@shared/api"
 import { ConfirmDeleteDialog } from "@shared/components/ConfirmDeleteDialog"
 import { formatToastError, useToast } from "@shared/components/toast"
-import { ArrowLeft, X, Plus, User } from "lucide-react"
-import type { Contact, ContactInteraction } from "@packages/db"
+import { ArrowLeft, X, Plus, User, ChevronUp, ChevronDown } from "lucide-react"
+import { buildBirthdayAwareness, buildCheckInAttention } from "@contracts/domain"
+import type { Contact, ContactInteraction, ContactProfileBlock } from "@packages/db"
 import {
   DndContext,
   closestCenter,
@@ -88,12 +89,20 @@ export function ContactProfilePage() {
   const contact = contactData as Contact | undefined
   const { data: interactionsData = [], isLoading: interactionsLoading } = useContactInteractions(selectedContactId ?? 0)
   const interactions = interactionsData as ContactInteraction[]
+  const { data: reminderSettings } = useContactReminderSettings(selectedContactId ?? 0)
+  const { data: profileBlocksData = [] } = useContactProfileBlocks(selectedContactId ?? 0)
+  const profileBlocks = profileBlocksData as ContactProfileBlock[]
   const { data: assetsData = [] } = useAssets({ limit: 200 })
 
   // Mutations
   const createContactMutation = useCreateContactMutation()
   const updateContactMutation = useUpdateContactMutation()
   const deleteContactMutation = useDeleteContactMutation()
+  const upsertReminderSettingsMutation = useUpsertContactReminderSettingsMutation()
+  const createProfileBlockMutation = useCreateContactProfileBlockMutation()
+  const updateProfileBlockMutation = useUpdateContactProfileBlockMutation()
+  const deleteProfileBlockMutation = useDeleteContactProfileBlockMutation()
+  const reorderProfileBlocksMutation = useReorderContactProfileBlocksMutation()
 
   // Form state
   const [name, setName] = useState("")
@@ -101,9 +110,19 @@ export function ContactProfilePage() {
   const [dateMet, setDateMet] = useState("")
   const [dateLastTalked, setDateLastTalked] = useState("")
   const [notes, setNotes] = useState("")
+  const [likesText, setLikesText] = useState("")
+  const [dislikesText, setDislikesText] = useState("")
   const [traits, setTraits] = useState<string[]>([])
   const [newTrait, setNewTrait] = useState("")
+  const [hasKids, setHasKids] = useState(false)
+  const [kidsNotes, setKidsNotes] = useState("")
   const [avatarAssetId, setAvatarAssetId] = useState<number | null>(null)
+  const [birthdayReminderEnabled, setBirthdayReminderEnabled] = useState(false)
+  const [birthdayReminderDaysBefore, setBirthdayReminderDaysBefore] = useState("7")
+  const [checkInReminderEnabled, setCheckInReminderEnabled] = useState(false)
+  const [checkInAfterDays, setCheckInAfterDays] = useState("14")
+  const [newBlockTitle, setNewBlockTitle] = useState("")
+  const [newBlockBody, setNewBlockBody] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -121,6 +140,30 @@ export function ContactProfilePage() {
     return calculatedAge >= 0 ? calculatedAge : null
   }, [birthday])
 
+  const splitList = (value: string): string[] | null => {
+    const items = value.split(",").map((item) => item.trim()).filter(Boolean)
+    return items.length > 0 ? items : null
+  }
+
+  const joinList = (value?: string[] | null): string => value?.join(", ") ?? ""
+
+  const birthdayAwareness = useMemo(
+    () => buildBirthdayAwareness({ birthday }, new Date(), Number.parseInt(birthdayReminderDaysBefore, 10) || 7),
+    [birthday, birthdayReminderDaysBefore],
+  )
+
+  const checkInAttention = useMemo(
+    () => buildCheckInAttention(
+      { lastTalkedAt: contact?.lastTalkedAt ?? null, dateLastTalked: dateLastTalked || null },
+      {
+        checkInReminderEnabled,
+        checkInAfterDays: Number.parseInt(checkInAfterDays, 10) || 14,
+      },
+      new Date(),
+    ),
+    [checkInAfterDays, checkInReminderEnabled, contact?.lastTalkedAt, dateLastTalked],
+  )
+
   // Load contact data when in edit mode
   useEffect(() => {
     if (contact && !isCreateMode) {
@@ -129,10 +172,23 @@ export function ContactProfilePage() {
       setDateMet(contact.dateMet || "")
       setDateLastTalked(contact.dateLastTalked || "")
       setNotes(contact.notes || "")
+      setLikesText(joinList(contact.likes))
+      setDislikesText(joinList(contact.dislikes))
       setTraits(contact.traits || [])
+      setHasKids(!!contact.hasKids)
+      setKidsNotes(contact.kidsNotes || "")
       setAvatarAssetId(contact.avatarAssetId || null)
     }
   }, [contact, isCreateMode])
+
+  useEffect(() => {
+    if (reminderSettings && !isCreateMode) {
+      setBirthdayReminderEnabled(reminderSettings.birthdayReminderEnabled)
+      setBirthdayReminderDaysBefore(String(reminderSettings.birthdayReminderDaysBefore))
+      setCheckInReminderEnabled(reminderSettings.checkInReminderEnabled)
+      setCheckInAfterDays(String(reminderSettings.checkInAfterDays))
+    }
+  }, [isCreateMode, reminderSettings])
 
   // Reset form when switching to create mode
   useEffect(() => {
@@ -142,8 +198,16 @@ export function ContactProfilePage() {
       setDateMet("")
       setDateLastTalked("")
       setNotes("")
+      setLikesText("")
+      setDislikesText("")
       setTraits([])
+      setHasKids(false)
+      setKidsNotes("")
       setAvatarAssetId(null)
+      setBirthdayReminderEnabled(false)
+      setBirthdayReminderDaysBefore("7")
+      setCheckInReminderEnabled(false)
+      setCheckInAfterDays("14")
     }
   }, [isCreateMode])
 
@@ -180,6 +244,81 @@ export function ContactProfilePage() {
 
   const handleRemoveTrait = (traitToRemove: string) => {
     setTraits(traits.filter((t) => t !== traitToRemove))
+  }
+
+  const handleCreateProfileBlock = async () => {
+    if (!selectedContactId || !newBlockTitle.trim()) return
+    try {
+      await createProfileBlockMutation.mutateAsync({
+        contactId: selectedContactId,
+        title: newBlockTitle.trim(),
+        body: newBlockBody.trim(),
+        orderIndex: profileBlocks.length,
+        blockType: "text",
+      })
+      setNewBlockTitle("")
+      setNewBlockBody("")
+    } catch (error) {
+      toast.error(
+        "We couldn't add that profile block.",
+        formatToastError(error, "Please try again in a moment."),
+      )
+    }
+  }
+
+  const handleUpdateProfileBlock = async (block: ContactProfileBlock, updates: Partial<ContactProfileBlock>) => {
+    if (!selectedContactId) return
+    try {
+      await updateProfileBlockMutation.mutateAsync({
+        id: block.id,
+        contactId: selectedContactId,
+        updates: {
+          title: updates.title ?? block.title,
+          body: updates.body ?? block.body,
+          orderIndex: updates.orderIndex ?? block.orderIndex,
+          blockType: updates.blockType ?? block.blockType,
+          contactId: selectedContactId,
+        },
+      })
+    } catch (error) {
+      toast.error(
+        "We couldn't update that profile block.",
+        formatToastError(error, "Please try again in a moment."),
+      )
+    }
+  }
+
+  const handleDeleteProfileBlock = async (block: ContactProfileBlock) => {
+    if (!selectedContactId) return
+    try {
+      await deleteProfileBlockMutation.mutateAsync({ id: block.id, contactId: selectedContactId })
+    } catch (error) {
+      toast.error(
+        "We couldn't delete that profile block.",
+        formatToastError(error, "Please try again in a moment."),
+      )
+    }
+  }
+
+  const handleMoveProfileBlock = async (blockId: number, direction: "up" | "down") => {
+    if (!selectedContactId) return
+    const index = profileBlocks.findIndex((block) => block.id === blockId)
+    const nextIndex = direction === "up" ? index - 1 : index + 1
+    if (index < 0 || nextIndex < 0 || nextIndex >= profileBlocks.length) return
+    const nextBlocks = [...profileBlocks]
+    const [moved] = nextBlocks.splice(index, 1)
+    nextBlocks.splice(nextIndex, 0, moved)
+    try {
+      await reorderProfileBlocksMutation.mutateAsync({
+        contactId: selectedContactId,
+        ids: nextBlocks.map((block) => block.id),
+      })
+    } catch (error) {
+      toast.error(
+        "We couldn't reorder those profile blocks.",
+        formatToastError(error, "Please try again in a moment."),
+      )
+    }
   }
 
   const handleAvatarUpload = async () => {
@@ -238,19 +377,27 @@ export function ContactProfilePage() {
           avatarAssetId,
           birthday: birthday || null,
           dateMet: dateMet || null,
+          likes: splitList(likesText),
+          dislikes: splitList(dislikesText),
+          traits: traits.length > 0 ? traits : null,
+          hasKids,
+          kidsNotes: kidsNotes.trim() || null,
           notes: notes.trim() || null,
         })) as Contact
 
-        if (traits.length > 0 && createdContact?.id) {
+        if (createdContact?.id) {
           try {
-            await updateContactMutation.mutateAsync({
-              id: createdContact.id,
-              updates: { traits },
+            await upsertReminderSettingsMutation.mutateAsync({
+              contactId: createdContact.id,
+              birthdayReminderEnabled,
+              birthdayReminderDaysBefore: Number.parseInt(birthdayReminderDaysBefore, 10) || 7,
+              checkInReminderEnabled,
+              checkInAfterDays: Number.parseInt(checkInAfterDays, 10) || 14,
             })
-          } catch (traitError) {
+          } catch (settingsError) {
             toast.error(
-              "The contact was created, but the traits need another try.",
-              formatToastError(traitError, "Please reopen the contact and try again."),
+              "The contact was created, but attention settings need another try.",
+              formatToastError(settingsError, "Please reopen the contact and try again."),
             )
             setCurrentPage("home")
             setSelectedContactId(null)
@@ -270,9 +417,20 @@ export function ContactProfilePage() {
             birthday: birthday || null,
             dateMet: dateMet || null,
             dateLastTalked: dateLastTalked || null,
+            likes: splitList(likesText),
+            dislikes: splitList(dislikesText),
             traits: traits.length > 0 ? traits : null,
+            hasKids,
+            kidsNotes: kidsNotes.trim() || null,
             notes: notes.trim() || null,
           },
+        })
+        await upsertReminderSettingsMutation.mutateAsync({
+          contactId: selectedContactId,
+          birthdayReminderEnabled,
+          birthdayReminderDaysBefore: Number.parseInt(birthdayReminderDaysBefore, 10) || 7,
+          checkInReminderEnabled,
+          checkInAfterDays: Number.parseInt(checkInAfterDays, 10) || 14,
         })
 
         toast.info("Contact updated.", name.trim())
@@ -460,6 +618,51 @@ export function ContactProfilePage() {
           />
         </div>
 
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <label className="text-sm text-[hsl(210_28%_97%)]">Likes</label>
+            <Input
+              type="text"
+              value={likesText}
+              onChange={(e) => setLikesText(e.target.value)}
+              placeholder="Coffee, hiking, sci-fi"
+              className="text-[hsl(210_28%_97%)] placeholder:text-[hsl(220_12%_58%)]"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm text-[hsl(210_28%_97%)]">Dislikes</label>
+            <Input
+              type="text"
+              value={dislikesText}
+              onChange={(e) => setDislikesText(e.target.value)}
+              placeholder="Crowds, early calls"
+              className="text-[hsl(210_28%_97%)] placeholder:text-[hsl(220_12%_58%)]"
+            />
+          </div>
+        </div>
+
+        <label className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.04] px-3 py-2 text-sm text-[hsl(210_28%_97%)]">
+          <input
+            type="checkbox"
+            checked={hasKids}
+            onChange={(e) => setHasKids(e.target.checked)}
+            className="h-4 w-4"
+          />
+          Has kids
+        </label>
+
+        {hasKids && (
+          <div className="space-y-2">
+            <label className="text-sm text-[hsl(210_28%_97%)]">Kids notes</label>
+            <textarea
+              value={kidsNotes}
+              onChange={(e) => setKidsNotes(e.target.value)}
+              rows={3}
+              className="w-full resize-none rounded-xl border border-white/8 bg-white/[0.05] px-3 py-2 text-[hsl(210_28%_97%)] placeholder:text-[hsl(220_12%_58%)]"
+            />
+          </div>
+        )}
+
         {/* Traits - drag and drop */}
         <div className="space-y-2">
           <label className="text-sm text-[hsl(210_28%_97%)]">Traits</label>
@@ -509,6 +712,156 @@ export function ContactProfilePage() {
           </div>
         </div>
       </div>
+
+      <div className="space-y-4 border-t border-white/10 pt-6">
+        <h2 className="text-lg font-medium text-[hsl(210_28%_97%)]">Contact Reminders / Attention</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.04] px-3 py-2 text-sm text-[hsl(210_28%_97%)]">
+            <input
+              type="checkbox"
+              checked={birthdayReminderEnabled}
+              onChange={(e) => setBirthdayReminderEnabled(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Birthday awareness
+          </label>
+          <div className="space-y-2">
+            <label className="text-sm text-[hsl(210_28%_97%)]">Days before birthday</label>
+            <Input
+              type="number"
+              min={0}
+              value={birthdayReminderDaysBefore}
+              onChange={(e) => setBirthdayReminderDaysBefore(e.target.value)}
+              className="text-[hsl(210_28%_97%)]"
+            />
+          </div>
+          <label className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.04] px-3 py-2 text-sm text-[hsl(210_28%_97%)]">
+            <input
+              type="checkbox"
+              checked={checkInReminderEnabled}
+              onChange={(e) => setCheckInReminderEnabled(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Check-in attention
+          </label>
+          <div className="space-y-2">
+            <label className="text-sm text-[hsl(210_28%_97%)]">Check in after days</label>
+            <Input
+              type="number"
+              min={1}
+              value={checkInAfterDays}
+              onChange={(e) => setCheckInAfterDays(e.target.value)}
+              className="text-[hsl(210_28%_97%)]"
+            />
+          </div>
+        </div>
+        <div className="grid gap-3 text-sm text-[hsl(220_12%_72%)] sm:grid-cols-2">
+          <div className="rounded-xl border border-white/8 bg-white/[0.04] p-3">
+            {birthdayAwareness.hasBirthday
+              ? birthdayAwareness.isToday
+                ? "Birthday is today"
+                : birthdayAwareness.isSoon
+                  ? `Birthday in ${birthdayAwareness.daysUntilBirthday} day${birthdayAwareness.daysUntilBirthday === 1 ? "" : "s"}`
+                  : "Birthday saved"
+              : "No birthday saved"}
+          </div>
+          <div className="rounded-xl border border-white/8 bg-white/[0.04] p-3">
+            {checkInAttention.daysSinceLastTalked == null
+              ? "No linked Social interaction yet"
+              : checkInAttention.needsAttention
+                ? `${checkInAttention.daysSinceLastTalked} days since last talked`
+                : `Last talked ${checkInAttention.daysSinceLastTalked} day${checkInAttention.daysSinceLastTalked === 1 ? "" : "s"} ago`}
+          </div>
+        </div>
+      </div>
+
+      {!isCreateMode && (
+        <div className="space-y-4 border-t border-white/10 pt-6">
+          <h2 className="text-lg font-medium text-[hsl(210_28%_97%)]">Profile Grid / Blocks</h2>
+          <div className="space-y-3">
+            {profileBlocks.length === 0 ? (
+              <p className="text-sm text-[hsl(220_12%_58%)]">No profile blocks yet</p>
+            ) : (
+              profileBlocks.map((block, index) => (
+                <div key={block.id} className="space-y-3 rounded-xl border border-white/8 bg-white/[0.04] p-3">
+                  <Input
+                    type="text"
+                    defaultValue={block.title}
+                    onBlur={(e) => {
+                      if (e.target.value.trim() !== block.title) {
+                        void handleUpdateProfileBlock(block, { title: e.target.value.trim() || block.title })
+                      }
+                    }}
+                    className="text-[hsl(210_28%_97%)]"
+                  />
+                  <textarea
+                    defaultValue={block.body}
+                    onBlur={(e) => {
+                      if (e.target.value !== block.body) {
+                        void handleUpdateProfileBlock(block, { body: e.target.value })
+                      }
+                    }}
+                    rows={3}
+                    className="w-full resize-none rounded-xl border border-white/8 bg-white/[0.05] px-3 py-2 text-[hsl(210_28%_97%)]"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={index === 0}
+                      onClick={() => void handleMoveProfileBlock(block.id, "up")}
+                      className="rounded-xl border-white/10 text-[hsl(210_28%_97%)] hover:bg-white/[0.06]"
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={index === profileBlocks.length - 1}
+                      onClick={() => void handleMoveProfileBlock(block.id, "down")}
+                      className="rounded-xl border-white/10 text-[hsl(210_28%_97%)] hover:bg-white/[0.06]"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => void handleDeleteProfileBlock(block)}
+                      className="rounded-xl bg-red-600 text-white hover:bg-red-700"
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="space-y-3 rounded-xl border border-white/8 bg-white/[0.04] p-3">
+            <Input
+              type="text"
+              value={newBlockTitle}
+              onChange={(e) => setNewBlockTitle(e.target.value)}
+              placeholder="Block title"
+              className="text-[hsl(210_28%_97%)] placeholder:text-[hsl(220_12%_58%)]"
+            />
+            <textarea
+              value={newBlockBody}
+              onChange={(e) => setNewBlockBody(e.target.value)}
+              placeholder="Block body"
+              rows={3}
+              className="w-full resize-none rounded-xl border border-white/8 bg-white/[0.05] px-3 py-2 text-[hsl(210_28%_97%)] placeholder:text-[hsl(220_12%_58%)]"
+            />
+            <Button
+              type="button"
+              onClick={() => void handleCreateProfileBlock()}
+              disabled={!newBlockTitle.trim()}
+              className="rounded-xl bg-[hsl(266_73%_63%)] text-white hover:bg-[hsl(266_73%_58%)]"
+            >
+              Add block
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-3 pt-4">
@@ -567,11 +920,16 @@ export function ContactProfilePage() {
                     <span
                       className={cn(
                         "inline-flex rounded px-2 py-0.5 text-xs font-medium border",
-                        getMoodColor(interaction.mood)
+                        getMoodColor(interaction.moodImpact ?? interaction.mood ?? "neutral")
                       )}
                     >
-                      {interaction.mood}
+                      {interaction.moodImpact ?? interaction.mood ?? "neutral"}
                     </span>
+                    {interaction.method && (
+                      <span className="ml-2 inline-flex rounded px-2 py-0.5 text-xs font-medium border border-white/10 text-[hsl(220_12%_72%)]">
+                        {interaction.method}
+                      </span>
+                    )}
                     {interaction.notes && (
                       <span className="block text-sm text-[hsl(210_12%_47%)]">
                         {interaction.notes}

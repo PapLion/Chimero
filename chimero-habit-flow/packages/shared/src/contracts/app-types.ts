@@ -89,6 +89,7 @@ export type EntryUpdateRequest = {
   timestamp?: number
   assetId?: number | null
   tagIds?: number[]
+  socialInteractions?: ContactInteractionDraft[]
 }
 
 export interface BaseEntryRequest {
@@ -99,6 +100,7 @@ export interface BaseEntryRequest {
   timestamp: number
   assetId?: number | null
   tagIds?: number[]
+  socialInteractions?: ContactInteractionDraft[]
 }
 
 export interface GamingEntryReadModel {
@@ -1033,10 +1035,16 @@ export interface Contact {
   id: number
   name: string
   avatarAssetId?: number | null
+  initials?: string | null
   birthday?: string | null
   dateMet?: string | null
   dateLastTalked?: string | null
+  lastTalkedAt?: number | null
+  likes?: string[] | null
+  dislikes?: string[] | null
   traits?: string[] | null
+  hasKids?: boolean | null
+  kidsNotes?: string | null
   notes?: string | null
   createdAt: number | null
 }
@@ -1046,6 +1054,11 @@ export interface ContactInsert {
   avatarAssetId?: number | null
   birthday?: string | null
   dateMet?: string | null
+  likes?: string[] | null
+  dislikes?: string[] | null
+  traits?: string[] | null
+  hasKids?: boolean | null
+  kidsNotes?: string | null
   notes?: string | null
 }
 
@@ -1055,7 +1068,25 @@ export interface ContactUpdate {
   birthday?: string | null
   dateMet?: string | null
   dateLastTalked?: string | null
+  lastTalkedAt?: number | null
+  likes?: string[] | null
+  dislikes?: string[] | null
   traits?: string[] | null
+  hasKids?: boolean | null
+  kidsNotes?: string | null
+  notes?: string | null
+}
+
+export type SocialMethod = 'in-person' | 'call' | 'text' | 'video' | 'other'
+export type SocialMoodImpact = 'positive' | 'negative' | 'neutral'
+export type ContactMoodImpact = SocialMoodImpact
+export type ContactInteractionMethod = SocialMethod
+
+export interface ContactInteractionDraft {
+  contactId: number
+  method?: ContactInteractionMethod | null
+  moodImpact?: ContactMoodImpact | null
+  mood?: ContactMoodImpact | null
   notes?: string | null
 }
 
@@ -1063,7 +1094,9 @@ export interface ContactInteraction {
   id: number
   contactId: number
   entryId?: number | null
-  mood: 'positive' | 'negative' | 'neutral'
+  method?: ContactInteractionMethod | null
+  moodImpact: ContactMoodImpact
+  mood?: ContactMoodImpact
   timestamp: number
   notes?: string | null
 }
@@ -1071,6 +1104,89 @@ export interface ContactInteraction {
 export interface ContactInteractionInsert {
   contactId: number
   entryId?: number | null
-  mood: 'positive' | 'negative' | 'neutral'
+  method?: ContactInteractionMethod | null
+  moodImpact?: ContactMoodImpact | null
+  mood?: ContactMoodImpact | null
   notes?: string | null
+}
+
+export interface CreateSocialEntryRequest extends BaseEntryRequest {
+  socialInteractions: ContactInteractionDraft[]
+}
+
+export interface UpdateSocialEntryRequest extends EntryUpdateRequest {
+  socialInteractions?: ContactInteractionDraft[]
+}
+
+export interface SocialInteractionReadModel {
+  contactId: number
+  contactName?: string | null
+  contactInitials?: string | null
+  method?: SocialMethod | null
+  moodImpact: SocialMoodImpact
+  note?: string | null
+}
+
+export interface SocialEntryReadModel {
+  entryId: number
+  trackerId: number
+  timestamp: number
+  dateStr?: string | null
+  note?: string | null
+  interactions: SocialInteractionReadModel[]
+  tagIds?: number[]
+  assetId?: number | null
+  structured: true
+}
+
+export interface LegacySocialEntryReadModel {
+  entryId: number
+  trackerId: number
+  timestamp: number
+  dateStr?: string | null
+  note?: string | null
+  structured: false
+}
+
+export interface ContactProfileReadModel {
+  contact: Contact
+  reminderSettings?: ContactReminderSettings | null
+  profileBlocks: ContactProfileBlock[]
+  interactions: ContactInteraction[]
+}
+
+export interface ContactReminderSettings {
+  id?: number
+  contactId: number
+  birthdayReminderEnabled: boolean
+  birthdayReminderDaysBefore: number
+  checkInReminderEnabled: boolean
+  checkInAfterDays: number
+  createdAt: number | null
+  updatedAt: number | null
+}
+
+export type ContactReminderSettingsInput = Partial<Omit<ContactReminderSettings, 'id' | 'contactId' | 'createdAt' | 'updatedAt'>> & {
+  contactId: number
+}
+
+export type ContactProfileBlockType = 'text' | 'list' | 'note'
+
+export interface ContactProfileBlock {
+  id: number
+  contactId: number
+  title: string
+  body: string
+  orderIndex: number
+  blockType: ContactProfileBlockType
+  createdAt: number | null
+  updatedAt: number | null
+}
+
+export interface ContactProfileBlockInput {
+  contactId: number
+  title: string
+  body: string
+  orderIndex?: number
+  blockType?: ContactProfileBlockType
 }

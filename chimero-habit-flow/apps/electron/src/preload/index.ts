@@ -8,9 +8,9 @@ const api: ElectronApi = {
   deleteTracker: (id: number) => ipcRenderer.invoke('delete-tracker', id),
   getEntries: (options?: { limit?: number; trackerId?: number }) =>
     ipcRenderer.invoke('get-entries', options),
-  addEntry: (data: { trackerId: number; value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp: number; assetId?: number | null; tagIds?: number[] }) =>
+  addEntry: (data: { trackerId: number; value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp: number; assetId?: number | null; tagIds?: number[]; socialInteractions?: Array<{ contactId: number; method?: string | null; moodImpact?: "positive" | "negative" | "neutral" | null; mood?: "positive" | "negative" | "neutral" | null; notes?: string | null }> }) =>
     ipcRenderer.invoke('add-entry', data),
-  updateEntry: (id: number, updates: { value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp?: number; assetId?: number | null; tagIds?: number[] }) =>
+  updateEntry: (id: number, updates: { value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp?: number; assetId?: number | null; tagIds?: number[]; socialInteractions?: Array<{ contactId: number; method?: string | null; moodImpact?: "positive" | "negative" | "neutral" | null; mood?: "positive" | "negative" | "neutral" | null; notes?: string | null }> }) =>
     ipcRenderer.invoke('update-entry', id, updates),
   deleteEntry: (id: number) => ipcRenderer.invoke('delete-entry', id),
   getQuickEntryContext: () => ipcRenderer.invoke('get-quick-entry-context'),
@@ -99,16 +99,23 @@ const api: ElectronApi = {
   getBookSelectedDaySummary: (trackerId, selectedDate, options) =>
     ipcRenderer.invoke('get-book-selected-day-summary', trackerId, selectedDate, options),
   // Contacts (Personal CRM)
-  getContacts: () => ipcRenderer.invoke('get-contacts'),
+  getContacts: (options?: { sortBy?: 'name' | 'most-talked-to' | 'least-talked-to' }) => ipcRenderer.invoke('get-contacts', options),
   getContact: (id: number) => ipcRenderer.invoke('get-contact', id),
-  createContact: (data: { name: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; notes?: string | null }) =>
+  createContact: (data: { name: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; likes?: string[] | null; dislikes?: string[] | null; traits?: string[] | null; hasKids?: boolean | null; kidsNotes?: string | null; notes?: string | null }) =>
     ipcRenderer.invoke('create-contact', data),
-  updateContact: (id: number, updates: { name?: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; dateLastTalked?: string | null; traits?: string[] | null; notes?: string | null }) =>
+  updateContact: (id: number, updates: { name?: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; dateLastTalked?: string | null; lastTalkedAt?: number | null; likes?: string[] | null; dislikes?: string[] | null; traits?: string[] | null; hasKids?: boolean | null; kidsNotes?: string | null; notes?: string | null }) =>
     ipcRenderer.invoke('update-contact', id, updates),
   deleteContact: (id: number) => ipcRenderer.invoke('delete-contact', id),
-  createContactInteraction: (data: { contactId: number; entryId?: number | null; mood: "positive" | "negative" | "neutral"; notes?: string | null }) =>
+  createContactInteraction: (data: { contactId: number; entryId?: number | null; method?: string | null; moodImpact?: "positive" | "negative" | "neutral" | null; mood?: "positive" | "negative" | "neutral" | null; notes?: string | null }) =>
     ipcRenderer.invoke('create-contact-interaction', data),
   getContactInteractions: (contactId: number) => ipcRenderer.invoke('get-contact-interactions', contactId),
+  getContactReminderSettings: (contactId: number) => ipcRenderer.invoke('get-contact-reminder-settings', contactId),
+  upsertContactReminderSettings: (data) => ipcRenderer.invoke('upsert-contact-reminder-settings', data),
+  getContactProfileBlocks: (contactId: number) => ipcRenderer.invoke('get-contact-profile-blocks', contactId),
+  createContactProfileBlock: (data) => ipcRenderer.invoke('create-contact-profile-block', data),
+  updateContactProfileBlock: (id, updates) => ipcRenderer.invoke('update-contact-profile-block', id, updates),
+  deleteContactProfileBlock: (id) => ipcRenderer.invoke('delete-contact-profile-block', id),
+  reorderContactProfileBlocks: (contactId, ids) => ipcRenderer.invoke('reorder-contact-profile-blocks', contactId, ids),
   // Exercise DB
   searchExercises: (query: string, limit?: number) => ipcRenderer.invoke('search-exercises', { query, limit }),
   getAllExercises: (limit?: number) => ipcRenderer.invoke('get-all-exercises', { limit }),

@@ -273,7 +273,12 @@ export const contacts = sqliteTable("contacts", {
   birthday: text("birthday"), // ISO date string "YYYY-MM-DD"
   dateMet: text("date_met"), // ISO date string "YYYY-MM-DD"
   dateLastTalked: text("date_last_talked"), // ISO date string "YYYY-MM-DD"
+  lastTalkedAt: integer("last_talked_at"),
+  likes: text("likes"), // JSON string array
+  dislikes: text("dislikes"), // JSON string array
   traits: text("traits"), // JSON string array, ej: '["honest","funny","reliable"]'
+  hasKids: integer("has_kids", { mode: "boolean" }).default(false),
+  kidsNotes: text("kids_notes"),
   notes: text("notes"),
   createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
 });
@@ -284,6 +289,35 @@ export const contactInteractions = sqliteTable("contact_interactions", {
   contactId: integer("contact_id").references(() => contacts.id, { onDelete: "cascade" }).notNull(),
   entryId: integer("entry_id").references(() => entries.id, { onDelete: "set null" }), // FK a entries (opcional)
   mood: text("mood", { enum: ["positive", "negative", "neutral"] }).notNull(),
+  moodImpact: text("mood_impact", { enum: ["positive", "negative", "neutral"] }).default("neutral"),
+  method: text("method"),
   timestamp: integer("timestamp").notNull(),
   notes: text("notes"),
 });
+
+export const contactReminderSettings = sqliteTable("contact_reminder_settings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  contactId: integer("contact_id").references(() => contacts.id, { onDelete: "cascade" }).notNull(),
+  birthdayReminderEnabled: integer("birthday_reminder_enabled", { mode: "boolean" }).notNull().default(false),
+  birthdayReminderDaysBefore: integer("birthday_reminder_days_before").notNull().default(7),
+  checkInReminderEnabled: integer("check_in_reminder_enabled", { mode: "boolean" }).notNull().default(false),
+  checkInAfterDays: integer("check_in_after_days").notNull().default(14),
+  createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
+  updatedAt: integer("updated_at").default(sql`(strftime('%s', 'now') * 1000)`),
+}, (t) => ({
+  contactUnique: uniqueIndex("contact_reminder_settings_contact_unique").on(t.contactId),
+}));
+
+export const contactProfileBlocks = sqliteTable("contact_profile_blocks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  contactId: integer("contact_id").references(() => contacts.id, { onDelete: "cascade" }).notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  orderIndex: integer("order_index").notNull().default(0),
+  blockType: text("block_type", { enum: ["text", "list", "note"] }).notNull().default("text"),
+  createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
+  updatedAt: integer("updated_at").default(sql`(strftime('%s', 'now') * 1000)`),
+}, (t) => ({
+  contactIdx: index("contact_profile_blocks_contact_idx").on(t.contactId),
+  orderIdx: index("contact_profile_blocks_order_idx").on(t.contactId, t.orderIndex),
+}));

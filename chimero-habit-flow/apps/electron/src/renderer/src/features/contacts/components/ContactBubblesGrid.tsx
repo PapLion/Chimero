@@ -18,7 +18,8 @@ interface ContactBubblesGridProps {
 }
 
 export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProps) {
-  const { data: contacts = [], isLoading } = useContacts()
+  const [sortBy, setSortBy] = useState<"name" | "most-talked-to" | "least-talked-to">("name")
+  const { data: contacts = [], isLoading } = useContacts({ sortBy })
   const { setCurrentPage, setSelectedContactId } = useAppStore()
 
   const [searchQuery, setSearchQuery] = useState("")
@@ -139,13 +140,24 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
   return (
     <div className="space-y-4">
       {/* Search Input */}
-      <Input
-        type="text"
-        placeholder="Search..."
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        className="text-[hsl(210_28%_97%)] placeholder:text-[hsl(220_12%_58%)]"
-      />
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+        <Input
+          type="text"
+          placeholder="Search..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="text-[hsl(210_28%_97%)] placeholder:text-[hsl(220_12%_58%)]"
+        />
+        <select
+          value={sortBy}
+          onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
+          className="rounded-xl border border-white/8 bg-white/[0.05] px-3 py-2 text-sm text-[hsl(210_28%_97%)]"
+        >
+          <option value="name">Name</option>
+          <option value="most-talked-to">Most talked to</option>
+          <option value="least-talked-to">Least talked to</option>
+        </select>
+      </div>
 
       {/* Bubbles Grid */}
       <div className="flex flex-wrap gap-3">

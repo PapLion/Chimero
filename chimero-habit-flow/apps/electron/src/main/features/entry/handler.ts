@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { and, desc, eq, sql } from 'drizzle-orm'
-import { books, bookActivities, entries, entriesToTags, entryFood, entryGaming, entryHealth, entryIntake, entryWeight, intakeItems, symptoms, trackers } from '@packages/db'
+import { books, bookActivities, contactInteractions, contacts, entries, entriesToTags, entryFood, entryGaming, entryHealth, entryIntake, entryWeight, intakeItems, symptoms, trackers } from '@packages/db'
 import { getDb as db } from '@packages/db/database'
 import { mapEntry, mapTracker } from '../../shared/mappers'
 import type { BaseEntryRequest, EntryUpdateRequest, QuickEntryContextResponse } from '@contracts/contracts'
@@ -11,6 +11,45 @@ import { getEntryTagIds, getTags, replaceEntryTags } from '../tags/service'
 function formatDateStr(timestamp: number): string {
   const d = new Date(timestamp)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function normalizeSocialInteractions(data: BaseEntryRequest | EntryUpdateRequest) {
+  return (data.socialInteractions ?? [])
+    .map((interaction) => ({
+      contactId: Number(interaction.contactId),
+      method: interaction.method ?? null,
+      moodImpact: interaction.moodImpact ?? interaction.mood ?? 'neutral',
+      notes: interaction.notes ?? null,
+    }))
+    .filter((interaction) => Number.isInteger(interaction.contactId) && interaction.contactId > 0)
+}
+
+function toContactIdRows(rows: unknown): Array<{ contactId: number }> {
+  if (Array.isArray(rows)) return rows as Array<{ contactId: number }>
+  if (rows && typeof (rows as Iterable<unknown>)[Symbol.iterator] === 'function') {
+    return Array.from(rows as Iterable<{ contactId: number }>)
+  }
+  return []
+}
+
+async function refreshContactsLastTalked(tx: any, contactIds: number[]): Promise<void> {
+  const uniqueIds = Array.from(new Set(contactIds)).filter((id) => Number.isInteger(id) && id > 0)
+  for (const contactId of uniqueIds) {
+    const [latest] = await tx
+      .select({ timestamp: contactInteractions.timestamp })
+      .from(contactInteractions)
+      .where(eq(contactInteractions.contactId, contactId))
+      .orderBy(desc(contactInteractions.timestamp))
+      .limit(1)
+    const timestamp = latest?.timestamp ?? null
+    await tx
+      .update(contacts)
+      .set({
+        lastTalkedAt: timestamp,
+        dateLastTalked: timestamp == null ? null : formatDateStr(timestamp),
+      })
+      .where(eq(contacts.id, contactId))
+  }
 }
 
 async function isGamingTracker(trackerId: number): Promise<boolean> {
@@ -240,6 +279,21 @@ export function registerEntryHandlers(): void {
           })
           .returning()
         if (!row) return null
+        const socialInteractions = normalizeSocialInteractions(data)
+        if (socialInteractions.length > 0) {
+          for (const interaction of socialInteractions) {
+            await tx.insert(contactInteractions).values({
+              contactId: interaction.contactId,
+              entryId: row.id,
+              mood: interaction.moodImpact,
+              moodImpact: interaction.moodImpact,
+              method: interaction.method,
+              timestamp: data.timestamp,
+              notes: interaction.notes,
+            })
+          }
+          await refreshContactsLastTalked(tx, socialInteractions.map((interaction) => interaction.contactId))
+        }
         await replaceEntryTags((row as { id: number }).id, data.tagIds, tx)
         return (row as { id: number }).id
       })
@@ -310,6 +364,31 @@ export function registerEntryHandlers(): void {
         if (Object.keys(set).length > 0) {
           await tx.update(entries).set(set).where(eq(entries.id, id))
         }
+        if (updates.socialInteractions !== undefined) {
+          const existingContactRows = await tx
+            .select({ contactId: contactInteractions.contactId })
+            .from(contactInteractions)
+            .where(eq(contactInteractions.entryId, id))
+          const existingContactIds = toContactIdRows(existingContactRows).map((row) => row.contactId)
+          await tx.delete(contactInteractions).where(eq(contactInteractions.entryId, id))
+          const nextTimestamp = updates.timestamp ?? Number(existing.trackerId ? (await tx.select({ timestamp: entries.timestamp }).from(entries).where(eq(entries.id, id)).limit(1))[0]?.timestamp : Date.now())
+          const socialInteractions = normalizeSocialInteractions(updates)
+          for (const interaction of socialInteractions) {
+            await tx.insert(contactInteractions).values({
+              contactId: interaction.contactId,
+              entryId: id,
+              mood: interaction.moodImpact,
+              moodImpact: interaction.moodImpact,
+              method: interaction.method,
+              timestamp: nextTimestamp,
+              notes: interaction.notes,
+            })
+          }
+          await refreshContactsLastTalked(tx, [
+            ...existingContactIds,
+            ...socialInteractions.map((interaction) => interaction.contactId),
+          ])
+        }
         await replaceEntryTags(id, updates.tagIds, tx)
         const [row] = await tx.select().from(entries).where(eq(entries.id, id))
         return row ?? null
@@ -362,12 +441,19 @@ export function registerEntryHandlers(): void {
 
       const database = db()
       await database.transaction(async (tx) => {
+        const linkedContactRows = await tx
+          .select({ contactId: contactInteractions.contactId })
+          .from(contactInteractions)
+          .where(eq(contactInteractions.entryId, id))
+        const linkedContactIds = toContactIdRows(linkedContactRows).map((row) => row.contactId)
+        await tx.delete(contactInteractions).where(eq(contactInteractions.entryId, id))
         await tx.delete(entriesToTags).where(eq(entriesToTags.entryId, id))
         await tx.delete(entryGaming).where(eq(entryGaming.entryId, id))
         await tx.delete(entryIntake).where(eq(entryIntake.entryId, id))
         await tx.delete(bookActivities).where(eq(bookActivities.entryId, id))
         await tx.delete(entryWeight).where(eq(entryWeight.entryId, id))
         await tx.delete(entries).where(eq(entries.id, id))
+        await refreshContactsLastTalked(tx, linkedContactIds)
       })
       return true
     } catch (e) {

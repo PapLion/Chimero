@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useBooks, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useAddFoodEntryMutation, useAddIntakeEntryMutation, useAddHealthSymptomEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useCreateContactInteractionMutation, useTags, useCreateTagMutation } from "@shared/queries"
+import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useBooks, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useAddFoodEntryMutation, useAddIntakeEntryMutation, useAddHealthSymptomEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
 import { cn } from "@shared/utils"
 import { getEntryConfig } from "../entry-config"
 import type { Entry, Tracker } from "@shared/store"
@@ -79,7 +79,6 @@ export function QuickEntry() {
   const readBookMutation = useReadBookMutation()
   const finishBookMutation = useFinishBookMutation()
   const createTagMutation = useCreateTagMutation()
-  const createContactInteractionMutation = useCreateContactInteractionMutation()
   const toast = useToast()
 
   const [search, setSearch] = useState("")
@@ -495,6 +494,7 @@ export function QuickEntry() {
         return
       }
 
+      const timestamp = Date.now()
       await addEntryMutation.mutateAsync({
         trackerId: selectedTracker,
         value: entryValue,
@@ -502,32 +502,22 @@ export function QuickEntry() {
         assetId: selectedAssetId,
         tagIds: selectedTagIds,
         metadata: {},
-        timestamp: Date.now(),
+        timestamp,
+        socialInteractions: isSocialTracker
+          ? selectedContacts.map((contact) => ({
+              contactId: contact.contactId,
+              moodImpact: contact.mood,
+              method: "other",
+              notes: entryNote,
+            }))
+          : undefined,
       })
 
       if (isSocialTracker && selectedContacts.length > 0) {
-        try {
-          await Promise.all(
-            selectedContacts.map((contact) =>
-              createContactInteractionMutation.mutateAsync({
-                contactId: contact.contactId,
-                mood: contact.mood,
-                entryId: null,
-                notes: entryNote,
-              }),
-            ),
-          )
-
-          toast.success(
-            "Check-in saved.",
-            `You logged time with ${selectedContacts.length} contact${selectedContacts.length === 1 ? "" : "s"}.`,
-          )
-        } catch (interactionError) {
-          toast.error(
-            "Your activity was saved, but the contact check-in could not finish.",
-            formatToastError(interactionError, "Please try again in a moment."),
-          )
-        }
+        toast.success(
+          "Check-in saved.",
+          `You logged time with ${selectedContacts.length} contact${selectedContacts.length === 1 ? "" : "s"}.`,
+        )
       } else {
         toast.success("Entry saved.", trackerData.name)
       }
@@ -547,7 +537,6 @@ export function QuickEntry() {
     addGamingEntryMutation,
     addFoodEntryMutation,
     addHealthSymptomEntryMutation,
-    createContactInteractionMutation,
     isSubmitting,
     healthCategory,
     healthSymptomName,

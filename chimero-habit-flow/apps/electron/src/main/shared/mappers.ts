@@ -1,6 +1,9 @@
 import type {
   Contact,
   ContactInteraction,
+  ContactProfileBlock,
+  ContactReminderSettings,
+  SocialMethod,
   Entry,
   MealType,
   Reminder,
@@ -22,6 +25,18 @@ function parseJsonObject(value: unknown): Record<string, unknown> {
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
   } catch {
     return {}
+  }
+}
+
+function parseJsonArray(value: unknown): string[] | null {
+  if (!value) return null
+  if (Array.isArray(value)) return value.map((item) => String(item))
+  if (typeof value !== 'string') return null
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)) : null
+  } catch {
+    return null
   }
 }
 
@@ -263,37 +278,70 @@ export function mapAsset(row: Record<string, unknown>): AssetWithUrls {
 }
 
 export function mapContact(row: Record<string, unknown>): Contact {
-  const traitsRaw = row.traits
-  let traits: string[] | null = null
-  if (traitsRaw && typeof traitsRaw === 'string') {
-    try {
-      traits = JSON.parse(traitsRaw)
-    } catch {
-      // ignore invalid JSON
-    }
-  } else if (Array.isArray(traitsRaw)) {
-    traits = traitsRaw as string[]
-  }
+  const name = (row.name as string) ?? ''
+  const dateLastTalked = (row.dateLastTalked ?? row.date_last_talked) as string | null
+  const lastTalkedAtRaw = row.lastTalkedAt ?? row.last_talked_at
   return {
     id: row.id as number,
-    name: (row.name as string) ?? '',
+    name,
     avatarAssetId: (row.avatarAssetId ?? row.avatar_asset_id) as number | null,
+    initials: name.trim().split(/\s+/).filter(Boolean).map((part) => part[0]).slice(0, 2).join('').toUpperCase() || null,
     birthday: (row.birthday as string) ?? null,
     dateMet: (row.dateMet ?? row.date_met) as string | null,
-    dateLastTalked: (row.dateLastTalked ?? row.date_last_talked) as string | null,
-    traits,
+    dateLastTalked,
+    lastTalkedAt: lastTalkedAtRaw == null
+      ? (dateLastTalked ? Date.parse(`${dateLastTalked}T00:00:00Z`) : null)
+      : Number(lastTalkedAtRaw),
+    likes: parseJsonArray(row.likes),
+    dislikes: parseJsonArray(row.dislikes),
+    traits: parseJsonArray(row.traits),
+    hasKids: row.hasKids !== undefined || row.has_kids !== undefined ? !!(row.hasKids ?? row.has_kids) : null,
+    kidsNotes: (row.kidsNotes ?? row.kids_notes) as string | null,
     notes: (row.notes as string) ?? null,
     createdAt: (row.createdAt ?? row.created_at) as number | null,
   }
 }
 
 export function mapContactInteraction(row: Record<string, unknown>): ContactInteraction {
+  const moodImpact = (row.moodImpact ?? row.mood_impact ?? row.mood ?? 'neutral') as 'positive' | 'negative' | 'neutral'
+  const methodRaw = row.method
+  const method = typeof methodRaw === 'string' && ['in-person', 'call', 'text', 'video', 'other'].includes(methodRaw)
+    ? methodRaw as SocialMethod
+    : null
   return {
     id: row.id as number,
     contactId: (row.contactId ?? row.contact_id) as number,
     entryId: (row.entryId ?? row.entry_id) as number | null,
-    mood: (row.mood as 'positive' | 'negative' | 'neutral') ?? 'neutral',
+    method,
+    moodImpact,
+    mood: moodImpact,
     timestamp: row.timestamp as number,
     notes: (row.notes as string) ?? null,
+  }
+}
+
+export function mapContactReminderSettings(row: Record<string, unknown>): ContactReminderSettings {
+  return {
+    id: row.id as number,
+    contactId: (row.contactId ?? row.contact_id) as number,
+    birthdayReminderEnabled: !!(row.birthdayReminderEnabled ?? row.birthday_reminder_enabled),
+    birthdayReminderDaysBefore: Number(row.birthdayReminderDaysBefore ?? row.birthday_reminder_days_before ?? 7),
+    checkInReminderEnabled: !!(row.checkInReminderEnabled ?? row.check_in_reminder_enabled),
+    checkInAfterDays: Number(row.checkInAfterDays ?? row.check_in_after_days ?? 14),
+    createdAt: (row.createdAt ?? row.created_at) as number | null,
+    updatedAt: (row.updatedAt ?? row.updated_at) as number | null,
+  }
+}
+
+export function mapContactProfileBlock(row: Record<string, unknown>): ContactProfileBlock {
+  return {
+    id: row.id as number,
+    contactId: (row.contactId ?? row.contact_id) as number,
+    title: (row.title as string) ?? '',
+    body: (row.body as string) ?? '',
+    orderIndex: Number(row.orderIndex ?? row.order_index ?? 0),
+    blockType: (row.blockType ?? row.block_type ?? 'text') as ContactProfileBlock['blockType'],
+    createdAt: (row.createdAt ?? row.created_at) as number | null,
+    updatedAt: (row.updatedAt ?? row.updated_at) as number | null,
   }
 }

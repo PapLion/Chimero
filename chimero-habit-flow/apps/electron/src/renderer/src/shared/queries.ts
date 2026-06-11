@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type { Tracker, Entry } from './store'
-import type { BaseEntryRequest, Book, BookActivityResponse, BookResponse, CreateBookActivityRequest, CreateBookRequest, CreateFoodEntryRequest, CreateGamingEntryRequest, CreateHealthSymptomRequest, CreateIntakeEntryRequest, CreateWeightEntryRequest, EntryUpdateRequest, FoodDetailResponse, FoodEntryResponse, GamingDetailResponse, GamingEntryResponse, HealthDetailResponse, HealthHomeWidgetReadModel, HealthSymptomResponse, IntakeDetailResponse, IntakeEntryResponse, IntakeHomeWidgetReadModel, SetTrackerGoalRequest, TrackerConfig, UpdateBookActivityRequest, UpdateBookRequest, UpdateFoodEntryRequest, UpdateGamingEntryRequest, UpdateHealthSymptomRequest, UpdateIntakeEntryRequest, UpdateWeightEntryRequest } from '@contracts/contracts'
+import type { BaseEntryRequest, Book, BookActivityResponse, BookResponse, ContactInteractionInsert, ContactProfileBlockInput, ContactReminderSettingsInput, ContactUpdate, CreateBookActivityRequest, CreateBookRequest, CreateFoodEntryRequest, CreateGamingEntryRequest, CreateHealthSymptomRequest, CreateIntakeEntryRequest, CreateWeightEntryRequest, EntryUpdateRequest, FoodDetailResponse, FoodEntryResponse, GamingDetailResponse, GamingEntryResponse, HealthDetailResponse, HealthHomeWidgetReadModel, HealthSymptomResponse, IntakeDetailResponse, IntakeEntryResponse, IntakeHomeWidgetReadModel, SetTrackerGoalRequest, TrackerConfig, UpdateBookActivityRequest, UpdateBookRequest, UpdateFoodEntryRequest, UpdateGamingEntryRequest, UpdateHealthSymptomRequest, UpdateIntakeEntryRequest, UpdateWeightEntryRequest } from '@contracts/contracts'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
 export const queryKeys = {
@@ -49,8 +49,11 @@ export const queryKeys = {
   bookRoot: ['book'] as const,
   // Contacts
   contacts: ['contacts'] as const,
+  contactsSorted: (sortBy?: 'name' | 'most-talked-to' | 'least-talked-to') => ['contacts', sortBy ?? 'name'] as const,
   contact: (id: number) => ['contact', id] as const,
   contactInteractions: (contactId: number) => ['contact-interactions', contactId] as const,
+  contactReminderSettings: (contactId: number) => ['contact-reminder-settings', contactId] as const,
+  contactProfileBlocks: (contactId: number) => ['contact-profile-blocks', contactId] as const,
 }
 
 export function useTrackers() {
@@ -282,7 +285,7 @@ export function useAddEntryMutation() {
   return useMutation({
     mutationFn: (data: BaseEntryRequest) =>
       api.addEntry(data),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       // Invalidate and refetch all entry-related data so widgets update immediately
       qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
       qc.invalidateQueries({ queryKey: queryKeys.recentTrackersRoot })
@@ -290,6 +293,12 @@ export function useAddEntryMutation() {
       qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
       qc.invalidateQueries({ queryKey: queryKeys.moodAggregatesRoot })
       qc.invalidateQueries({ queryKey: queryKeys.taskEntriesRoot })
+      if (variables.socialInteractions && variables.socialInteractions.length > 0) {
+        qc.invalidateQueries({ queryKey: queryKeys.contacts })
+        variables.socialInteractions.forEach((interaction) => {
+          qc.invalidateQueries({ queryKey: queryKeys.contactInteractions(interaction.contactId) })
+        })
+      }
       // Ensure active queries refetch immediately for a snappy dashboard experience
       qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
       qc.refetchQueries({ queryKey: queryKeys.stats, type: 'active' })
@@ -789,10 +798,10 @@ export function useDeleteEntryMutation() {
 
 // === CONTACTS (Personal CRM) ===
 
-export function useContacts() {
+export function useContacts(options?: { sortBy?: 'name' | 'most-talked-to' | 'least-talked-to' }) {
   return useQuery({
-    queryKey: queryKeys.contacts,
-    queryFn: () => api.getContacts(),
+    queryKey: queryKeys.contactsSorted(options?.sortBy),
+    queryFn: () => api.getContacts(options),
     staleTime: 30_000,
   })
 }
@@ -815,10 +824,28 @@ export function useContactInteractions(contactId: number) {
   })
 }
 
+export function useContactReminderSettings(contactId: number) {
+  return useQuery({
+    queryKey: queryKeys.contactReminderSettings(contactId),
+    queryFn: () => api.getContactReminderSettings(contactId),
+    enabled: !!contactId,
+    staleTime: 30_000,
+  })
+}
+
+export function useContactProfileBlocks(contactId: number) {
+  return useQuery({
+    queryKey: queryKeys.contactProfileBlocks(contactId),
+    queryFn: () => api.getContactProfileBlocks(contactId),
+    enabled: !!contactId,
+    staleTime: 15_000,
+  })
+}
+
 export function useCreateContactMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { name: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; notes?: string | null }) =>
+    mutationFn: (data: { name: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; likes?: string[] | null; dislikes?: string[] | null; traits?: string[] | null; hasKids?: boolean | null; kidsNotes?: string | null; notes?: string | null }) =>
       api.createContact(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.contacts })
@@ -829,7 +856,7 @@ export function useCreateContactMutation() {
 export function useUpdateContactMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, updates }: { id: number; updates: { name?: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; dateLastTalked?: string | null; traits?: string[] | null; notes?: string | null } }) =>
+    mutationFn: ({ id, updates }: { id: number; updates: ContactUpdate }) =>
       api.updateContact(id, updates),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.contacts })
@@ -850,11 +877,65 @@ export function useDeleteContactMutation() {
 export function useCreateContactInteractionMutation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { contactId: number; entryId?: number | null; mood: "positive" | "negative" | "neutral"; notes?: string | null }) =>
+    mutationFn: (data: ContactInteractionInsert) =>
       api.createContactInteraction(data),
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: queryKeys.contactInteractions(variables.contactId) })
       qc.invalidateQueries({ queryKey: queryKeys.contacts })
+    },
+  })
+}
+
+export function useUpsertContactReminderSettingsMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: ContactReminderSettingsInput) => api.upsertContactReminderSettings(data),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.contactReminderSettings(variables.contactId) })
+      qc.invalidateQueries({ queryKey: queryKeys.contacts })
+    },
+  })
+}
+
+export function useCreateContactProfileBlockMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: ContactProfileBlockInput) => api.createContactProfileBlock(data),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.contactProfileBlocks(variables.contactId) })
+    },
+  })
+}
+
+export function useUpdateContactProfileBlockMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, updates, contactId }: { id: number; updates: Partial<ContactProfileBlockInput>; contactId: number }) =>
+      api.updateContactProfileBlock(id, updates).then((block) => ({ block, contactId })),
+    onSuccess: ({ contactId }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.contactProfileBlocks(contactId) })
+    },
+  })
+}
+
+export function useDeleteContactProfileBlockMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, contactId }: { id: number; contactId: number }) =>
+      api.deleteContactProfileBlock(id).then((ok) => ({ ok, contactId })),
+    onSuccess: ({ contactId }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.contactProfileBlocks(contactId) })
+    },
+  })
+}
+
+export function useReorderContactProfileBlocksMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ contactId, ids }: { contactId: number; ids: number[] }) =>
+      api.reorderContactProfileBlocks(contactId, ids),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.contactProfileBlocks(variables.contactId) })
     },
   })
 }

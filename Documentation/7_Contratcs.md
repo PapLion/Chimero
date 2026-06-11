@@ -25,7 +25,7 @@ This is the master index for current tracker/product contracts. It summarizes wh
 
 | Tracker | Status | Current contract state |
 | --- | --- | --- |
-| Social / CRM | Partial | Client-confirmed and important, but still partial. Needs a structured contact interaction model, contact detail, birthdays, likes/dislikes/traits/notes, history per contact, and honest stats. |
+| Social / CRM | Partial foundation implemented | Linked Social interaction foundation is implemented for new structured Social entries, with expanded contact CRM fields, persisted reminder/attention settings, profile blocks with move up/down reorder, and frequency sorting from linked interactions. Legacy `contact_interactions.entryId = null` rows remain readable legacy data and are not backfilled. No Mood correlation UI, AI suggestions, OS-level notifications, contact import/sync, unsafe legacy backfill, or draggable/masonry guarantee is implemented. |
 | Exercise / Gym | Partial | Client-confirmed and important, but still partial. Needs structured workouts/routines/exercises/sets/reps/load/history/statistics. |
 | Diet / Food / Calories | Complete | Structured Food logs are implemented on the Diet identity. Legacy generic Diet rows remain readable as unstructured history, but new Food flows should use the structured food contract instead of generic calories-only writes. |
 
@@ -46,7 +46,7 @@ This is the master index for current tracker/product contracts. It summarizes wh
 
 ## Current contract roadmap
 
-1. Social / CRM structured contract and implementation.
+1. Social / CRM follow-up for full dedicated read models, structured Edit Entry, Calendar/Home enrichment, and renderer coverage beyond the shipped foundation.
 2. Exercise / Gym structured contract and implementation.
 3. Health / Symptoms contract creation.
 4. Sleep contract creation.
@@ -55,7 +55,7 @@ This is the master index for current tracker/product contracts. It summarizes wh
 7. Hydration only if reprioritized.
 
 Why this order:
-- Social and Exercise are confirmed deep systems.
+- Social now has a safe linked-interaction/CRM foundation, but still needs deeper surface read models before it can be called complete. Exercise remains a confirmed deep system.
 - Health should exist before deep Food/Vitamins correlations.
 - Vitamins / Medications now has a structured combined foundation, but correlation/advice/schedule work remains future.
 - Hydration remains backburner.
