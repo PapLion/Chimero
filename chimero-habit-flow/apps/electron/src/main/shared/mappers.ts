@@ -4,6 +4,7 @@ import type {
   ContactProfileBlock,
   ContactReminderSettings,
   SocialMethod,
+  SocialInteractionReadModel,
   Entry,
   MealType,
   Reminder,
@@ -38,6 +39,26 @@ function parseJsonArray(value: unknown): string[] | null {
   } catch {
     return null
   }
+}
+
+function mapSocialInteractions(value: unknown): SocialInteractionReadModel[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const interactions: SocialInteractionReadModel[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const row = item as Record<string, unknown>
+    const contactId = Number(row.contactId ?? row.contact_id)
+    if (!Number.isInteger(contactId) || contactId <= 0) continue
+    interactions.push({
+      contactId,
+      contactName: (row.contactName ?? row.contact_name ?? null) as string | null,
+      contactInitials: (row.contactInitials ?? row.contact_initials ?? null) as string | null,
+      method: (row.method ?? null) as SocialInteractionReadModel['method'],
+      moodImpact: (row.moodImpact ?? row.mood_impact ?? row.mood ?? 'neutral') as SocialInteractionReadModel['moodImpact'],
+      note: (row.note ?? row.notes ?? null) as string | null,
+    })
+  }
+  return interactions.length > 0 ? interactions : undefined
 }
 
 export function schemaTypeToUI(type: string, config: Record<string, unknown>): string {
@@ -96,6 +117,7 @@ export function mapEntry(row: Record<string, unknown>): Entry {
   const bookTitle = row.bookTitle ?? row.book_title
   const bookTitleKey = row.bookTitleKey ?? row.book_title_key
   const bookActivityType = row.bookActivityType ?? row.book_activity_type
+  const socialInteractions = mapSocialInteractions(row.socialInteractions ?? row.social_interactions)
   return {
     id: row.id as number,
     trackerId: (row.trackerId ?? row.tracker_id) as number,
@@ -158,6 +180,7 @@ export function mapEntry(row: Record<string, unknown>): Entry {
             activityType: bookActivityType as 'started' | 'read' | 'finished',
           }
         : undefined,
+    socialInteractions,
   }
 }
 

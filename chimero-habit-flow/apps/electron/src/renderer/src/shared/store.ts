@@ -3,7 +3,7 @@ import type { Tracker, Entry, TrackerConfig, Reminder } from "@contracts/contrac
 
 export type { Tracker, Entry, TrackerConfig, Reminder }
 export type TrackerType = Tracker["type"]
-export type PageType = "home" | "calendar" | "assets" | "custom-trackers" | "tracking" | "stats" | "contact"
+export type PageType = "home" | "calendar" | "assets" | "custom-trackers" | "tracking" | "stats" | "contacts" | "contact"
 export type AssetCategory = "games" | "books" | "tv" | "apps" | "person" | "other"
 export type AssetType = "svg" | "png" | "jpg" | "gif" | "webp" | "other"
 
@@ -30,7 +30,7 @@ export interface Asset {
 interface AppState {
   activeTracker: number | null
   currentPage: PageType
-  selectedContactId: number | null  // For contact profile page - null means "create new", number means "edit existing"
+  selectedContactId: number | null | undefined  // undefined means contacts list, null means create new, number means edit existing
   sidebarCollapsed: boolean
   commandBarOpen: boolean
   isQuickEntryOpen: boolean
@@ -38,7 +38,7 @@ interface AppState {
   selectedDate: Date
   setActiveTracker: (id: number | null) => void
   setCurrentPage: (page: PageType) => void
-  setSelectedContactId: (id: number | null) => void
+  setSelectedContactId: (id: number | null | undefined) => void
   toggleSidebar: () => void
   toggleCommandBar: () => void
   setQuickEntryOpen: (open: boolean) => void
@@ -60,7 +60,7 @@ export const useAppStore = create<AppState>((set) => ({
   isNotificationsOpen: false,
   selectedDate: new Date(),
   setActiveTracker: (id) => set({ activeTracker: id }),
-  setCurrentPage: (page) => set((state) => ({ currentPage: page, selectedContactId: page === "contact" ? state.selectedContactId : null })),
+  setCurrentPage: (page) => set((state) => ({ currentPage: page, selectedContactId: page === "contact" ? state.selectedContactId : undefined })),
   setSelectedContactId: (id) => set({ selectedContactId: id }),
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   toggleCommandBar: () => set((state) => ({ commandBarOpen: !state.commandBarOpen })),

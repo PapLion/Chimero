@@ -22,7 +22,7 @@ import { formatToastError, useToast } from "@shared/components/toast"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Activity, Calendar, Flame, Book, Gamepad2, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, ImageIcon, X, Tv, BookmarkPlus, BookOpen, BookMarked, CheckCheck, type LucideIcon } from "lucide-react"
 import { clampMoodScore } from "@contracts/domain"
 import { getTrackerIdentity, isBooksTracker } from "@contracts/features/tracking"
-import type { IntakeItemType, MealType } from "@contracts/contracts"
+import type { IntakeItemType, MealType, SocialMethod } from "@contracts/contracts"
 
 const iconMap: Record<string, LucideIcon> = {
   scale: Scale,
@@ -102,6 +102,7 @@ export function QuickEntry() {
 
   // Selected contacts for Social trackers
   const [selectedContacts, setSelectedContacts] = useState<ContactMoodSelection[]>([])
+  const [socialMethod, setSocialMethod] = useState<SocialMethod>("text")
 
   // Selected exercises for Exercise trackers
   const [selectedExercises, setSelectedExercises] = useState<SelectedExercise[]>([])
@@ -209,6 +210,7 @@ export function QuickEntry() {
       setReminderTime("")
       setLinkedTrackerId(undefined)
       setSelectedContacts([])
+      setSocialMethod("text")
       setSelectedExercises([])
     } else {
       if (activeTracker) {
@@ -238,6 +240,7 @@ export function QuickEntry() {
       setReminderDate("")
       setReminderTime("")
       setSelectedContacts([])
+      setSocialMethod("text")
       setSelectedExercises([])
     }
   }, [commandBarOpen, activeTracker])
@@ -507,7 +510,7 @@ export function QuickEntry() {
           ? selectedContacts.map((contact) => ({
               contactId: contact.contactId,
               moodImpact: contact.mood,
-              method: "other",
+              method: socialMethod,
               notes: entryNote,
             }))
           : undefined,
@@ -544,6 +547,7 @@ export function QuickEntry() {
     mealType,
     selectedAssetId,
     selectedContacts,
+    socialMethod,
     selectedExercises,
     selectedTagIds,
     selectedTracker,
@@ -1076,7 +1080,23 @@ export function QuickEntry() {
                     </div>
                   </div>
                 ) : isSocialTracker ? (
-                  <div className="mb-4">
+                  <div className="mb-4 space-y-4">
+                    <div>
+                      <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                        Method
+                      </label>
+                      <select
+                        value={socialMethod}
+                        onChange={(event) => setSocialMethod(event.target.value as SocialMethod)}
+                        className="h-12 w-full rounded-xl border border-white/8 bg-white/[0.05] px-3 text-sm text-[hsl(210_28%_97%)]"
+                      >
+                        <option value="text">Text</option>
+                        <option value="call">Call</option>
+                        <option value="in-person">In person</option>
+                        <option value="video">Video</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
                     <ContactBubblesGrid
                       onSelectionChange={(selected) => setSelectedContacts(selected)}
                     />

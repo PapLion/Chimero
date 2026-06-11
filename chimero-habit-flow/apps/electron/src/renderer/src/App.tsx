@@ -10,7 +10,7 @@ import { CalendarPage } from "@features/calendar/page"
 import { AssetsPage } from "@features/assets/page"
 import { CustomTrackersPage } from "@features/trackers/page"
 import StatsPage from "@features/tracking/page"
-import { ContactProfilePage } from "@features/contacts/page"
+import { ContactsPage, ContactProfilePage } from "@features/contacts/page"
 import { ExerciseDownloadToast } from "@features/exercises/components/ExerciseDownloadToast"
 import { useAppStore } from "@shared/store"
 import { ToastHost } from "@shared/components/ToastHost"
@@ -30,6 +30,8 @@ export default function ChimeroApp() {
       // NEW CASE
       case "stats":
         return <StatsPage />
+      case "contacts":
+        return <ContactsPage />
       case "contact":
         return <ContactProfilePage />
       case "home":

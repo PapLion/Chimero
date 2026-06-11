@@ -2,7 +2,7 @@
 
 import { createElement, useState, useMemo, useEffect } from "react"
 import { useAppStore } from "@shared/store"
-import { useContact, useContactInteractions, useContactProfileBlocks, useContactReminderSettings, useCreateContactMutation, useCreateContactProfileBlockMutation, useDeleteContactMutation, useDeleteContactProfileBlockMutation, useReorderContactProfileBlocksMutation, useUpdateContactMutation, useUpdateContactProfileBlockMutation, useUpsertContactReminderSettingsMutation, useAssets } from "@shared/queries"
+import { useContact, useContactInteractions, useContactProfileBlocks, useContactReminderSettings, useContacts, useCreateContactMutation, useCreateContactProfileBlockMutation, useDeleteContactMutation, useDeleteContactProfileBlockMutation, useReorderContactProfileBlocksMutation, useUpdateContactMutation, useUpdateContactProfileBlockMutation, useUpsertContactReminderSettingsMutation, useAssets } from "@shared/queries"
 import { Input } from "@packages/ui/input"
 import { Button } from "@packages/ui/button"
 import { cn } from "@shared/utils"
@@ -29,6 +29,116 @@ import {
   useSortable,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
+
+export function ContactsPage() {
+  const [sortBy, setSortBy] = useState<"name" | "most-talked-to" | "least-talked-to">("name")
+  const [searchQuery, setSearchQuery] = useState("")
+  const { data: contactsData = [], isLoading } = useContacts({ sortBy })
+  const contacts = contactsData as Contact[]
+  const { setCurrentPage, setSelectedContactId } = useAppStore()
+
+  const filteredContacts = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    if (!query) return contacts
+    return contacts.filter((contact) => contact.name.toLowerCase().includes(query))
+  }, [contacts, searchQuery])
+
+  const handleAddContact = () => {
+    setSelectedContactId(null)
+    setCurrentPage("contact")
+  }
+
+  const handleOpenContact = (contactId: number) => {
+    setSelectedContactId(contactId)
+    setCurrentPage("contact")
+  }
+
+  const getInitials = (name: string): string => {
+    const parts = name.trim().split(/\s+/)
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    return name.slice(0, 2).toUpperCase()
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="section-kicker">Social CRM</div>
+          <h1 className="page-title mt-1 text-[2.25rem]">Contacts</h1>
+          <p className="page-subtitle mt-1.5">Manage people, profile notes, and check-in context.</p>
+        </div>
+        <Button
+          type="button"
+          onClick={handleAddContact}
+          className="rounded-xl bg-[hsl(266_73%_63%)] text-white hover:bg-[hsl(266_73%_58%)]"
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Add contact
+        </Button>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+        <Input
+          type="text"
+          placeholder="Search contacts..."
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          className="text-[hsl(210_28%_97%)] placeholder:text-[hsl(220_12%_58%)]"
+        />
+        <select
+          value={sortBy}
+          onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
+          className="rounded-xl border border-white/8 bg-white/[0.05] px-3 py-2 text-sm text-[hsl(210_28%_97%)]"
+        >
+          <option value="name">Name</option>
+          <option value="most-talked-to">Most talked to</option>
+          <option value="least-talked-to">Least talked to</option>
+        </select>
+      </div>
+
+      {isLoading ? (
+        <div className="surface-card rounded-2xl py-12 text-center text-sm text-[hsl(220_12%_58%)]">Loading contacts...</div>
+      ) : filteredContacts.length === 0 ? (
+        <div className="surface-card rounded-2xl py-12 text-center">
+          <p className="text-sm text-[hsl(220_12%_58%)]">
+            {contacts.length === 0 ? "No contacts yet." : "No contacts match that search."}
+          </p>
+          <Button
+            type="button"
+            onClick={handleAddContact}
+            className="mt-4 rounded-xl bg-[hsl(266_73%_63%)] text-white hover:bg-[hsl(266_73%_58%)]"
+          >
+            Add contact
+          </Button>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredContacts.map((contact) => (
+            <button
+              key={contact.id}
+              type="button"
+              onClick={() => handleOpenContact(contact.id)}
+              className="surface-card flex min-h-[104px] items-center gap-4 rounded-2xl p-4 text-left transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[hsl(var(--border)/0.82)]"
+            >
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-sm font-semibold text-[hsl(210_28%_97%)]">
+                {contact.initials || getInitials(contact.name)}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-[hsl(210_28%_97%)]">{contact.name}</div>
+                <div className="mt-1 text-xs text-[hsl(220_12%_58%)]">
+                  {contact.dateLastTalked ? `Last talked ${contact.dateLastTalked}` : "No linked check-ins yet"}
+                </div>
+                {contact.birthday && (
+                  <div className="mt-1 text-xs text-[hsl(220_12%_58%)]">Birthday {contact.birthday}</div>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface SortableTraitProps {
   id: string
@@ -399,15 +509,15 @@ export function ContactProfilePage() {
               "The contact was created, but attention settings need another try.",
               formatToastError(settingsError, "Please reopen the contact and try again."),
             )
-            setCurrentPage("home")
-            setSelectedContactId(null)
+            setCurrentPage("contacts")
+            setSelectedContactId(undefined)
             return
           }
         }
 
         toast.success("Contact created.", name.trim())
-        setCurrentPage("home")
-        setSelectedContactId(null)
+        setCurrentPage("contacts")
+        setSelectedContactId(undefined)
       } else if (selectedContactId) {
         await updateContactMutation.mutateAsync({
           id: selectedContactId,
@@ -434,8 +544,8 @@ export function ContactProfilePage() {
         })
 
         toast.info("Contact updated.", name.trim())
-        setCurrentPage("home")
-        setSelectedContactId(null)
+        setCurrentPage("contacts")
+        setSelectedContactId(undefined)
       }
     } catch (error) {
       toast.error(
@@ -453,8 +563,8 @@ export function ContactProfilePage() {
     try {
       await deleteContactMutation.mutateAsync(selectedContactId)
       setDeleteDialogOpen(false)
-      setCurrentPage("home")
-      setSelectedContactId(null)
+      setCurrentPage("contacts")
+      setSelectedContactId(undefined)
       toast.destructive("Contact removed.", name.trim() || "Contact")
     } catch (error) {
       toast.error(
@@ -465,8 +575,8 @@ export function ContactProfilePage() {
   }
 
   const handleBack = () => {
-    setCurrentPage("home")
-    setSelectedContactId(null)
+    setCurrentPage("contacts")
+    setSelectedContactId(undefined)
   }
 
   const getInitials = (nameStr: string): string => {

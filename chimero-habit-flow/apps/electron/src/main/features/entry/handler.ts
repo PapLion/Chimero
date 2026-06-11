@@ -1,9 +1,10 @@
 import { ipcMain } from 'electron'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { books, bookActivities, contactInteractions, contacts, entries, entriesToTags, entryFood, entryGaming, entryHealth, entryIntake, entryWeight, intakeItems, symptoms, trackers } from '@packages/db'
 import { getDb as db } from '@packages/db/database'
 import { mapEntry, mapTracker } from '../../shared/mappers'
-import type { BaseEntryRequest, EntryUpdateRequest, QuickEntryContextResponse } from '@contracts/contracts'
+import type { BaseEntryRequest, Entry, EntryUpdateRequest, QuickEntryContextResponse, SocialInteractionReadModel } from '@contracts/contracts'
+import { getContactInitials } from '@contracts/domain'
 import { getTrackerIdentity } from '@contracts/features/tracking'
 import { getBookLifecycleRecord } from '@contracts/features/books'
 import { getEntryTagIds, getTags, replaceEntryTags } from '../tags/service'
@@ -50,6 +51,50 @@ async function refreshContactsLastTalked(tx: any, contactIds: number[]): Promise
       })
       .where(eq(contacts.id, contactId))
   }
+}
+
+async function withSocialInteractions(mappedEntries: Entry[]): Promise<Entry[]> {
+  const entryIds = mappedEntries.map((entry) => entry.id).filter((id) => Number.isInteger(id) && id > 0)
+  if (entryIds.length === 0) return mappedEntries
+
+  const interactionRows = await db()
+    .select({
+      entryId: contactInteractions.entryId,
+      contactId: contactInteractions.contactId,
+      contactName: contacts.name,
+      method: contactInteractions.method,
+      mood: contactInteractions.mood,
+      moodImpact: contactInteractions.moodImpact,
+      timestamp: contactInteractions.timestamp,
+      notes: contactInteractions.notes,
+    })
+    .from(contactInteractions)
+    .leftJoin(contacts, eq(contacts.id, contactInteractions.contactId))
+    .where(inArray(contactInteractions.entryId, entryIds))
+
+  const byEntry = new Map<number, SocialInteractionReadModel[]>()
+  for (const row of interactionRows) {
+    if (row.entryId == null) continue
+    const contactName = row.contactName ?? null
+    const interaction: SocialInteractionReadModel = {
+      contactId: row.contactId,
+      contactName,
+      contactInitials: contactName ? getContactInitials(contactName) : null,
+      method: row.method as SocialInteractionReadModel['method'],
+      moodImpact: (row.moodImpact ?? row.mood ?? 'neutral') as SocialInteractionReadModel['moodImpact'],
+      note: row.notes ?? null,
+    }
+    const list = byEntry.get(row.entryId) ?? []
+    list.push(interaction)
+    byEntry.set(row.entryId, list)
+  }
+
+  return mappedEntries.map((entry) => {
+    const socialInteractions = byEntry.get(entry.id)
+    return socialInteractions && socialInteractions.length > 0
+      ? { ...entry, socialInteractions }
+      : entry
+  })
 }
 
 async function isGamingTracker(trackerId: number): Promise<boolean> {
@@ -181,7 +226,7 @@ export function registerEntryHandlers(): void {
         : await base
       const mapped = rows.map((r) => mapEntry(r as Record<string, unknown>))
       const tagIdsByEntry = await getEntryTagIds(mapped.map((entry) => entry.id))
-      return mapped.map((entry) => ({ ...entry, tagIds: tagIdsByEntry.get(entry.id) ?? [] }))
+      return await withSocialInteractions(mapped.map((entry) => ({ ...entry, tagIds: tagIdsByEntry.get(entry.id) ?? [] })))
     } catch (e) {
       console.error('get-entries error:', e)
       return []
@@ -306,7 +351,8 @@ export function registerEntryHandlers(): void {
       if (!row) return null
       const mapped = mapEntry(row as Record<string, unknown>)
       const tagIdsByEntry = await getEntryTagIds([mapped.id])
-      return { ...mapped, tagIds: tagIdsByEntry.get(mapped.id) ?? [] }
+      const [entryWithSocial] = await withSocialInteractions([{ ...mapped, tagIds: tagIdsByEntry.get(mapped.id) ?? [] }])
+      return entryWithSocial ?? null
     } catch (e) {
       console.error('add-entry error:', e)
       return null
@@ -396,7 +442,8 @@ export function registerEntryHandlers(): void {
       if (!updated) return null
       const mapped = mapEntry(updated as Record<string, unknown>)
       const tagIdsByEntry = await getEntryTagIds([mapped.id])
-      return { ...mapped, tagIds: tagIdsByEntry.get(mapped.id) ?? [] }
+      const [entryWithSocial] = await withSocialInteractions([{ ...mapped, tagIds: tagIdsByEntry.get(mapped.id) ?? [] }])
+      return entryWithSocial ?? null
     } catch (e) {
       console.error('update-entry error:', e)
       return null
@@ -480,7 +527,7 @@ export function registerEntryHandlers(): void {
         .limit(limit)
       const mapped = rows.map((r) => mapEntry(r as Record<string, unknown>))
       const tagIdsByEntry = await getEntryTagIds(mapped.map((entry) => entry.id))
-      return mapped.map((entry) => ({ ...entry, tagIds: tagIdsByEntry.get(entry.id) ?? [] }))
+      return await withSocialInteractions(mapped.map((entry) => ({ ...entry, tagIds: tagIdsByEntry.get(entry.id) ?? [] })))
     } catch (e) {
       console.error('get-task-entries error:', e)
       return []

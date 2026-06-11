@@ -138,7 +138,7 @@ function BookFinishedRatingBadge({ bookId }: { bookId: number }) {
 }
 
 export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, assets }: TrackerDetailViewProps) {
-  const { selectedDate: storeSelectedDate } = useAppStore()
+  const { selectedDate: storeSelectedDate, setCurrentPage, setSelectedContactId } = useAppStore()
   const { data: trackers = [] } = useTrackers()
   const { data: allEntries = [] } = useEntries({ limit: 1000 })
   const { data: tags = [] } = useTags()
@@ -619,11 +619,17 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const isWeightType = isWeightTracker
   const isMoodType = isMoodTracker
   const isTaskType = trackerIdentity === "tasks"
+  const isSocialType = trackerIdentity === "social"
   const isDietType = trackerNameLower.includes("diet") || trackerNameLower.includes("calorie") || trackerNameLower.includes("food") || trackerNameLower.includes("meal") || tracker.icon === "salad"
   const isNumericType = tracker.type === "numeric" || tracker.type === "range" || tracker.type === "counter"
   const selectedDateStr = toDateStr(selectedDate)
   const taskHistoryReadModel = isTaskType ? buildTaskDayReadModel(trackerEntries, selectedDateStr) : null
   const taskHistoryEntries = taskHistoryReadModel?.entries.slice().reverse() ?? []
+
+  const handleManageContacts = () => {
+    setSelectedContactId(undefined)
+    setCurrentPage("contacts")
+  }
 
   const handlePostponeTask = async (entry: Entry) => {
     try {
@@ -817,6 +823,15 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
           >
             Insights (Soon)
           </button>
+          {isSocialType && (
+            <button
+              type="button"
+              onClick={handleManageContacts}
+              className="rounded-full border border-white/8 bg-white/[0.06] px-4 py-2 text-sm font-medium text-[hsl(210_28%_97%)] transition-all duration-200 ease-out hover:border-[hsl(var(--border)/0.82)] hover:bg-white/[0.1]"
+            >
+              Manage Contacts
+            </button>
+          )}
         </div>
         </div>
       </div>
@@ -1851,6 +1866,87 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                             alt=""
                             className="w-full h-auto max-h-[300px] object-contain"
                             title={intake?.itemName || entry.note || "Intake photo"}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : isSocialType ? (
+              <div className="space-y-4">
+                {historyEntries.map((entry) => {
+                  const interactions = entry.socialInteractions ?? []
+                  const legacySocial = interactions.length === 0
+                  const asset = entry.assetId != null ? assets.get(entry.assetId) : null
+                  return (
+                    <div
+                      key={entry.id}
+                      className={entryCardBase}
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
+                    >
+                      <div className="absolute right-3 top-3 z-10 flex gap-1.5 opacity-0 translate-y-1 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+                        <button className={actionButtonBase} onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button className={actionButtonBase} onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div className="text-sm text-white/60">
+                          {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                          {" · "}
+                          {new Date(entry.timestamp).toLocaleDateString()}
+                        </div>
+                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] uppercase tracking-normal text-white/45">
+                          {legacySocial ? "Legacy" : `${interactions.length} contact${interactions.length === 1 ? "" : "s"}`}
+                        </span>
+                      </div>
+
+                      {interactions.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {interactions.map((interaction) => (
+                            <div
+                              key={`${entry.id}-${interaction.contactId}`}
+                              className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[hsl(266_73%_63%/0.18)] text-[11px] font-semibold text-[hsl(210_28%_97%)]">
+                                  {interaction.contactInitials || interaction.contactName?.slice(0, 2).toUpperCase() || "?"}
+                                </span>
+                                <span className="text-sm font-medium text-[hsl(210_28%_97%)]">
+                                  {interaction.contactName || `Contact ${interaction.contactId}`}
+                                </span>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-[hsl(220_12%_58%)]">
+                                {interaction.method && (
+                                  <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5">{interaction.method}</span>
+                                )}
+                                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5">{interaction.moodImpact}</span>
+                              </div>
+                              {interaction.note && (
+                                <div className="mt-2 text-sm text-white/60">{interaction.note}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-white/60">Unstructured legacy social entry</div>
+                      )}
+
+                      {legacySocial && entry.note && (
+                        <div className="mt-2 text-sm text-white/60">{entry.note}</div>
+                      )}
+                      {renderEntryTags(entry.tagIds)}
+                      {asset && (
+                        <div className="mt-3 max-h-[300px] overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
+                          <img
+                            src={asset.thumbnailUrl || asset.assetUrl}
+                            alt=""
+                            className="h-auto max-h-[300px] w-full object-contain"
+                            title={entry.note || "Social attachment"}
                           />
                         </div>
                       )}

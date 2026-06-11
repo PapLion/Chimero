@@ -13,6 +13,7 @@ const mainNavigation: { name: string; id: PageType; icon: typeof Home }[] = [
 ]
 
 const managementNavigation: { name: string; id: PageType; icon: typeof Home }[] = [
+  { name: "Contacts", id: "contacts", icon: Users },
   { name: "Assets", id: "assets", icon: ImageIcon },
   { name: "Custom Trackers", id: "custom-trackers", icon: Settings },
 ]

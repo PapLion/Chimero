@@ -80,6 +80,7 @@ export interface Entry {
     titleKey: string
     activityType: BookActivityType
   }
+  socialInteractions?: SocialInteractionReadModel[]
 }
 
 export type EntryUpdateRequest = {

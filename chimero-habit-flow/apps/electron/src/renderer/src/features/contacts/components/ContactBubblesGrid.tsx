@@ -133,6 +133,13 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
         <p className="text-sm text-[hsl(220_12%_58%)]">
           No contacts found for &apos;{searchQuery}&apos;
         </p>
+        <Button
+          type="button"
+          onClick={handleAddContact}
+          className="mt-4 rounded-xl bg-[hsl(266_73%_63%)] text-white hover:bg-[hsl(266_73%_58%)]"
+        >
+          Add contact
+        </Button>
       </div>
     )
   }
@@ -140,7 +147,7 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
   return (
     <div className="space-y-4">
       {/* Search Input */}
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
         <Input
           type="text"
           placeholder="Search..."
@@ -157,6 +164,13 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
           <option value="most-talked-to">Most talked to</option>
           <option value="least-talked-to">Least talked to</option>
         </select>
+        <Button
+          type="button"
+          onClick={handleAddContact}
+          className="rounded-xl bg-[hsl(266_73%_63%)] text-white hover:bg-[hsl(266_73%_58%)]"
+        >
+          Add contact
+        </Button>
       </div>
 
       {/* Bubbles Grid */}
