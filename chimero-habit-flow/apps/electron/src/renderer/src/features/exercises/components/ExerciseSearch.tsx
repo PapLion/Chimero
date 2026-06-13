@@ -5,9 +5,18 @@ import { useSearchExercises, useAllExercises, useExerciseDbStatus } from "@share
 import { Input } from "@packages/ui/input"
 import { Button } from "@packages/ui/button"
 import { X, Search } from "lucide-react"
+import type { Exercise } from "@contracts/features/exercises"
 
 export interface SelectedExercise {
+  exerciseId: string
   name: string
+  category: string
+  level: string
+  equipment: string | null
+  primaryMuscles: string[]
+  secondaryMuscles: string[]
+  force: string | null
+  mechanic: string | null
   sets?: number
   reps?: number
   weight?: number
@@ -16,16 +25,6 @@ export interface SelectedExercise {
 interface ExerciseSearchProps {
   onExerciseSelect: (exercise: SelectedExercise) => void
   selectedExercises: SelectedExercise[]
-}
-
-interface Exercise {
-  id: string
-  name: string
-  category: string
-  level: string
-  equipment: string | null
-  primaryMuscles: string[]
-  secondaryMuscles: string[]
 }
 
 export function ExerciseSearch({ onExerciseSelect, selectedExercises }: ExerciseSearchProps) {
@@ -77,7 +76,15 @@ export function ExerciseSearch({ onExerciseSelect, selectedExercises }: Exercise
     if (!selectedExercise) return
 
     onExerciseSelect({
+      exerciseId: selectedExercise.id,
       name: selectedExercise.name,
+      category: selectedExercise.category,
+      level: selectedExercise.level,
+      equipment: selectedExercise.equipment,
+      primaryMuscles: selectedExercise.primaryMuscles,
+      secondaryMuscles: selectedExercise.secondaryMuscles,
+      force: selectedExercise.force,
+      mechanic: selectedExercise.mechanic,
       sets: sets ? parseInt(sets, 10) : undefined,
       reps: reps ? parseInt(reps, 10) : undefined,
       weight: weight ? parseFloat(weight) : undefined,
@@ -153,7 +160,7 @@ export function ExerciseSearch({ onExerciseSelect, selectedExercises }: Exercise
         <div className="flex flex-wrap gap-2 mb-4">
           {selectedExercises.map((exercise, index) => (
             <div
-              key={`${exercise.name}-${index}`}
+              key={`${exercise.exerciseId}-${index}`}
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[hsl(266_73%_63%/0.15)] border border-[hsl(266_73%_63%/0.3)] text-sm text-[hsl(210_25%_97%)]"
             >
               <span className="font-medium">{exercise.name}</span>
@@ -162,6 +169,9 @@ export function ExerciseSearch({ onExerciseSelect, selectedExercises }: Exercise
                   {formatExerciseSummary(exercise)}
                 </span>
               )}
+              <span className="text-[10px] uppercase tracking-[0.18em] text-[hsl(210_12%_47%)]">
+                {exercise.category}
+              </span>
             </div>
           ))}
         </div>

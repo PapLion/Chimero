@@ -42,6 +42,7 @@ export interface Entry {
   dateStr: string
   assetId?: number | null
   tagIds?: number[]
+  workout?: WorkoutSessionReadModel
   gaming?: {
     structured: true
     gameTitle: string
@@ -575,6 +576,51 @@ export interface BookActivityResponse {
   entry: BookEntryReadModel
   book: Book
   tags: Tag[]
+}
+
+export type WorkoutWeightUnit = 'kg' | 'lb'
+
+export interface WorkoutSetReadModel {
+  setIndex: number
+  reps: number | null
+  weight: number | null
+  weightUnit: WorkoutWeightUnit | null
+  durationSeconds?: number | null
+  notes?: string | null
+  isWarmup?: boolean
+}
+
+export interface WorkoutExerciseReadModel {
+  exerciseId: string
+  exerciseName: string
+  category: string | null
+  level: string | null
+  equipment: string | null
+  primaryMuscles: string[]
+  secondaryMuscles: string[]
+  force: string | null
+  mechanic: string | null
+  notes?: string | null
+  sets: WorkoutSetReadModel[]
+}
+
+export interface WorkoutRoutineReadModel {
+  name: string
+  notes?: string | null
+}
+
+export interface WorkoutSessionReadModel {
+  structured: true
+  entryId: number
+  trackerId: number
+  timestamp: number
+  dateStr: string
+  title: string | null
+  note: string | null
+  routine: WorkoutRoutineReadModel | null
+  totalSets: number
+  completedAt: number | null
+  exercises: WorkoutExerciseReadModel[]
 }
 
 export interface CreateBookRequest {

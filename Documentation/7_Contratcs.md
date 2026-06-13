@@ -26,7 +26,7 @@ This is the master index for current tracker/product contracts. It summarizes wh
 | Tracker | Status | Current contract state |
 | --- | --- | --- |
 | Social / CRM | Partial foundation implemented | Linked Social interaction foundation is implemented for new structured Social entries, with expanded contact CRM fields, persisted reminder/attention settings, profile blocks with move up/down reorder, and frequency sorting from linked interactions. Legacy `contact_interactions.entryId = null` rows remain readable legacy data and are not backfilled. No Mood correlation UI, AI suggestions, OS-level notifications, contact import/sync, unsafe legacy backfill, or draggable/masonry guarantee is implemented. |
-| Exercise / Gym | Partial | Client-confirmed and important, but still partial. Needs structured workouts/routines/exercises/sets/reps/load/history/statistics. |
+| Exercise / Gym | Partial | Client-confirmed and important. Structured workout session metadata is now implemented on the generic entry backbone, including routine/session notes plus per-exercise set snapshots. Dedicated workout tables, load/PR analytics, and deeper training stats remain future. |
 | Diet / Food / Calories | Complete | Structured Food logs are implemented on the Diet identity. Legacy generic Diet rows remain readable as unstructured history, but new Food flows should use the structured food contract instead of generic calories-only writes. |
 
 ## Requested but missing contracts

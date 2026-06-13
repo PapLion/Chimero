@@ -92,11 +92,12 @@ export function getEntryConfig(tracker: Tracker): EntryConfig {
   // 🏋️‍♀️ Exercise
   if (identity === "exercise") {
     return {
-      mainPlaceholder: "Duration (minutes) or Calories",
-      mainType: "number",
-      noteLabel: "Activity Name",
-      notePlaceholder: "e.g., Leg Day, Cardio, Morning Run",
-      noteHint: "What did you do?",
+      mainLabel: "Workout session",
+      mainPlaceholder: "e.g., Push day, Leg day, AM cardio",
+      mainType: "text",
+      noteLabel: "Session note",
+      notePlaceholder: "e.g., Top set felt strong, keep progression steady",
+      noteHint: "Add routine or context for the workout.",
     }
   }
 

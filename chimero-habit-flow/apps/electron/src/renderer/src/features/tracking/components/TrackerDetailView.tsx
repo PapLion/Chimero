@@ -196,6 +196,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const isFoodTrackerType = !!tracker && getTrackerIdentity(tracker) === "diet"
   const isHealthTracker = !!tracker && getTrackerIdentity(tracker) === "health"
   const isIntakeTracker = !!tracker && getTrackerIdentity(tracker) === "intake"
+  const isExerciseTracker = !!tracker && (getTrackerIdentity(tracker) === "exercise" || tracker.icon === "dumbbell" || trackerNameLowerForWeight.includes("workout") || trackerNameLowerForWeight.includes("exercise") || trackerNameLowerForWeight.includes("fitness"))
   const { data: weightDetail } = useWeightDetail(trackerId, isWeightTracker)
   const weightEntriesReadModel = useMemo(
     () => weightDetail ? buildWeightEntriesTabReadModel(weightDetail) : { entries: [] },
@@ -1866,6 +1867,108 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                             alt=""
                             className="w-full h-auto max-h-[300px] object-contain"
                             title={intake?.itemName || entry.note || "Intake photo"}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : isExerciseTracker ? (
+              <div className="space-y-4">
+                {historyEntries.map((entry) => {
+                  const workout = entry.workout ?? null
+                  const legacyWorkout = !workout
+                  const asset = entry.assetId != null ? assets.get(entry.assetId) : null
+                  return (
+                    <div
+                      key={entry.id}
+                      className={entryCardBase}
+                      onClick={(e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); setDeletingEntry(entry) } }}
+                      onContextMenu={(e) => { if (e.shiftKey) { e.preventDefault(); handleEditEntry(e, entry) } }}
+                    >
+                      <div className="absolute right-3 top-3 z-10 flex gap-1.5 opacity-0 translate-y-1 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+                        <button className={actionButtonBase} onClick={(e) => { e.stopPropagation(); handleEditEntry(e, entry) }} title="Edit entry (Shift+RightClick)">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button className={actionButtonBase} onClick={(e) => { e.stopPropagation(); setDeletingEntry(entry) }} title="Delete entry">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div className="text-sm text-white/60">
+                          {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                          {" · "}
+                          {new Date(entry.timestamp).toLocaleDateString()}
+                        </div>
+                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] uppercase tracking-normal text-white/45">
+                          {legacyWorkout ? "Legacy" : `${workout?.totalSets ?? 0} set${(workout?.totalSets ?? 0) === 1 ? "" : "s"}`}
+                        </span>
+                      </div>
+
+                      <div className="mb-1 text-sm text-white/90">
+                        {workout?.title || workout?.routine?.name || entry.note || "Workout session"}
+                      </div>
+                      {workout?.routine && (
+                        <div className="mb-2 text-xs text-white/50">
+                          Routine: {workout.routine.name}
+                          {workout.routine.notes ? ` · ${workout.routine.notes}` : ""}
+                        </div>
+                      )}
+                      {workout ? (
+                        <div className="space-y-3">
+                          {workout.note && workout.note !== workout.title && (
+                            <div className="text-sm text-white/60">{workout.note}</div>
+                          )}
+                          <div className="space-y-2">
+                            {workout.exercises.map((exercise) => (
+                              <div key={exercise.exerciseId} className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div>
+                                    <div className="text-sm font-medium text-[hsl(var(--foreground))]">
+                                      {exercise.exerciseName}
+                                    </div>
+                                    <div className="text-xs text-white/45">
+                                      {exercise.category}
+                                      {exercise.equipment ? ` · ${exercise.equipment}` : ""}
+                                    </div>
+                                  </div>
+                                  <div className="text-xs text-white/45">
+                                    {exercise.sets.length} set{exercise.sets.length === 1 ? "" : "s"}
+                                  </div>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {exercise.sets.map((set) => (
+                                    <span
+                                      key={`${exercise.exerciseId}-${set.setIndex}`}
+                                      className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-xs text-white/70"
+                                    >
+                                      Set {set.setIndex}
+                                      {set.reps != null ? ` · ${set.reps} reps` : ""}
+                                      {set.weight != null ? ` · ${set.weight} ${set.weightUnit ?? "kg"}` : ""}
+                                      {set.isWarmup ? " · warmup" : ""}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-white/60">Unstructured legacy exercise entry</div>
+                      )}
+
+                      {legacyWorkout && entry.note && (
+                        <div className="mt-2 text-sm text-white/60">{entry.note}</div>
+                      )}
+                      {renderEntryTags(entry.tagIds)}
+                      {asset && (
+                        <div className="mt-3 max-h-[300px] overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
+                          <img
+                            src={asset.thumbnailUrl || asset.assetUrl}
+                            alt=""
+                            className="h-auto max-h-[300px] w-full object-contain"
+                            title={entry.note || "Workout attachment"}
                           />
                         </div>
                       )}

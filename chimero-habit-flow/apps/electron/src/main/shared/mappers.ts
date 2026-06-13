@@ -15,6 +15,7 @@ import type {
   WeightEntry,
   AssetLink,
 } from '@contracts/contracts'
+import { buildWorkoutSessionReadModel } from '@contracts/domain'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
 function parseJsonObject(value: unknown): Record<string, unknown> {
@@ -118,6 +119,15 @@ export function mapEntry(row: Record<string, unknown>): Entry {
   const bookTitleKey = row.bookTitleKey ?? row.book_title_key
   const bookActivityType = row.bookActivityType ?? row.book_activity_type
   const socialInteractions = mapSocialInteractions(row.socialInteractions ?? row.social_interactions)
+  const workout = buildWorkoutSessionReadModel({
+    id: row.id as number,
+    trackerId: (row.trackerId ?? row.tracker_id) as number,
+    value: (row.value as number) ?? null,
+    note: (row.note as string) ?? null,
+    metadata: parseJsonObject(row.metadata),
+    timestamp: row.timestamp as number,
+    dateStr: (row.dateStr ?? row.date_str) as string,
+  })
   return {
     id: row.id as number,
     trackerId: (row.trackerId ?? row.tracker_id) as number,
@@ -180,6 +190,7 @@ export function mapEntry(row: Record<string, unknown>): Entry {
             activityType: bookActivityType as 'started' | 'read' | 'finished',
           }
         : undefined,
+    workout,
     socialInteractions,
   }
 }

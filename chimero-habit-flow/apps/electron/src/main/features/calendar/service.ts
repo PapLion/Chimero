@@ -3,6 +3,7 @@ import { entries, entryFood, entryGaming, entryHealth, entryIntake, entryWeight,
 import { eq } from 'drizzle-orm'
 import {
   buildCalendarDayEntry,
+  buildWorkoutSessionReadModel,
   getTaskActiveDate,
   getTaskStateForDate,
   isTaskTrackerLike,
@@ -96,6 +97,15 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
       dateStr: r.dateStr,
       assetId: r.assetId,
       tagIds: tagIdsByEntry.get(r.id) ?? [],
+      workout: buildWorkoutSessionReadModel({
+        id: r.id,
+        trackerId: r.trackerId,
+        value: r.value,
+        note: r.note,
+        metadata: parseJsonObject(r.metadata),
+        timestamp: r.timestamp,
+        dateStr: r.dateStr,
+      }),
       gaming: r.gamingStructured
         ? {
             structured: true,

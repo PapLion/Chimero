@@ -88,6 +88,7 @@ export function QuickEntry() {
   const [value, setValue] = useState("")
   const [waist, setWaist] = useState("")
   const [note, setNote] = useState("")
+  const [workoutRoutineName, setWorkoutRoutineName] = useState("")
   const [healthSymptomName, setHealthSymptomName] = useState("")
   const [healthCategory, setHealthCategory] = useState<"physical" | "mental" | "general" | "other">("general")
   const [intakeItemName, setIntakeItemName] = useState("")
@@ -197,6 +198,7 @@ export function QuickEntry() {
       setValue("")
       setWaist("")
       setNote("")
+      setWorkoutRoutineName("")
       setHealthSymptomName("")
       setHealthCategory("general")
       setIntakeItemName("")
@@ -228,6 +230,7 @@ export function QuickEntry() {
       setValue("")
       setWaist("")
       setNote("")
+      setWorkoutRoutineName("")
       setHealthSymptomName("")
       setHealthCategory("general")
       setIntakeItemName("")
@@ -369,6 +372,7 @@ export function QuickEntry() {
 
     const trackerData = trackers.find((t) => t.id === selectedTracker)
     if (!trackerData) return
+    const timestamp = Date.now()
 
     const isSocialTracker =
       trackerData.icon === "users" ||
@@ -376,6 +380,7 @@ export function QuickEntry() {
       trackerData.name.toLowerCase().includes("connection")
 
     const isExerciseTracker =
+      getTrackerIdentity(trackerData) === "exercise" ||
       trackerData.icon === "dumbbell" ||
       trackerData.name.toLowerCase().includes("exercise") ||
       trackerData.name.toLowerCase().includes("workout") ||
@@ -399,14 +404,60 @@ export function QuickEntry() {
 
     try {
       if (isExerciseTracker && selectedExercises.length > 0) {
+        const workoutExercises = selectedExercises.map((exercise) => {
+          const setCount = typeof exercise.sets === "number" && Number.isFinite(exercise.sets) && exercise.sets > 0
+            ? Math.floor(exercise.sets)
+            : 1
+          return {
+            exerciseId: exercise.exerciseId,
+            exerciseName: exercise.name,
+            category: exercise.category,
+            level: exercise.level,
+            equipment: exercise.equipment,
+            primaryMuscles: exercise.primaryMuscles,
+            secondaryMuscles: exercise.secondaryMuscles,
+            force: exercise.force,
+            mechanic: exercise.mechanic,
+            notes: null,
+            sets: Array.from({ length: setCount }, (_, index) => ({
+              setIndex: index + 1,
+              reps: exercise.reps ?? null,
+              weight: exercise.weight ?? null,
+              weightUnit: exercise.weight != null ? "kg" : null,
+              durationSeconds: null,
+              notes: null,
+              isWarmup: false,
+            })),
+          }
+        })
+        const routineName = workoutRoutineName.trim()
+        const workoutSession = {
+          structured: true as const,
+          routine: routineName
+            ? {
+                name: routineName,
+                notes: null,
+              }
+            : null,
+          title: routineName || null,
+          note: note.trim() || null,
+          startedAt: timestamp,
+          completedAt: timestamp,
+          totalSets: workoutExercises.reduce((sum, exercise) => sum + exercise.sets.length, 0),
+          exercises: workoutExercises,
+        }
+
         await addEntryMutation.mutateAsync({
           trackerId: selectedTracker,
           value: selectedExercises.length,
           note: note.trim() || null,
           assetId: selectedAssetId,
           tagIds: selectedTagIds,
-          metadata: { exercises: selectedExercises },
-          timestamp: Date.now(),
+          metadata: {
+            exercises: selectedExercises,
+            workoutSession,
+          },
+          timestamp,
         })
 
         toast.success("Workout logged.", trackerData.name)
@@ -550,7 +601,6 @@ export function QuickEntry() {
         return
       }
 
-      const timestamp = Date.now()
       await addEntryMutation.mutateAsync({
         trackerId: selectedTracker,
         value: entryValue,
@@ -1173,11 +1223,39 @@ export function QuickEntry() {
                     </div>
                   </div>
                 ) : isExerciseTracker ? (
-                  <div className="mb-4">
+                  <div className="mb-4 space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                          Workout routine
+                        </label>
+                        <Input
+                          type="text"
+                          placeholder="e.g., Push day, Leg day"
+                          value={workoutRoutineName}
+                          onChange={(e) => setWorkoutRoutineName(e.target.value)}
+                          className="h-12 bg-white/5 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                          Note / context
+                        </label>
+                        <textarea
+                          placeholder="What did you train or want to remember?"
+                          value={note}
+                          onChange={(e) => setNote(e.target.value)}
+                          className="min-h-[96px] w-full resize-y rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-4 py-3 text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] outline-none transition-colors duration-200 ease-out focus:border-[hsl(var(--primary)/0.45)] focus:ring-2 focus:ring-[hsl(var(--ring)/0.25)]"
+                        />
+                      </div>
+                    </div>
                     <ExerciseSearch
                       onExerciseSelect={(exercise) => setSelectedExercises((prev) => [...prev, exercise])}
                       selectedExercises={selectedExercises}
                     />
+                    <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                      Select at least one exercise to save the workout session. Each exercise keeps its own set, rep, and load snapshot.
+                    </p>
                   </div>
                 ) : (
                   <>
