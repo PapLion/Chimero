@@ -815,29 +815,29 @@ export function useContact(id: number) {
   })
 }
 
-export function useContactInteractions(contactId: number) {
+export function useContactInteractions(contactId: number, enabled = true) {
   return useQuery({
     queryKey: queryKeys.contactInteractions(contactId),
     queryFn: () => api.getContactInteractions(contactId),
-    enabled: !!contactId,
+    enabled: enabled && !!contactId,
     staleTime: 15_000,
   })
 }
 
-export function useContactReminderSettings(contactId: number) {
+export function useContactReminderSettings(contactId: number, enabled = true) {
   return useQuery({
     queryKey: queryKeys.contactReminderSettings(contactId),
     queryFn: () => api.getContactReminderSettings(contactId),
-    enabled: !!contactId,
+    enabled: enabled && !!contactId,
     staleTime: 30_000,
   })
 }
 
-export function useContactProfileBlocks(contactId: number) {
+export function useContactProfileBlocks(contactId: number, enabled = true) {
   return useQuery({
     queryKey: queryKeys.contactProfileBlocks(contactId),
     queryFn: () => api.getContactProfileBlocks(contactId),
-    enabled: !!contactId,
+    enabled: enabled && !!contactId,
     staleTime: 15_000,
   })
 }

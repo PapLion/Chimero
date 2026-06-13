@@ -1,11 +1,12 @@
 "use client"
 
 import React, { useState, useMemo } from "react"
-import { useContacts } from "@shared/queries"
+import { useAssets, useContacts } from "@shared/queries"
 import { useAppStore } from "@shared/store"
 import { Input } from "@packages/ui/input"
 import { Button } from "@packages/ui/button"
 import { cn } from "@shared/utils"
+import { CyberpunkSelect } from "@features/tracking/components/CyberpunkSelect"
 import type { Contact } from "@packages/db"
 
 export interface ContactMoodSelection {
@@ -20,6 +21,7 @@ interface ContactBubblesGridProps {
 export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProps) {
   const [sortBy, setSortBy] = useState<"name" | "most-talked-to" | "least-talked-to">("name")
   const { data: contacts = [], isLoading } = useContacts({ sortBy })
+  const { data: assetsData = [] } = useAssets({ limit: 200 })
   const { setCurrentPage, setSelectedContactId } = useAppStore()
 
   const [searchQuery, setSearchQuery] = useState("")
@@ -31,6 +33,14 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
     const query = searchQuery.toLowerCase().trim()
     return (contacts as Contact[]).filter((c) => c.name.toLowerCase().includes(query))
   }, [contacts, searchQuery])
+
+  const assetsMap = useMemo(() => {
+    const map = new Map<number, { id: number; thumbnailUrl?: string; assetUrl?: string }>()
+    ;(assetsData as Array<{ id: number; thumbnailUrl?: string; assetUrl?: string }>).forEach((asset) => {
+      if (asset?.id != null) map.set(asset.id, asset)
+    })
+    return map
+  }, [assetsData])
 
   // Handle click on a contact bubble
   const handleBubbleClick = (contactId: number, event?: React.MouseEvent) => {
@@ -155,15 +165,16 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
           onChange={(e) => setSearchQuery(e.target.value)}
           className="text-[hsl(210_28%_97%)] placeholder:text-[hsl(220_12%_58%)]"
         />
-        <select
+        <CyberpunkSelect
           value={sortBy}
-          onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
-          className="rounded-xl border border-white/8 bg-white/[0.05] px-3 py-2 text-sm text-[hsl(210_28%_97%)]"
-        >
-          <option value="name">Name</option>
-          <option value="most-talked-to">Most talked to</option>
-          <option value="least-talked-to">Least talked to</option>
-        </select>
+          onValueChange={(value) => setSortBy(value as typeof sortBy)}
+          className="w-full sm:min-w-[12rem]"
+          options={[
+            { value: "name", label: "Name" },
+            { value: "most-talked-to", label: "Most talked to" },
+            { value: "least-talked-to", label: "Least talked to" },
+          ]}
+        />
         <Button
           type="button"
           onClick={handleAddContact}
@@ -178,6 +189,8 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
         {filteredContacts.map((contact) => {
           const mood = selectedContacts.get(contact.id)
           const isSelected = !!mood
+          const avatarAsset = contact.avatarAssetId ? assetsMap.get(contact.avatarAssetId) : null
+          const avatarUrl = avatarAsset?.thumbnailUrl || avatarAsset?.assetUrl || null
 
           return (
             <button
@@ -191,12 +204,13 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
                   : "surface-chip border-white/10 hover:border-[hsl(266_73%_63%/0.45)]"
               )}
               title={`${contact.name} - ${mood || "not selected"} (Ctrl+Click to edit profile)`}
-            >
-              {contact.avatarAssetId ? (
-                /* Avatar image would go here - for now fallback to initials */
-                <span className="text-sm font-medium text-[hsl(210_28%_97%)]">
-                  {getInitials(contact.name)}
-                </span>
+              >
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={contact.name}
+                  className="h-full w-full rounded-full object-cover"
+                />
               ) : (
                 <span className="text-sm font-medium text-[hsl(210_28%_97%)]">
                   {getInitials(contact.name)}

@@ -72,6 +72,7 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
     })
     .from(entries)
     .leftJoin(entryWeight, eq(entryWeight.entryId, entries.id))
+    .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
     .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
     .leftJoin(entryHealth, eq(entryHealth.entryId, entries.id))
     .leftJoin(entryIntake, eq(entryIntake.entryId, entries.id))

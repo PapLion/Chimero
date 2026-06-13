@@ -9,6 +9,7 @@ import { Button } from "@packages/ui/button"
 import { cn } from "@shared/utils"
 import { api } from "@shared/api"
 import { TagSelector } from "@features/tags/components/TagChips"
+import { CyberpunkSelect } from "@features/tracking/components/CyberpunkSelect"
 import type { Entry } from "@shared/store"
 import { formatToastError, useToast } from "@shared/components/toast"
 import type { AssetWithUrls } from "@contracts/features/assets"
@@ -433,16 +434,16 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                                     </div>
                                     <div className="space-y-1">
                                         <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Category</label>
-                                        <select
+                                        <CyberpunkSelect
                                             value={healthCategory}
-                                            onChange={(e) => setHealthCategory(e.target.value as "physical" | "mental" | "general" | "other")}
-                                            className="h-11 w-full rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-3 text-sm text-[hsl(var(--foreground))] outline-none transition-colors focus:border-[hsl(var(--border)/0.95)]"
-                                        >
-                                            <option value="general">General</option>
-                                            <option value="physical">Physical</option>
-                                            <option value="mental">Mental</option>
-                                            <option value="other">Other</option>
-                                        </select>
+                                            onValueChange={(value) => setHealthCategory(value as "physical" | "mental" | "general" | "other")}
+                                            options={[
+                                                { value: "general", label: "General" },
+                                                { value: "physical", label: "Physical" },
+                                                { value: "mental", label: "Mental" },
+                                                { value: "other", label: "Other" },
+                                            ]}
+                                        />
                                     </div>
                                 </div>
                                 <div className="space-y-1">
@@ -482,18 +483,18 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                                     </div>
                                     <div className="space-y-1">
                                         <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Meal Type (Optional)</label>
-                                        <select
-                                            value={mealType}
-                                            onChange={(e) => setMealType((e.target.value as MealType) || "")}
-                                            className="h-11 w-full rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-3 text-sm text-[hsl(var(--foreground))] outline-none transition-colors focus:border-[hsl(var(--border)/0.95)]"
-                                        >
-                                            <option value="">Any meal</option>
-                                            <option value="breakfast">Breakfast</option>
-                                            <option value="lunch">Lunch</option>
-                                            <option value="dinner">Dinner</option>
-                                            <option value="snack">Snack</option>
-                                            <option value="other">Other</option>
-                                        </select>
+                                        <CyberpunkSelect
+                                            value={mealType || null}
+                                            onValueChange={(value) => setMealType((value as MealType) || "")}
+                                            placeholder="Any meal"
+                                            options={[
+                                                { value: "breakfast", label: "Breakfast" },
+                                                { value: "lunch", label: "Lunch" },
+                                                { value: "dinner", label: "Dinner" },
+                                                { value: "snack", label: "Snack" },
+                                                { value: "other", label: "Other" },
+                                            ]}
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -513,16 +514,16 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <div className="space-y-1">
                                         <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Type</label>
-                                        <select
+                                        <CyberpunkSelect
                                             value={intakeItemType}
-                                            onChange={(e) => setIntakeItemType(e.target.value as IntakeItemType)}
-                                            className="h-11 w-full rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-3 text-sm text-[hsl(var(--foreground))] outline-none transition-colors focus:border-[hsl(var(--border)/0.95)]"
-                                        >
-                                            <option value="vitamin">Vitamin</option>
-                                            <option value="medication">Medication</option>
-                                            <option value="supplement">Supplement</option>
-                                            <option value="other">Other</option>
-                                        </select>
+                                            onValueChange={(value) => setIntakeItemType(value as IntakeItemType)}
+                                            options={[
+                                                { value: "vitamin", label: "Vitamin" },
+                                                { value: "medication", label: "Medication" },
+                                                { value: "supplement", label: "Supplement" },
+                                                { value: "other", label: "Other" },
+                                            ]}
+                                        />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Dosage (Optional)</label>

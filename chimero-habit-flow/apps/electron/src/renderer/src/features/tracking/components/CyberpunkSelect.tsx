@@ -1,8 +1,7 @@
 "use client"
 
 import { createPortal } from "react-dom"
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react"
-import { AnimatePresence, motion } from "framer-motion"
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react"
 import { ChevronDown, Check } from "lucide-react"
 import { cn } from "@shared/utils"
 
@@ -13,13 +12,6 @@ interface CyberpunkSelectProps {
   placeholder?: string
   className?: string
   disabled?: boolean
-}
-
-const dropdownMotion = {
-  initial: { opacity: 0, y: 8, scale: 0.98 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: 6, scale: 0.98 },
-  transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] as const },
 }
 
 export function CyberpunkSelect({
@@ -112,6 +104,10 @@ export function CyberpunkSelect({
     setIsOpen(false)
   }
 
+  const handleOptionPointerDown = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+  }
+
   return (
     <div ref={dropdownRef} className={cn("relative", className)}>
       <button
@@ -138,55 +134,54 @@ export function CyberpunkSelect({
         />
       </button>
 
-      <AnimatePresence>
-        {isOpen && (
-          typeof document !== "undefined" && menuStyle
-            ? createPortal(
-                <motion.div
-                  ref={menuRef}
-                  initial={dropdownMotion.initial}
-                  animate={dropdownMotion.animate}
-                  exit={dropdownMotion.exit}
-                  transition={dropdownMotion.transition}
-                  style={menuStyle}
-                  className="surface-panel z-[60] overflow-hidden rounded-2xl border border-[hsl(var(--border)/0.72)] shadow-[0_18px_38px_rgba(2,6,23,0.2)]"
-                >
-                  <div className="max-h-60 overflow-y-auto py-1">
-                    {placeholder && (
-                      <button
-                        type="button"
-                        onClick={() => handleSelect("")}
-                        className={cn(
-                          "flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm transition-colors duration-150",
-                          "text-[hsl(var(--muted-foreground))] hover:bg-white/[0.04] focus:bg-white/[0.08]"
-                        )}
-                      >
-                        <span>{placeholder}</span>
-                        {value === null && <Check className="h-4 w-4 text-[hsl(266_73%_63%)]" />}
-                      </button>
+      {isOpen && typeof document !== "undefined" && menuStyle
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="listbox"
+              style={menuStyle}
+              className="surface-panel z-[80] overflow-hidden rounded-2xl border border-[hsl(var(--border)/0.72)] shadow-[0_18px_38px_rgba(2,6,23,0.2)]"
+            >
+              <div className="max-h-60 overflow-y-auto py-1">
+                {placeholder && (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={value === null}
+                    onMouseDown={handleOptionPointerDown}
+                    onClick={() => handleSelect("")}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm transition-colors duration-150",
+                      "text-[hsl(var(--muted-foreground))] hover:bg-white/[0.04] focus:bg-white/[0.08]"
                     )}
+                  >
+                    <span>{placeholder}</span>
+                    {value === null && <Check className="h-4 w-4 text-[hsl(266_73%_63%)]" />}
+                  </button>
+                )}
 
-                    {options.map((option) => (
-                      <button
-                        type="button"
-                        key={option.value}
-                        onClick={() => handleSelect(option.value)}
-                        className={cn(
-                          "flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm transition-colors duration-150 last:border-b-0",
-                          "text-[hsl(var(--foreground))] hover:bg-white/[0.04] focus:bg-white/[0.08]"
-                        )}
-                      >
-                        <span className="truncate">{option.label}</span>
-                        {value === option.value && <Check className="h-4 w-4 text-[hsl(266_73%_63%)]" />}
-                      </button>
-                    ))}
-                  </div>
-                </motion.div>,
-                document.body,
-              )
-            : null
-        )}
-      </AnimatePresence>
+                {options.map((option) => (
+                  <button
+                    type="button"
+                    key={option.value}
+                    role="option"
+                    aria-selected={value === option.value}
+                    onMouseDown={handleOptionPointerDown}
+                    onClick={() => handleSelect(option.value)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm transition-colors duration-150 last:border-b-0",
+                      "text-[hsl(var(--foreground))] hover:bg-white/[0.04] focus:bg-white/[0.08]"
+                    )}
+                  >
+                    <span className="truncate">{option.label}</span>
+                    {value === option.value && <Check className="h-4 w-4 text-[hsl(266_73%_63%)]" />}
+                  </button>
+                ))}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }

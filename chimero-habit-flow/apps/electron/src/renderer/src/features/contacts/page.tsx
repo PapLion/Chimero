@@ -1,12 +1,15 @@
 "use client"
 
 import { createElement, useState, useMemo, useEffect } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useAppStore } from "@shared/store"
 import { useContact, useContactInteractions, useContactProfileBlocks, useContactReminderSettings, useContacts, useCreateContactMutation, useCreateContactProfileBlockMutation, useDeleteContactMutation, useDeleteContactProfileBlockMutation, useReorderContactProfileBlocksMutation, useUpdateContactMutation, useUpdateContactProfileBlockMutation, useUpsertContactReminderSettingsMutation, useAssets } from "@shared/queries"
 import { Input } from "@packages/ui/input"
 import { Button } from "@packages/ui/button"
 import { cn } from "@shared/utils"
 import { api } from "@shared/api"
+import { queryKeys } from "@shared/queries"
+import { CyberpunkSelect } from "@features/tracking/components/CyberpunkSelect"
 import { ConfirmDeleteDialog } from "@shared/components/ConfirmDeleteDialog"
 import { formatToastError, useToast } from "@shared/components/toast"
 import { ArrowLeft, X, Plus, User, ChevronUp, ChevronDown } from "lucide-react"
@@ -34,8 +37,17 @@ export function ContactsPage() {
   const [sortBy, setSortBy] = useState<"name" | "most-talked-to" | "least-talked-to">("name")
   const [searchQuery, setSearchQuery] = useState("")
   const { data: contactsData = [], isLoading } = useContacts({ sortBy })
+  const { data: assetsData = [] } = useAssets({ limit: 200 })
   const contacts = contactsData as Contact[]
   const { setCurrentPage, setSelectedContactId } = useAppStore()
+
+  const assetsMap = useMemo(() => {
+    const map = new Map<number, { id: number; thumbnailUrl?: string; assetUrl?: string }>()
+    ;(assetsData as Array<{ id: number; thumbnailUrl?: string; assetUrl?: string }>).forEach((asset) => {
+      if (asset?.id != null) map.set(asset.id, asset)
+    })
+    return map
+  }, [assetsData])
 
   const filteredContacts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -85,15 +97,16 @@ export function ContactsPage() {
           onChange={(event) => setSearchQuery(event.target.value)}
           className="text-[hsl(210_28%_97%)] placeholder:text-[hsl(220_12%_58%)]"
         />
-        <select
+        <CyberpunkSelect
           value={sortBy}
-          onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
-          className="rounded-xl border border-white/8 bg-white/[0.05] px-3 py-2 text-sm text-[hsl(210_28%_97%)]"
-        >
-          <option value="name">Name</option>
-          <option value="most-talked-to">Most talked to</option>
-          <option value="least-talked-to">Least talked to</option>
-        </select>
+          onValueChange={(value) => setSortBy(value as typeof sortBy)}
+          className="w-full sm:min-w-[12rem]"
+          options={[
+            { value: "name", label: "Name" },
+            { value: "most-talked-to", label: "Most talked to" },
+            { value: "least-talked-to", label: "Least talked to" },
+          ]}
+        />
       </div>
 
       {isLoading ? (
@@ -120,8 +133,16 @@ export function ContactsPage() {
               onClick={() => handleOpenContact(contact.id)}
               className="surface-card flex min-h-[104px] items-center gap-4 rounded-2xl p-4 text-left transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[hsl(var(--border)/0.82)]"
             >
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-sm font-semibold text-[hsl(210_28%_97%)]">
-                {contact.initials || getInitials(contact.name)}
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/[0.05] text-sm font-semibold text-[hsl(210_28%_97%)]">
+                {contact.avatarAssetId && (assetsMap.get(contact.avatarAssetId)?.thumbnailUrl || assetsMap.get(contact.avatarAssetId)?.assetUrl) ? (
+                  <img
+                    src={assetsMap.get(contact.avatarAssetId)?.thumbnailUrl || assetsMap.get(contact.avatarAssetId)?.assetUrl || undefined}
+                    alt={contact.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  contact.initials || getInitials(contact.name)
+                )}
               </div>
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-[hsl(210_28%_97%)]">{contact.name}</div>
@@ -193,16 +214,18 @@ export function ContactProfilePage() {
   const { selectedContactId, setCurrentPage, setSelectedContactId } = useAppStore()
   const isCreateMode = selectedContactId === null
   const toast = useToast()
+  const supportsContactDetailExtras = typeof window !== "undefined" && !!window.api
 
   // Queries - cast to proper types
   const { data: contactData, isLoading: contactLoading } = useContact(selectedContactId ?? 0)
   const contact = contactData as Contact | undefined
-  const { data: interactionsData = [], isLoading: interactionsLoading } = useContactInteractions(selectedContactId ?? 0)
+  const { data: interactionsData = [], isLoading: interactionsLoading } = useContactInteractions(selectedContactId ?? 0, supportsContactDetailExtras)
   const interactions = interactionsData as ContactInteraction[]
-  const { data: reminderSettings } = useContactReminderSettings(selectedContactId ?? 0)
-  const { data: profileBlocksData = [] } = useContactProfileBlocks(selectedContactId ?? 0)
+  const { data: reminderSettings } = useContactReminderSettings(selectedContactId ?? 0, supportsContactDetailExtras)
+  const { data: profileBlocksData = [] } = useContactProfileBlocks(selectedContactId ?? 0, supportsContactDetailExtras)
   const profileBlocks = profileBlocksData as ContactProfileBlock[]
   const { data: assetsData = [] } = useAssets({ limit: 200 })
+  const queryClient = useQueryClient()
 
   // Mutations
   const createContactMutation = useCreateContactMutation()
@@ -227,6 +250,7 @@ export function ContactProfilePage() {
   const [hasKids, setHasKids] = useState(false)
   const [kidsNotes, setKidsNotes] = useState("")
   const [avatarAssetId, setAvatarAssetId] = useState<number | null>(null)
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null)
   const [birthdayReminderEnabled, setBirthdayReminderEnabled] = useState(false)
   const [birthdayReminderDaysBefore, setBirthdayReminderDaysBefore] = useState("7")
   const [checkInReminderEnabled, setCheckInReminderEnabled] = useState(false)
@@ -288,6 +312,7 @@ export function ContactProfilePage() {
       setHasKids(!!contact.hasKids)
       setKidsNotes(contact.kidsNotes || "")
       setAvatarAssetId(contact.avatarAssetId || null)
+      setAvatarPreviewUrl(null)
     }
   }, [contact, isCreateMode])
 
@@ -314,6 +339,7 @@ export function ContactProfilePage() {
       setHasKids(false)
       setKidsNotes("")
       setAvatarAssetId(null)
+      setAvatarPreviewUrl(null)
       setBirthdayReminderEnabled(false)
       setBirthdayReminderDaysBefore("7")
       setCheckInReminderEnabled(false)
@@ -357,6 +383,7 @@ export function ContactProfilePage() {
   }
 
   const handleCreateProfileBlock = async () => {
+    if (!supportsContactDetailExtras) return
     if (!selectedContactId || !newBlockTitle.trim()) return
     try {
       await createProfileBlockMutation.mutateAsync({
@@ -377,6 +404,7 @@ export function ContactProfilePage() {
   }
 
   const handleUpdateProfileBlock = async (block: ContactProfileBlock, updates: Partial<ContactProfileBlock>) => {
+    if (!supportsContactDetailExtras) return
     if (!selectedContactId) return
     try {
       await updateProfileBlockMutation.mutateAsync({
@@ -399,6 +427,7 @@ export function ContactProfilePage() {
   }
 
   const handleDeleteProfileBlock = async (block: ContactProfileBlock) => {
+    if (!supportsContactDetailExtras) return
     if (!selectedContactId) return
     try {
       await deleteProfileBlockMutation.mutateAsync({ id: block.id, contactId: selectedContactId })
@@ -411,6 +440,7 @@ export function ContactProfilePage() {
   }
 
   const handleMoveProfileBlock = async (blockId: number, direction: "up" | "down") => {
+    if (!supportsContactDetailExtras) return
     if (!selectedContactId) return
     const index = profileBlocks.findIndex((block) => block.id === blockId)
     const nextIndex = direction === "up" ? index - 1 : index + 1
@@ -440,9 +470,11 @@ export function ContactProfilePage() {
         filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "gif", "webp"] }],
       })
       if (!result.path) return
-      const newAsset = await api.uploadAsset(result.path) as { id: number } | undefined
+      const newAsset = await api.uploadAsset(result.path)
       if (newAsset && newAsset.id) {
         setAvatarAssetId(newAsset.id)
+        setAvatarPreviewUrl(newAsset.thumbnailUrl || newAsset.assetUrl || null)
+        await queryClient.invalidateQueries({ queryKey: queryKeys.assetsRoot })
         // If in edit mode, also update the contact
         if (!isCreateMode && selectedContactId) {
           await updateContactMutation.mutateAsync({
@@ -472,7 +504,7 @@ export function ContactProfilePage() {
     return map
   }, [assetsData])
 
-  const avatarUrl = avatarAssetId ? (assetsMap.get(avatarAssetId)?.thumbnailUrl || assetsMap.get(avatarAssetId)?.assetUrl || null) : null
+  const avatarUrl = avatarPreviewUrl || (avatarAssetId ? (assetsMap.get(avatarAssetId)?.thumbnailUrl || assetsMap.get(avatarAssetId)?.assetUrl || null) : null)
 
   const handleSave = async () => {
     if (!name.trim()) return
@@ -495,7 +527,7 @@ export function ContactProfilePage() {
           notes: notes.trim() || null,
         })) as Contact
 
-        if (createdContact?.id) {
+        if (createdContact?.id && supportsContactDetailExtras) {
           try {
             await upsertReminderSettingsMutation.mutateAsync({
               contactId: createdContact.id,
@@ -535,13 +567,15 @@ export function ContactProfilePage() {
             notes: notes.trim() || null,
           },
         })
-        await upsertReminderSettingsMutation.mutateAsync({
-          contactId: selectedContactId,
-          birthdayReminderEnabled,
-          birthdayReminderDaysBefore: Number.parseInt(birthdayReminderDaysBefore, 10) || 7,
-          checkInReminderEnabled,
-          checkInAfterDays: Number.parseInt(checkInAfterDays, 10) || 14,
-        })
+        if (supportsContactDetailExtras) {
+          await upsertReminderSettingsMutation.mutateAsync({
+            contactId: selectedContactId,
+            birthdayReminderEnabled,
+            birthdayReminderDaysBefore: Number.parseInt(birthdayReminderDaysBefore, 10) || 7,
+            checkInReminderEnabled,
+            checkInAfterDays: Number.parseInt(checkInAfterDays, 10) || 14,
+          })
+        }
 
         toast.info("Contact updated.", name.trim())
         setCurrentPage("contacts")
@@ -823,7 +857,8 @@ export function ContactProfilePage() {
         </div>
       </div>
 
-      <div className="space-y-4 border-t border-white/10 pt-6">
+      {supportsContactDetailExtras && (
+        <div className="space-y-4 border-t border-white/10 pt-6">
         <h2 className="text-lg font-medium text-[hsl(210_28%_97%)]">Contact Reminders / Attention</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.04] px-3 py-2 text-sm text-[hsl(210_28%_97%)]">
@@ -884,8 +919,9 @@ export function ContactProfilePage() {
           </div>
         </div>
       </div>
+      )}
 
-      {!isCreateMode && (
+      {supportsContactDetailExtras && !isCreateMode && (
         <div className="space-y-4 border-t border-white/10 pt-6">
           <h2 className="text-lg font-medium text-[hsl(210_28%_97%)]">Profile Grid / Blocks</h2>
           <div className="space-y-3">
@@ -1009,7 +1045,7 @@ export function ContactProfilePage() {
       </div>
 
       {/* Interactions history - only in edit mode */}
-      {!isCreateMode && (
+      {supportsContactDetailExtras && !isCreateMode && (
         <div className="space-y-4 border-t border-white/10 pt-6">
           <h2 className="text-lg font-medium text-[hsl(210_28%_97%)]">Interaction History</h2>
           {interactionsLoading ? (

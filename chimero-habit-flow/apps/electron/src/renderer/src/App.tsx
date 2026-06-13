@@ -70,7 +70,7 @@ export default function ChimeroApp() {
         <FloatingActionButton />
 
         {/* Keyboard Shortcut Hint */}
-        <div className="surface-chip fixed bottom-6 left-[calc(var(--dashboard-sidebar-width)+1rem)] hidden items-center gap-2 px-3 py-2 text-xs text-[hsl(var(--muted-foreground))] md:flex">
+        <div className="surface-chip shell-interactive fixed bottom-6 left-[calc(var(--dashboard-sidebar-width)+1rem)] z-50 hidden items-center gap-2 px-3 py-2 text-xs text-[hsl(var(--muted-foreground))] md:flex">
           <kbd className="rounded-md border border-[hsl(var(--border)/0.75)] bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-[hsl(var(--foreground))]">
             Alt+Q
           </kbd>

@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react"
+import { createPortal } from "react-dom"
+import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, type CSSProperties } from "react"
 import { useAppStore } from "@shared/store"
 import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useBooks, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useAddFoodEntryMutation, useAddIntakeEntryMutation, useAddHealthSymptomEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
 import { cn } from "@shared/utils"
@@ -13,6 +14,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogDescription,
   DialogTitle,
 } from "@packages/ui/dialog"
 import { Input } from "@packages/ui/input"
@@ -124,6 +126,8 @@ export function QuickEntry() {
   const assets = (assetsData ?? []) as Array<{ id: number; thumbnailUrl: string; assetUrl: string; originalName?: string | null }>
   const selectedAsset = assets.find((a) => a.id === selectedAssetId)
   const assetPickerRef = useRef<HTMLDivElement>(null)
+  const assetPickerAnchorRef = useRef<HTMLDivElement>(null)
+  const [assetPickerStyle, setAssetPickerStyle] = useState<CSSProperties | null>(null)
 
   const normalizeBookKey = useCallback((title: string) => title.trim().toLowerCase().replace(/\s+/g, " "), [])
 
@@ -266,12 +270,61 @@ export function QuickEntry() {
     if (!assetPickerOpen) return
 
     const handleClickOutside = (event: MouseEvent) => {
+      if (assetPickerAnchorRef.current && assetPickerAnchorRef.current.contains(event.target as Node)) {
+        return
+      }
       if (assetPickerRef.current && !assetPickerRef.current.contains(event.target as Node)) {
         setAssetPickerOpen(false)
       }
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [assetPickerOpen])
+
+  useLayoutEffect(() => {
+    if (!assetPickerOpen) {
+      setAssetPickerStyle(null)
+      return
+    }
+
+    const updatePosition = () => {
+      const anchor = assetPickerAnchorRef.current
+      if (!anchor) return
+
+      const rect = anchor.getBoundingClientRect()
+      const width = Math.min(rect.width, window.innerWidth - 16)
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))
+      const spaceBelow = window.innerHeight - rect.bottom - 8
+      const menuHeight = 256
+      const openUpwards = spaceBelow < menuHeight && rect.top > spaceBelow
+
+      setAssetPickerStyle(
+        openUpwards
+          ? {
+              position: "fixed",
+              left,
+              bottom: Math.max(8, window.innerHeight - rect.top + 8),
+              width,
+              minWidth: width,
+            }
+          : {
+              position: "fixed",
+              left,
+              top: rect.bottom + 8,
+              width,
+              minWidth: width,
+            },
+      )
+    }
+
+    updatePosition()
+    window.addEventListener("resize", updatePosition)
+    window.addEventListener("scroll", updatePosition, true)
+
+    return () => {
+      window.removeEventListener("resize", updatePosition)
+      window.removeEventListener("scroll", updatePosition, true)
+    }
   }, [assetPickerOpen])
 
   // Keyboard shortcut
@@ -725,11 +778,15 @@ export function QuickEntry() {
 
   return (
     <Dialog open={commandBarOpen} onOpenChange={(open) => setQuickEntryOpen(open)}>
-      <DialogContent className="sm:max-w-[560px] min-w-0 overflow-hidden p-0 gap-0">
+      <DialogContent className="sm:max-w-[560px] min-w-0 h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] overflow-hidden p-0 gap-0 !flex !flex-col">
         <DialogHeader className="p-4 pb-0">
           <DialogTitle className="sr-only">Quick Entry</DialogTitle>
+          <DialogDescription className="sr-only">
+            Quickly log an activity, reminder, or Social check-in.
+          </DialogDescription>
         </DialogHeader>
 
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
         {/* Mode Switcher */}
         <div className="surface-chip mx-4 mt-4 flex gap-1 rounded-2xl p-1.5">
           <button
@@ -761,7 +818,7 @@ export function QuickEntry() {
         {mode === MODE_ACTIVITY ? (
           /* Activity Mode */
           !selectedTracker ? (
-            <>
+            <div className="flex min-h-0 flex-1 flex-col">
               {/* Search Input */}
               <div className="surface-card mx-4 mt-4 flex items-center gap-2 rounded-2xl px-4 py-3">
                 <Command className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />
@@ -778,7 +835,7 @@ export function QuickEntry() {
               </div>
 
               {/* Tracker List: Favorites/Recent + Standard/Custom */}
-              <div className="max-h-[300px] overflow-y-auto p-2">
+              <div className="min-h-0 flex-1 overflow-y-auto p-2 pb-4">
                 {trackersLoading ? (
                   <div className="py-6 text-center text-sm text-[hsl(var(--muted-foreground))]">Loading trackers...</div>
                 ) : suggestedTrackers.length === 0 ? (
@@ -805,7 +862,7 @@ export function QuickEntry() {
                   </div>
                 )}
               </div>
-            </>
+            </div>
           ) : (
             <>
               {/* Entry Form */}
@@ -972,18 +1029,18 @@ export function QuickEntry() {
                         <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
                           Meal Type (optional)
                         </label>
-                        <select
-                          value={mealType}
-                          onChange={(e) => setMealType((e.target.value as MealType) || "")}
-                          className="h-12 w-full rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-3 text-sm text-[hsl(var(--foreground))] outline-none transition-colors focus:border-[hsl(var(--border)/0.95)]"
-                        >
-                          <option value="">Any meal</option>
-                          <option value="breakfast">Breakfast</option>
-                          <option value="lunch">Lunch</option>
-                          <option value="dinner">Dinner</option>
-                          <option value="snack">Snack</option>
-                          <option value="other">Other</option>
-                        </select>
+                        <CyberpunkSelect
+                          value={mealType || null}
+                          onValueChange={(value) => setMealType((value as MealType) || "")}
+                          placeholder="Any meal"
+                          options={[
+                            { value: "breakfast", label: "Breakfast" },
+                            { value: "lunch", label: "Lunch" },
+                            { value: "dinner", label: "Dinner" },
+                            { value: "snack", label: "Snack" },
+                            { value: "other", label: "Other" },
+                          ]}
+                        />
                       </div>
                     </div>
                   </div>
@@ -1014,16 +1071,16 @@ export function QuickEntry() {
                         <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
                           Type
                         </label>
-                        <select
+                        <CyberpunkSelect
                           value={intakeItemType}
-                          onChange={(e) => setIntakeItemType(e.target.value as IntakeItemType)}
-                          className="h-12 w-full rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-3 text-sm text-[hsl(var(--foreground))] outline-none transition-colors focus:border-[hsl(var(--border)/0.95)]"
-                        >
-                          <option value="vitamin">Vitamin</option>
-                          <option value="medication">Medication</option>
-                          <option value="supplement">Supplement</option>
-                          <option value="other">Other</option>
-                        </select>
+                          onValueChange={(value) => setIntakeItemType(value as IntakeItemType)}
+                          options={[
+                            { value: "vitamin", label: "Vitamin" },
+                            { value: "medication", label: "Medication" },
+                            { value: "supplement", label: "Supplement" },
+                            { value: "other", label: "Other" },
+                          ]}
+                        />
                       </div>
                       <div>
                         <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
@@ -1085,21 +1142,35 @@ export function QuickEntry() {
                       <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
                         Method
                       </label>
-                      <select
+                      <CyberpunkSelect
                         value={socialMethod}
-                        onChange={(event) => setSocialMethod(event.target.value as SocialMethod)}
-                        className="h-12 w-full rounded-xl border border-white/8 bg-white/[0.05] px-3 text-sm text-[hsl(210_28%_97%)]"
-                      >
-                        <option value="text">Text</option>
-                        <option value="call">Call</option>
-                        <option value="in-person">In person</option>
-                        <option value="video">Video</option>
-                        <option value="other">Other</option>
-                      </select>
+                        onValueChange={(value) => setSocialMethod(value as SocialMethod)}
+                        options={[
+                          { value: "text", label: "Text" },
+                          { value: "call", label: "Call" },
+                          { value: "in-person", label: "In person" },
+                          { value: "video", label: "Video" },
+                          { value: "other", label: "Other" },
+                        ]}
+                      />
                     </div>
                     <ContactBubblesGrid
                       onSelectionChange={(selected) => setSelectedContacts(selected)}
                     />
+                    <div className="space-y-2">
+                      <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                        Note / context
+                      </label>
+                      <textarea
+                        placeholder="What did you talk about?"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        className="min-h-[96px] w-full resize-y rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-4 py-3 text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] outline-none transition-colors duration-200 ease-out focus:border-[hsl(var(--primary)/0.45)] focus:ring-2 focus:ring-[hsl(var(--ring)/0.25)]"
+                      />
+                      <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                        This note is saved with the Social entry and shown in history where supported.
+                      </p>
+                    </div>
                   </div>
                 ) : isExerciseTracker ? (
                   <div className="mb-4">
@@ -1208,16 +1279,16 @@ export function QuickEntry() {
                         <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
                           Category
                         </label>
-                        <select
+                        <CyberpunkSelect
                           value={healthCategory}
-                          onChange={(e) => setHealthCategory(e.target.value as "physical" | "mental" | "general" | "other")}
-                          className="h-12 w-full rounded-xl border border-[hsl(var(--border)/0.7)] bg-white/5 px-3 text-sm text-[hsl(var(--foreground))] outline-none transition-colors focus:border-[hsl(var(--border)/0.95)]"
-                        >
-                          <option value="general">General</option>
-                          <option value="physical">Physical</option>
-                          <option value="mental">Mental</option>
-                          <option value="other">Other</option>
-                        </select>
+                          onValueChange={(value) => setHealthCategory(value as "physical" | "mental" | "general" | "other")}
+                          options={[
+                            { value: "general", label: "General" },
+                            { value: "physical", label: "Physical" },
+                            { value: "mental", label: "Mental" },
+                            { value: "other", label: "Other" },
+                          ]}
+                        />
                       </div>
                     </div>
                     <div>
@@ -1365,7 +1436,7 @@ export function QuickEntry() {
                 </div>
 
                 {/* Asset Attachment */}
-                <div className="mb-4 relative">
+                <div ref={assetPickerAnchorRef} className="mb-4 relative">
                   <div className="flex items-center gap-2 mb-2">
                     <button
                       type="button"
@@ -1403,43 +1474,47 @@ export function QuickEntry() {
                   )}
 
                   {/* Asset Picker Popover */}
-                  {assetPickerOpen && (
-                    <div
-                      ref={assetPickerRef}
-                      className="surface-panel absolute left-0 top-full z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl p-3"
-                    >
-                      {assets.length === 0 ? (
-                        <div className="py-4 text-center text-sm text-[hsl(var(--muted-foreground))]">
-                          No assets available
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-[repeat(auto-fit,minmax(72px,1fr))] gap-2">
-                          {assets.map((asset) => (
-                            <button
-                              type="button"
-                              key={asset.id}
-                              onClick={() => {
-                                setSelectedAssetId(asset.id)
-                                setAssetPickerOpen(false)
-                              }}
-                              className={cn(
-                                "relative aspect-square min-w-0 overflow-hidden rounded-xl border-2 transition-all duration-200 ease-out",
-                                selectedAssetId === asset.id
-                                  ? "border-[hsl(var(--primary))]"
-                                  : "border-[hsl(var(--border)/0.7)] hover:border-[hsl(var(--primary)/0.4)]"
-                              )}
-                            >
-                              <img
-                                src={asset.thumbnailUrl}
-                                alt={asset.originalName || "Asset"}
-                                className="w-full h-full object-cover"
-                              />
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {assetPickerOpen && typeof document !== "undefined" && assetPickerStyle
+                    ? createPortal(
+                        <div
+                          ref={assetPickerRef}
+                          className="surface-panel z-[80] max-h-64 overflow-y-auto rounded-2xl p-3 shadow-[0_18px_38px_rgba(2,6,23,0.24)]"
+                          style={assetPickerStyle}
+                        >
+                          {assets.length === 0 ? (
+                            <div className="py-4 text-center text-sm text-[hsl(var(--muted-foreground))]">
+                              No assets available
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-[repeat(auto-fit,minmax(72px,1fr))] gap-2">
+                              {assets.map((asset) => (
+                                <button
+                                  type="button"
+                                  key={asset.id}
+                                  onClick={() => {
+                                    setSelectedAssetId(asset.id)
+                                    setAssetPickerOpen(false)
+                                  }}
+                                  className={cn(
+                                    "relative aspect-square min-w-0 overflow-hidden rounded-xl border-2 transition-all duration-200 ease-out",
+                                    selectedAssetId === asset.id
+                                      ? "border-[hsl(var(--primary))]"
+                                      : "border-[hsl(var(--border)/0.7)] hover:border-[hsl(var(--primary)/0.4)]"
+                                  )}
+                                >
+                                  <img
+                                    src={asset.thumbnailUrl}
+                                    alt={asset.originalName || "Asset"}
+                                    className="h-full w-full object-cover"
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>,
+                        document.body,
+                      )
+                    : null}
                 </div>
 
                 <div className="flex gap-2">
@@ -1478,6 +1553,11 @@ export function QuickEntry() {
                     </Button>
                   )}
                 </div>
+                {isSocialTracker && selectedContacts.length === 0 && (
+                  <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
+                    Select at least one contact to enable Social check-in saving.
+                  </p>
+                )}
               </form>
             </>
           )
@@ -1581,6 +1661,7 @@ export function QuickEntry() {
             </div>
           </form>
         )}
+        </div>
       </DialogContent>
     </Dialog>
   )

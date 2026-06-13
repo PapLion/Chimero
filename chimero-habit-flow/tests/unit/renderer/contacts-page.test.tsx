@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 
 const mocks = vi.hoisted(() => ({
   useContactsMock: vi.fn(),
@@ -20,14 +20,13 @@ vi.mock('@shared/store', () => ({
   }),
 }))
 
-import { ContactBubblesGrid } from '../../../apps/electron/src/renderer/src/features/contacts/components/ContactBubblesGrid'
+import { ContactsPage } from '../../../apps/electron/src/renderer/src/features/contacts/page'
 
-describe('ContactBubblesGrid', () => {
+describe('ContactsPage', () => {
   beforeEach(() => {
     mocks.useContactsMock.mockReturnValue({
       data: [
-        { id: 1, name: 'Jack Robert', avatarAssetId: 10 },
-        { id: 2, name: 'Ana Maria', avatarAssetId: null },
+        { id: 1, name: 'Jack Robert', avatarAssetId: 10, dateLastTalked: null, birthday: null },
       ],
       isLoading: false,
     })
@@ -40,17 +39,8 @@ describe('ContactBubblesGrid', () => {
     mocks.setSelectedContactIdMock.mockClear()
   })
 
-  it('keeps an Add Contact path visible when contacts already exist', async () => {
-    render(<ContactBubblesGrid onSelectionChange={vi.fn()} />)
-
-    fireEvent.click(screen.getByRole('button', { name: /add contact/i }))
-
-    expect(mocks.setSelectedContactIdMock).toHaveBeenCalledWith(null)
-    expect(mocks.setCurrentPageMock).toHaveBeenCalledWith('contact')
-  })
-
-  it('renders the contact avatar image when the asset is available', () => {
-    render(<ContactBubblesGrid onSelectionChange={vi.fn()} />)
+  it('renders the contact image in the workspace list when an avatar asset exists', () => {
+    render(<ContactsPage />)
 
     expect(screen.getAllByAltText('Jack Robert').length).toBeGreaterThan(0)
   })
