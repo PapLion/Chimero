@@ -2,262 +2,162 @@
 
 ## 1. Purpose
 
-Exercise covers two distinct things: exercise search/database support and workout logging. Current implementation supports exercise search and structured workout session metadata on the generic entry backbone, including routine name/context and per-exercise set snapshots. First-class dedicated workout tables, volume, and PR contracts are Future unless already implemented.
+Exercise covers structured workout logging plus exercise search/database support. New workouts are DB-backed, linked to the base `entries` row, and rendered as workouts across detail, statistics, graphs, home, and calendar surfaces. Legacy generic Exercise rows remain readable as unstructured history.
 
 ## 2. Current Implementation Status
 
-- Status: EXERCISE_SEARCH_IMPLEMENTED_AND_STRUCTURED_WORKOUT_SESSION_METADATA.
-- Quick Entry requires at least one selected exercise for Exercise/Fitness trackers.
-- The selected exercise list is stored in generic `entries.metadata.exercises`, and structured session payloads are stored in `entries.metadata.workoutSession`.
-- BentoGrid has an Exercise widget for selected-day totals/activity names.
-- No `entry_exercise`, set, rep, weight, routine, or preset workout table exists today.
+- Status: STRUCTURED_WORKOUT_PERSISTENCE_AND_SURFACES_IMPLEMENTED.
+- Migration `0009_workout_structured_persistence.sql` adds workout session, session-exercise, set, routine, and routine-exercise tables.
+- Dedicated workout service/handler, preload/API/query wiring, and web routes exist.
+- Quick Entry can launch structured workout creation; edit stays honest and does not flatten nested data.
+- Tracker Detail, Statistics, Graphs, Home, and Calendar read structured workout models.
+- Legacy metadata-backed Exercise rows still render, but they are labeled unstructured and excluded from structured volume/PR metrics.
 
 ## 3. Surface Contract / Frontend
 
-### 3.1 Quick Entry / Edit Entry Input
+### 3.1 Quick Entry / Workout Builder
 
-- Quick Entry uses `ExerciseSearch` and captures selected exercises.
-- Quick Entry stores selected exercise count as generic `value`.
-- Quick Entry captures optional workout routine title and workout/session note.
-- Quick Entry stores a structured workout session payload with per-exercise set snapshots in metadata.
-- Edit Entry can update generic value, note, timestamp, tags, and asset. It does not currently provide a structured workout editor for nested workout metadata, but generic edits should not destroy the structured payload.
-- Delete uses generic delete behavior.
+- Quick Entry exposes structured workout start/build flows.
+- The workout builder supports session name, source routine, date/time, kg/lb, duration, exercise search/add, reordering, sets, reps, load, note/context, tags/assets where supported, and Save Workout.
+- Edit Entry can safely edit note/context without destroying structured workout data.
 
-### 3.2 BentoGrid / Home Widget Read Model
+### 3.2 Home Widget Read Model
 
-- Shows selected-day total value.
-- Shows activity names from notes when available.
-- Shows recent chart data from generic entry values.
-- Must not claim volume or PR support without structured workout data.
+- Shows last workout session, routine/session name, days since last workout, sessions this week, active-week streak, and latest session volume with unit.
+- Uses structured workout data when available.
 
 ### 3.3 Tracker Detail / Entries Tab Read Model
 
-- Shows workout entries, note/activity name, timestamp, tags, assets, and structured workout session details when present.
-- Can show routine, exercise, set, rep, and weight snapshots from metadata if the surface renders them.
-- Provides edit/delete controls.
+- Structured sessions render as workouts with session name, routine name, date/time, duration, load unit, exercise list, sets, reps, load, note/context, tags/assets where available, total volume, and PR context.
+- Bodyweight-only sets remain visible but do not fabricate zero load.
+- Legacy rows are labeled unstructured and stay readable.
 
 ### 3.4 Tracker Detail / Statistics Tab Read Model
 
-- May show total entries, current streak, average value, 30-day average, entries this week/year, days since last entry, and generic chart stats.
-- Volume, streak by exercise, PRs, and deeper load summaries are Future.
+- Shows total structured sessions, sessions this week, days since last workout, active-week streak, weekly volume, average session volume, average duration, frequent exercises, recent PRs, and structured vs legacy counts.
+- Volume and PR metrics are unit-safe and exclude legacy/unstructured rows.
 
 ### 3.5 Tracker Detail / Graphs Tab Read Model
 
-- Relevant.
-- Graphs generic workout value over time.
-- Volume/load graphs remain Future until a dedicated workout persistence model exists.
+- Shows weekly volume, session volume over time, and per-exercise progression charts.
+- Progression includes session volume, heaviest load, and best set volume.
+- No estimated 1RM, no mixed-unit series, and no fake load progression for bodyweight-only sets.
 
 ### 3.6 Calendar Selected-Day Summary Read Model
 
-- Shows workout value/count, note, timestamp, tags, asset reference, and structured workout session metadata when available.
-- Selected exercise names and set details may be shown from metadata if the UI can safely read them.
+- Shows structured workout sessions by day with session/routine name, time, duration, exercise count, top exercises, total volume/unit, note/context, and tags/assets where supported.
+- Multiple sessions in one day remain visible.
+- Legacy rows stay readable as unstructured entries.
 
 ### 3.7 Insights / Correlations Read Model
 
-- Generic correlations can use Exercise values.
-- Mood/weight/health correlations are Future unless explicitly requested and backed by existing data.
+- Exercise-specific correlation claims are not part of the current contract.
+- Mood/weight/health correlations remain separate tracker concerns.
 
 ## 4. Deep Contract / Backend-Service
 
 ### 1. Backend Entry Point
 
-- Status: PARTIAL.
-- Implemented exercise search/database endpoints: `search-exercises`, `get-all-exercises`, `get-exercise-db-status`.
-- Implemented workout logging endpoints: generic `add-entry`, `update-entry`, `delete-entry`, `get-entries`.
-- Workout logging is metadata-backed on the generic entry table; search is IMPLEMENTED.
-- There is no specialized workout logging service, routine endpoint, set/rep/load endpoint, or `entry_exercise` table today.
+- Status: IMPLEMENTED.
+- Dedicated workout service/handler exists alongside exercise search/database endpoints.
+- Structured create/update/delete, routine CRUD, and routine/session instantiation flows are available.
+- Generic `add-entry` remains the shared base entry event, but new workout saves are not metadata-only.
 
 ### 2. Request Validation
 
-- Current workout entry required fields: `trackerId`, numeric `value` or selected-exercise count, `timestamp`.
-- Quick Entry requires at least one selected exercise before submit, and the frontend now emits structured workout session metadata in `metadata.workoutSession` alongside `metadata.exercises` for compatibility.
-- Optional fields: workout routine/name, workout note/context, `metadata.exercises`, `metadata.workoutSession`, `assetId`, `tagIds`.
-- Search validates only query/limit defensively at handler/service level; empty search results are valid.
-- Future fields such as sets, reps, load, duration, routines, presets, volume, and PRs are not validated/persisted structurally.
+- New structured sessions require explicit load unit selection, at least one exercise, and valid nested set data.
+- Reps are positive integers or null; load is finite non-negative or null.
+- Bodyweight sets can have load null.
+- Unknown legacy unit data is preserved as unstructured and excluded from structured analytics.
 
 ### 3. Normalization
 
 - Backend computes `dateStr` from `timestamp`.
-- Generic entry defaults `note`/`assetId` to `null` and metadata to `{}`.
-- Exercise selected metadata is stored as renderer-shaped JSON; structured workout session payloads are normalized only enough for UI readback, not a dedicated DB model.
-- Entry reads order newest-first; calendar reads by month and timestamp.
-- Search results come from the exercise dataset/cache, not from workout entry persistence.
+- Session and routine names, notes, exercise snapshots, set snapshots, and order indices are normalized for read models.
+- Legacy exercise rows without safe structured unit data remain unstructured.
 
-### 4. Persistence Plan
+### 4. Persistence / Schema
 
-Write flow:
-
-1. Insert/update base entry in `entries`.
-2. Insert/update specialized tracker table if needed: none exists for workout logging.
-3. Insert/update junction rows in `entries_to_tags` when `tagIds` is provided.
-4. Update related entity state if needed: none today.
-5. Return mapped generic `Entry` contract; exercise search returns shared `Exercise` contracts separately.
-
-- Generic entry/tag writes are transactional.
-- Delete removes generic entry/tag rows; exercise dataset rows/cache are not affected by workout entry delete.
-- Workout analytics fields that require reliable volume/PRs must not stay hidden only in metadata in future implementation.
+- `entries` remains the shared session event table.
+- `workout_sessions` stores session metadata and load unit.
+- `workout_session_exercises` stores ordered exercise snapshots.
+- `workout_sets` stores ordered set rows.
+- `workout_routines` stores reusable routine metadata.
+- `workout_routine_exercises` stores ordered routine exercise snapshots and targets.
 
 ### 5. Read / Query Plan
 
-- BentoGrid: reads generic exercise entries by tracker/date, uses value/count and note/metadata names where safely available.
-- Entries tab: reads generic entries newest-first with note, value, metadata, tags, assets, and structured workout session details where present.
-- Statistics tab: generic stats can compute total entries, active days, averages, entries this week/year, and days since last entry from entries.
-- Graphs: plots `entries.value`; volume/load graphs are FUTURE.
-- Calendar selected-day: month query returns workout entries with value, note, timestamp, asset, tag IDs, and metadata only through generic entry paths.
-- Edit Entry prefill: generic entry response does not guarantee a full nested workout editor, but must not lose structured workout metadata.
-- Correlation/Insight: generic correlations can use workout values; exercise-specific correlations are FUTURE.
-- Empty state: no workouts/search matches returns empty arrays and neutral stats.
+- History/detail: reads structured workout sessions when present, else legacy unstructured exercise rows.
+- Statistics: reads structured workout aggregates only from structured sessions.
+- Graphs: plots unit-safe structured session and exercise progression.
+- Home: reads the structured workout summary read model.
+- Calendar: reads structured workout day summaries.
+- Search: exercise dataset/cache remains the source for selectable exercises.
 
 ### 6. Computed Metrics
 
-- Implemented/generic: entry count, selected-day total/count, average value, grouped stats/correlation caveats.
-- Search status is returned by the exercise database status endpoint.
-- Future: volume, PRs, deeper set/load summaries, routine adherence, per-exercise streaks, duration normalization.
-- Metrics are computed on read or in frontend widgets; no workout metric cache/denormalization exists.
+- Structured metrics: total sessions, sessions this week, days since last workout, active-week streak, weekly volume, average session volume, average duration, heaviest-load PRs, best-set-volume PRs, and per-exercise progression.
+- Legacy metrics: readable history only; not counted in structured volume or PRs.
 
-### 7. Response Mapping
+### 7. Transaction Rules
 
-- Workout flow: `entries` DB rows -> `mapEntry` -> shared `Entry` + structured workout metadata -> Exercise widget/detail/calendar response.
-- Search flow: exercise dataset/cache -> shared `Exercise` response -> Quick Entry search surface.
-- Raw DB rows never return to renderer surfaces.
-- Missing metadata/tags/assets return `{}`, `[]`, or `null`.
+- Workout session create/update/delete is transactional across session, exercises, and sets.
+- Routine CRUD is independent from historical sessions.
+- Saving a workout as a routine must not mutate historical workout sessions.
 
-### 8. Error Handling
-
-- Invalid generic entry/DB failure returns `null` or `false`.
-- Search failure returns empty arrays or status fallback; empty search result is not an error.
-- Missing tracker/entry/tag/asset uses generic fallbacks.
-- Unsupported workout schema fields should be marked CONTRACT_ONLY/FUTURE.
-
-### 9. Transaction Rules
-
-- Generic add/update/delete are transactional for `entries` and `entries_to_tags`.
-- Exercise search/cache operations are separate from entry transactions.
-- Current status: transaction safety is IMPLEMENTED for generic workout entry/tag writes; specialized workout logging tables are still CONTRACT_ONLY/FUTURE.
-
-### 10. Data Ownership Rules
+### 8. Data Ownership Rules
 
 Frontend owns: capture, display, UI state, visual formatting.
 Backend owns: validation, normalization, derived metrics, relation resolution, persistence orchestration, response mapping.
 Database owns: durable storage, relational integrity, queryable structure.
 Shared contracts own: request/response shapes, app-facing types, pure domain helpers when reusable.
 
-### 11. Deep Contract Status
-
-- Status: PARTIAL.
-- Implemented: exercise database search/status and metadata-backed structured workout sessions with exercise snapshots and set/readback support.
-- Gaps: dedicated workout tables, backend metadata validation, volume/PR metrics, and full edit prefill for nested workout data.
-
-## 5. Persistence and Schema / Database
-
-- `trackers`: Exercise/Fitness trackers use numeric/dumbbell-style config.
-- `entries.value`: selected exercise count or generic workout value.
-- `entries.note`: activity/workout name/context.
-- `entries.metadata.exercises`: renderer-shaped selected exercise array.
-- `entries.metadata.workoutSession`: structured session/routine/set payload.
-- `entries.timestamp` and `entries.date_str`: workout time/day.
-- `entries.asset_id`: optional attachment.
-- `entries_to_tags`: explicit tags.
-- Exercise search cache/database is separate from entry persistence.
-- No workout-specific table exists today.
-
-## 6. Input / Output Contracts
+## 5. Input / Output Contracts
 
 ```ts
-type CreateExerciseEntryRequest = BaseEntryRequest & {
-  trackerId: number
-  value: number
-  note?: string | null
-  timestamp: number
-  assetId?: number | null
-  tagIds?: number[]
-  metadata: {
-    exercises: SelectedExercise[]
-    workoutSession?: {
-      structured: true
-      title?: string | null
-      note?: string | null
-      routine?: { name: string; notes?: string | null } | null
-      startedAt: number
-      completedAt?: number | null
-      totalSets: number
-      exercises: Array<{
-        exerciseId: string
-        exerciseName: string
-        category: string
-        level?: string | null
-        equipment?: string | null
-        primaryMuscles: string[]
-        secondaryMuscles: string[]
-        force?: string | null
-        mechanic?: string | null
-        notes?: string | null
-        sets: Array<{
-          setIndex: number
-          reps?: number | null
-          weight?: number | null
-          weightUnit?: 'kg' | 'lb' | null
-          durationSeconds?: number | null
-          notes?: string | null
-          isWarmup?: boolean
-        }>
-      }>
-    }
-  }
-}
-
-type UpdateExerciseEntryRequest = Partial<Omit<CreateExerciseEntryRequest, "trackerId">>
-
-type ExerciseEntryResponse = BaseEntryResponse
-
-type ExerciseDetailResponse = {
-  entries: BaseEntryResponse["entry"][]
-  searchStatus?: ExerciseDbSnapshot
-}
-
-type ExerciseBentoWidgetResponse = {
-  trackerId: number
-  selectedDateTotal: number
-  activities: string[]
-  sparkline?: Array<{ date: string; value: number }>
-}
-
-type ExerciseEntriesTabResponse = {
-  entries: Array<BaseEntryResponse["entry"] & { tags?: TagSummary[]; assets?: AssetSummary[] }>
-}
-
-type ExerciseStatisticsResponse = {
-  totalEntries: number
-  currentStreak?: number
-  averageValue?: number | null
-  thirtyDayAverage?: number | null
-  daysSinceLastEntry?: number | null
-  volume?: Future<number>
-  personalRecords?: Future<Array<{ exercise: string; value: number }>>
-}
-
-type ExerciseCalendarDayResponse = TimelineEvent & {
+type WorkoutSessionReadModel = {
+  structured: true
   entryId: number
   trackerId: number
-  value: number
-  activityNames?: string[]
-  note?: string | null
-  tagIds?: number[]
-  assets?: AssetSummary[]
+  routineId: number | null
+  timestamp: number
+  dateStr: string
+  sessionName: string | null
+  title: string | null
+  note: string | null
+  loadUnit: 'kg' | 'lb'
+  durationMinutes: number | null
+  totalSets: number
+  totalVolume: number | null
+  completedAt: number | null
+  routine: WorkoutRoutineReadModel | null
+  exercises: Array<{
+    exerciseId: string
+    exerciseName: string
+    bodyPartSnapshot: string[]
+    equipment: string | null
+    sets: Array<{
+      setIndex: number
+      reps: number | null
+      load: number | null
+      weight: number | null
+      weightUnit: 'kg' | 'lb' | null
+    }>
+  }>
 }
 ```
 
-## 7. Field Visibility Matrix
+## 6. Field Visibility Matrix
 
-| Field | Quick Entry | Edit Entry | DB | Backend Computed | BentoGrid | Entries Tab | Statistics Tab | Graphs Tab | Calendar | Insights/Correlations |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| exercise search result | Yes | No | No | No | No | Optional | No | No | No | No |
-| selected exercises metadata | Yes | Optional | Yes | No | Optional | Optional | Future | Future | Optional | Future |
-| workout value/count | Yes | Yes | Yes | Optional | Yes | Yes | Yes | Yes | Yes | Yes |
-| workout note/name | Optional | Optional | Yes | No | Optional | Yes | Optional | No | Optional | Optional |
-| sets/reps/weight | Yes | Optional | Yes | No | Optional | Yes | Future | Future | Optional | Future |
-| routines/presets | Yes | Optional | Yes | No | Optional | Yes | Future | Future | Optional | Future |
-| volume/PRs | No | No | No | Future | Future | Future | Future | Future | Future | Future |
+| Field | Quick Entry | Edit Entry | DB | Backend Computed | Home | Entries Tab | Statistics Tab | Graphs Tab | Calendar |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| session name | Yes | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| routine name | Yes | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| exercise search result | Yes | No | Yes | No | No | Yes | No | No | No |
+| sets/reps/load | Yes | Protected | Yes | Yes | No | Yes | Yes | Yes | Yes |
+| duration | Yes | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
+| volume / PRs | Yes | Protected | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| legacy unstructured row | No | Yes | Yes | No | No | Yes | No | No | Yes |
 | tagIds | Optional | Optional | Yes | Optional | No | Yes | Future | Future | Optional | Future |
 | assets | Optional | Optional | Optional | Optional | No | Optional | No | No | Optional | Future |
 

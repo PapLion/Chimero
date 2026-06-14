@@ -26,7 +26,7 @@ This is the master index for current tracker/product contracts. It summarizes wh
 | Tracker | Status | Current contract state |
 | --- | --- | --- |
 | Social / CRM | Partial foundation implemented | Linked Social interaction foundation is implemented for new structured Social entries, with expanded contact CRM fields, persisted reminder/attention settings, profile blocks with move up/down reorder, and frequency sorting from linked interactions. Legacy `contact_interactions.entryId = null` rows remain readable legacy data and are not backfilled. No Mood correlation UI, AI suggestions, OS-level notifications, contact import/sync, unsafe legacy backfill, or draggable/masonry guarantee is implemented. |
-| Exercise / Gym | Partial | Client-confirmed and important. Structured workout session metadata is now implemented on the generic entry backbone, including routine/session notes plus per-exercise set snapshots. Dedicated workout tables, load/PR analytics, and deeper training stats remain future. |
+| Exercise / Gym | Complete | Structured workout persistence and visible workout surfaces are implemented. New workouts use dedicated workout tables and services, while legacy generic Exercise rows remain readable as unstructured history. No cardio/steps, no estimated 1RM, and no unit mixing. |
 | Diet / Food / Calories | Complete | Structured Food logs are implemented on the Diet identity. Legacy generic Diet rows remain readable as unstructured history, but new Food flows should use the structured food contract instead of generic calories-only writes. |
 
 ## Requested but missing contracts
@@ -47,7 +47,7 @@ This is the master index for current tracker/product contracts. It summarizes wh
 ## Current contract roadmap
 
 1. Social / CRM follow-up for full dedicated read models, structured Edit Entry, Calendar/Home enrichment, and renderer coverage beyond the shipped foundation.
-2. Exercise / Gym structured contract and implementation.
+2. Exercise / Gym remains shipped; future work should be tracked only as follow-up surface polish or adjacent tracker requests.
 3. Health / Symptoms contract creation.
 4. Sleep contract creation.
 5. Meditation contract creation.

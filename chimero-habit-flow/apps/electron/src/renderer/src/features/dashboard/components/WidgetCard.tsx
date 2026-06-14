@@ -3,7 +3,7 @@
 import { useMemo } from "react"
 import { cn } from "@shared/utils"
 import { type Widget, type Tracker, type Entry } from "@shared/store"
-import { useBooks, useMoodDailyAggregates, useUpdateEntryMutation, useWeightDetail } from "@shared/queries"
+import { useBooks, useMoodDailyAggregates, useUpdateEntryMutation, useWeightDetail, useWorkoutHome } from "@shared/queries"
 import { buildFoodHomeWidgetReadModel, buildGamingHomeWidgetReadModel, buildHealthHomeWidgetReadModel, buildIntakeHomeWidgetReadModel, buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, formatIntakeDosageDisplay, formatSeverityDisplay, moodScoreToColor, postponeTaskToNextDay, unpostponeTask } from "@contracts/domain"
 import { buildBooksTrackerReadModel, formatBookRatingDisplay, getBookActionLabel } from "@contracts/features/books"
 import { getTrackerIdentity, isBooksTracker, usesMediaStyleRendering } from "@contracts/features/tracking"
@@ -1199,50 +1199,19 @@ function ExerciseWidget({
   size: string
   selectedDate: Date
 }) {
-  const dateValue = getDateValue(entries, tracker, selectedDate)
-  const targetDateStr = dateToDateStr(selectedDate)
-  
-  // Get today's entries with activity names (notes)
-  const dateEntries = entries.filter((e) => {
-    if (e.dateStr) return e.dateStr === targetDateStr
-    return isSameDay(e.timestamp, selectedDate.getTime())
-  })
-  
-  // Total minutes/calories
-  const totalMinutes = dateValue ?? 0
-  
-  // Activity names from notes
-  const activities = dateEntries
-    .filter((e) => e.note)
-    .map((e) => e.note!)
-    .slice(0, 5) // Show up to 5 activities
-
+  void entries
+  void size
+  void selectedDate
+  const { data: workoutHome } = useWorkoutHome(tracker.id)
   const iconKey = (tracker.icon ?? "").trim() || "dumbbell"
   const Icon = iconMap[iconKey] || Dumbbell
-
-  // Chart data: Last 7 days
-  const chartData = (() => {
-    const last7Days: Record<string, Entry[]> = {}
-    entries.slice(-30).forEach((entry) => {
-      const entryDateStr = entry.dateStr || new Date(entry.timestamp).toISOString().split("T")[0]
-      if (!last7Days[entryDateStr]) {
-        last7Days[entryDateStr] = []
-      }
-      last7Days[entryDateStr].push(entry)
-    })
-
-    const dates = Object.keys(last7Days).sort().slice(-7)
-    return dates.map((dateStr) => {
-      const dayEntries = last7Days[dateStr]
-      const aggregatedValue = dayEntries.reduce((acc, e) => acc + (e.value ?? 0), 0)
-      const date = new Date(dateStr)
-      return {
-        value: aggregatedValue,
-        date: date.toLocaleDateString("en", { weekday: "short" }),
-        fullDate: dateStr,
-      }
-    })
-  })()
+  const lastSession = workoutHome?.lastSession ?? null
+  const latestVolume = workoutHome?.latestVolume ?? null
+  const lastSessionTitle = lastSession?.sessionName || lastSession?.routine?.name || lastSession?.title || "Workout session"
+  const lastSessionVolume = latestVolume != null
+    ? `${latestVolume.toFixed(1)} ${workoutHome?.loadUnit ?? ""}`.trim()
+    : "Bodyweight / no external load"
+  const recentRoutines = workoutHome?.recentRoutines ?? []
 
   return (
     <div className="flex flex-col h-full">
@@ -1257,50 +1226,56 @@ function ExerciseWidget({
 
       <div className="flex-1 flex flex-col">
         <div className="text-3xl font-medium text-[hsl(var(--foreground))] tracking-tight mb-2">
-          {dateValue !== null ? `${totalMinutes} min` : "--"}
+          {latestVolume != null ? lastSessionVolume : "No workout yet"}
         </div>
-        
-        {/* Activity List */}
-        {activities.length > 0 && (
-          <div className="mt-3 space-y-1.5">
-            {activities.map((activity, idx) => (
-              <div key={idx} className="text-xs text-[hsl(var(--muted-foreground))] flex items-center gap-2">
-                <div className="w-1 h-1 rounded-full bg-[hsl(var(--primary))]" />
-                <span className="truncate">{activity}</span>
-              </div>
-            ))}
+        <div className="space-y-2 rounded-2xl border border-[hsl(var(--border)/0.6)] bg-white/[0.03] p-3">
+          <div className="text-xs uppercase tracking-[0.18em] text-[hsl(var(--muted-foreground))]">Last session</div>
+          <div className="text-sm font-medium text-[hsl(var(--foreground))]">{lastSessionTitle}</div>
+          <div className="text-xs text-[hsl(var(--muted-foreground))]">
+            {lastSession ? (
+              <>
+                {workoutHome?.daysSinceLastSession != null ? `${workoutHome.daysSinceLastSession} days ago` : "Recent workout"}
+                {" · "}
+                {lastSession.durationMinutes != null ? `${lastSession.durationMinutes} min` : "Duration not set"}
+              </>
+            ) : (
+              "Start a structured workout to populate this tile."
+            )}
           </div>
-        )}
+        </div>
 
-        {size === "large" && chartData.length > 1 && (
-          <div className="flex-1 mt-4 min-h-[80px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id={`gradient-exercise-${tracker.id}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.18} />
-                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis
-                  dataKey="date"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                />
-                <YAxis hide domain={["auto", "auto"]} />
-                <Tooltip content={<CustomTooltip />} />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  fill={`url(#gradient-exercise-${tracker.id})`}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">This week</div>
+            <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{workoutHome?.sessionsThisWeek ?? 0}</div>
           </div>
-        )}
+          <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Streak</div>
+            <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{workoutHome?.activeWeekStreak ?? 0}</div>
+          </div>
+          <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-2">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Days since</div>
+            <div className="mt-1 text-lg font-semibold text-[hsl(var(--foreground))]">{workoutHome?.daysSinceLastSession ?? "--"}</div>
+          </div>
+        </div>
+
+        <div className="mt-3 space-y-2 text-xs text-[hsl(var(--muted-foreground))]">
+          <div className="flex items-center justify-between gap-3">
+            <span>Latest volume</span>
+            <span>{latestVolume != null ? lastSessionVolume : "Bodyweight / no external load"}</span>
+          </div>
+          {recentRoutines.length > 0 && (
+            <div className="space-y-1">
+              <div className="uppercase tracking-[0.18em] text-[hsl(var(--muted-foreground))]">Recent routines</div>
+              {recentRoutines.slice(0, 3).map((routine) => (
+                <div key={routine.id} className="flex items-center justify-between gap-3">
+                  <span className="truncate text-[hsl(var(--foreground))]">{routine.name}</span>
+                  <span>{routine.exercises.length} exercise{routine.exercises.length === 1 ? "" : "s"}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

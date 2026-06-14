@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type MouseEvent } from "react"
+import { useEffect, useMemo, useState, type MouseEvent } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import type { AssetWithUrls } from "@contracts/features/assets"
 import type { WeightEntryHistoryItem } from "@contracts/contracts"
@@ -15,6 +15,9 @@ import {
   buildWeightEntriesTabReadModel,
   formatIntakeDosageDisplay,
   buildWeightStatisticsReadModel,
+  buildWorkoutStatisticsReadModel,
+  buildWorkoutGraphReadModel,
+  buildExerciseProgressReadModel,
   formatSeverityDisplay,
   postponeTaskToNextDay,
   unpostponeTask,
@@ -22,12 +25,13 @@ import {
 import { buildBooksTrackerReadModel, formatBookRatingDisplay, getBookActionLabel, getBookLifecycleRecord } from "@contracts/features/books"
 import { getTrackerIdentity, isBooksTracker, usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useEntries, useDeleteEntryMutation, useDeleteFoodEntryMutation, useDeleteIntakeEntryMutation, useDeleteHealthSymptomEntryMutation, useUpdateEntryMutation, useWeightDetail, useTags, useBook } from "@shared/queries"
+import { useTrackers, useEntries, useDeleteEntryMutation, useDeleteFoodEntryMutation, useDeleteIntakeEntryMutation, useDeleteHealthSymptomEntryMutation, useUpdateEntryMutation, useWeightDetail, useTags, useBook, useWorkoutHistory, useWorkoutStatistics, useWorkoutGraph, useExerciseProgress } from "@shared/queries"
 import { filterEntriesByDate, cn } from "@shared/utils"
 import type { Entry } from "@shared/store"
 import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Flame, Book, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Gamepad2, Star, TrendingUp, TrendingDown, Salad, ImageIcon, Trash2, Pencil, CalendarPlus, Undo2, Square, Tv, type LucideIcon } from "lucide-react"
 import { EditEntryDialog } from "@features/entry/modals/EditEntryDialog"
 import { BookEntryDialog } from "@features/books/components/BookEntryDialog"
+import { CyberpunkSelect } from "@features/tracking/components/CyberpunkSelect"
 import { TagChips } from "@features/tags/components/TagChips"
 import { ConfirmDeleteDialog } from "@shared/components/ConfirmDeleteDialog"
 import { formatToastError, useToast } from "@shared/components/toast"
@@ -153,6 +157,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
 
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null)
   const [editingBookEntry, setEditingBookEntry] = useState<Entry | null>(null)
+  const [selectedWorkoutExerciseId, setSelectedWorkoutExerciseId] = useState<string | null>(null)
 
   const handleEditEntry = (e: MouseEvent, entry: Entry) => {
     e.stopPropagation()
@@ -198,6 +203,9 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const isIntakeTracker = !!tracker && getTrackerIdentity(tracker) === "intake"
   const isExerciseTracker = !!tracker && (getTrackerIdentity(tracker) === "exercise" || tracker.icon === "dumbbell" || trackerNameLowerForWeight.includes("workout") || trackerNameLowerForWeight.includes("exercise") || trackerNameLowerForWeight.includes("fitness"))
   const { data: weightDetail } = useWeightDetail(trackerId, isWeightTracker)
+  const { data: workoutHistory } = useWorkoutHistory(trackerId, isExerciseTracker)
+  const { data: workoutStatistics } = useWorkoutStatistics(trackerId, isExerciseTracker)
+  const { data: workoutGraph } = useWorkoutGraph(trackerId, isExerciseTracker)
   const weightEntriesReadModel = useMemo(
     () => weightDetail ? buildWeightEntriesTabReadModel(weightDetail) : { entries: [] },
     [weightDetail],
@@ -243,6 +251,81 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     () => (isBooksTrackerType ? buildBooksTrackerReadModel(trackerEntries, selectedDate) : null),
     [isBooksTrackerType, trackerEntries, selectedDate],
   )
+  const workoutSessions = workoutHistory?.structuredSessions ?? []
+  const workoutSessionByEntryId = useMemo(
+    () => new Map(workoutSessions.map((session) => [session.entryId, session])),
+    [workoutSessions],
+  )
+  const structuredWorkoutSessions = useMemo(
+    () => trackerEntries
+      .map((entry) => entry.workout ?? workoutSessionByEntryId.get(entry.id) ?? null)
+      .filter((session): session is NonNullable<typeof session> => session != null),
+    [trackerEntries, workoutSessionByEntryId],
+  )
+  const workoutStatisticsView = useMemo(
+    () => workoutStatistics ?? (structuredWorkoutSessions.length > 0
+      ? buildWorkoutStatisticsReadModel({ trackerId, sessions: structuredWorkoutSessions })
+      : null),
+    [structuredWorkoutSessions, trackerId, workoutStatistics],
+  )
+  const workoutGraphView = useMemo(
+    () => workoutGraph ?? (structuredWorkoutSessions.length > 0
+      ? buildWorkoutGraphReadModel({ trackerId, sessions: structuredWorkoutSessions })
+      : null),
+    [structuredWorkoutSessions, trackerId, workoutGraph],
+  )
+  const workoutLoadUnit = workoutSessions[0]?.loadUnit ?? null
+  const workoutExerciseOptions = useMemo(() => {
+    const seen = new Set<string>()
+    const options: Array<{ value: string; label: string }> = []
+    for (const session of workoutSessions) {
+      for (const exercise of session.exercises) {
+        if (seen.has(exercise.exerciseId)) continue
+        seen.add(exercise.exerciseId)
+        options.push({ value: exercise.exerciseId, label: exercise.exerciseName })
+      }
+    }
+    return options
+  }, [workoutSessions])
+
+  useEffect(() => {
+    if (!isExerciseTracker) return
+    if (workoutExerciseOptions.length === 0) {
+      if (selectedWorkoutExerciseId !== null) setSelectedWorkoutExerciseId(null)
+      return
+    }
+    if (!selectedWorkoutExerciseId || !workoutExerciseOptions.some((option) => option.value === selectedWorkoutExerciseId)) {
+      setSelectedWorkoutExerciseId(workoutExerciseOptions[0].value)
+    }
+  }, [isExerciseTracker, selectedWorkoutExerciseId, workoutExerciseOptions])
+  const { data: selectedWorkoutExerciseProgress } = useExerciseProgress(
+    trackerId,
+    selectedWorkoutExerciseId ?? "",
+    isExerciseTracker && selectedWorkoutExerciseId != null,
+  )
+  const selectedWorkoutExerciseProgressView = useMemo(
+    () => {
+      if (!selectedWorkoutExerciseId) return selectedWorkoutExerciseProgress ?? null
+      const loadUnit = structuredWorkoutSessions[0]?.loadUnit ?? workoutLoadUnit ?? null
+      if (!loadUnit) return selectedWorkoutExerciseProgress ?? null
+      return selectedWorkoutExerciseProgress ?? (
+        structuredWorkoutSessions.length > 0
+          ? buildExerciseProgressReadModel({
+              exerciseId: selectedWorkoutExerciseId,
+              exerciseName: workoutExerciseOptions.find((option) => option.value === selectedWorkoutExerciseId)?.label ?? selectedWorkoutExerciseId,
+              loadUnit,
+              sessions: structuredWorkoutSessions,
+            })
+          : null
+      )
+    },
+    [selectedWorkoutExerciseId, selectedWorkoutExerciseProgress, structuredWorkoutSessions, workoutExerciseOptions, workoutLoadUnit],
+  )
+  const isWorkoutTrackerSurface =
+    isExerciseTracker ||
+    structuredWorkoutSessions.length > 0 ||
+    (workoutStatisticsView?.totalSessions ?? 0) > 0 ||
+    (workoutGraphView?.sessionVolume.length ?? 0) > 0
 
   // Filter entries for selected date (for stats and history feed)
   const selectedDateEntries = useMemo(() => {
@@ -1068,6 +1151,27 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                     </div>
                   </div>
                 </>
+              ) : isWorkoutTrackerSurface ? (
+                <>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Structured Sessions</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {workoutStatisticsView?.totalSessions ?? 0}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Sessions This Week</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {workoutStatisticsView?.sessionsThisWeek ?? 0}
+                    </div>
+                  </div>
+                  <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Days Since Last Workout</div>
+                    <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                      {workoutStatisticsView?.daysSinceLastWorkout ?? "--"}
+                    </div>
+                  </div>
+                </>
               ) : !isNumericType ? (
                 <>
                   <div className={statCardBase + " relative overflow-hidden group"}>
@@ -1111,21 +1215,108 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
 
               <div className={statCardBase}>
                 <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">
-                  {isMediaType ? "Days Since Last Item" : isDietType ? "Days Since Last Meal" : isTaskType ? "Days Since Last Task" : "Days Since Last Entry"}
+                  {isExerciseTracker
+                    ? "Active Week Streak"
+                    : isMediaType
+                      ? "Days Since Last Item"
+                      : isDietType
+                        ? "Days Since Last Meal"
+                        : isTaskType
+                          ? "Days Since Last Task"
+                          : "Days Since Last Entry"}
                 </div>
                 <div className="text-4xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
-                  {daysSinceLastEntry !== null ? daysSinceLastEntry : "--"}
-                  <span className="ml-1 text-sm font-normal text-[hsl(220_12%_58%)]">days</span>
+                  {isExerciseTracker
+                    ? `${workoutStatisticsView?.activeWeekStreak ?? 0} weeks`
+                    : daysSinceLastEntry !== null
+                      ? `${daysSinceLastEntry} days`
+                      : "--"}
                 </div>
               </div>
 
               {/* Optional Empty placeholder slot to preserve grid aesthetics */}
-              {isNumericType && (
+              {isNumericType && !isWorkoutTrackerSurface && (
                 <div className="hidden items-center justify-center rounded-2xl border border-dashed border-white/8 bg-white/[0.02] p-4 text-xs text-[hsl(220_12%_58%)] md:flex">
                   Insights Engine Active
                 </div>
               )}
             </div>
+            {isWorkoutTrackerSurface && (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div className={statCardBase}>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Weekly Volume</div>
+                  <div className="text-3xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                    {workoutStatisticsView?.weeklyVolume != null
+                      ? `${workoutStatisticsView.weeklyVolume.toFixed(1)} ${workoutLoadUnit ?? ""}`.trim()
+                      : "--"}
+                  </div>
+                </div>
+                <div className={statCardBase}>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Average Session Volume</div>
+                  <div className="text-3xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                    {workoutStatisticsView?.averageSessionVolume != null
+                      ? `${workoutStatisticsView.averageSessionVolume.toFixed(1)} ${workoutLoadUnit ?? ""}`.trim()
+                      : "--"}
+                  </div>
+                </div>
+                <div className={statCardBase}>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Average Duration</div>
+                  <div className="text-3xl font-bold tracking-tight text-[hsl(210_28%_97%)]">
+                    {workoutStatisticsView?.averageDurationMinutes != null
+                      ? `${workoutStatisticsView.averageDurationMinutes.toFixed(1)} min`
+                      : "--"}
+                  </div>
+                </div>
+                <div className={statCardBase}>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Most Performed Exercises</div>
+                  <div className="space-y-1.5 text-sm text-[hsl(210_28%_97%)]">
+                    {(workoutStatisticsView?.frequentExercises ?? []).slice(0, 4).length > 0 ? (
+                      workoutStatisticsView!.frequentExercises.slice(0, 4).map((exercise) => (
+                        <div key={exercise.exerciseId} className="flex items-center justify-between gap-3">
+                          <span className="truncate">{exercise.exerciseName}</span>
+                          <span className="text-xs text-[hsl(220_12%_58%)]">{exercise.sessions} session{exercise.sessions === 1 ? "" : "s"}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-[hsl(220_12%_58%)]">No structured exercise history yet.</div>
+                    )}
+                  </div>
+                </div>
+                <div className={statCardBase}>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Recent PRs</div>
+                  <div className="space-y-1.5 text-sm text-[hsl(210_28%_97%)]">
+                    {(workoutStatisticsView?.recentPrs ?? []).length > 0 ? (
+                      workoutStatisticsView!.recentPrs.slice(0, 4).map((pr) => (
+                        <div key={`${pr.exerciseId}-${pr.kind}`} className="flex items-center justify-between gap-3">
+                          <span className="truncate">
+                            {pr.exerciseName}
+                            <span className="ml-1 text-xs text-[hsl(220_12%_58%)]">
+                              {pr.kind === "heaviest-load" ? "heaviest load" : "best set volume"}
+                            </span>
+                          </span>
+                          <span className="text-xs text-[hsl(220_12%_58%)]">{pr.value.toFixed(1)} {pr.loadUnit}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-[hsl(220_12%_58%)]">No PRs yet.</div>
+                    )}
+                  </div>
+                </div>
+                <div className={statCardBase}>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Structured vs Legacy</div>
+                  <div className="space-y-1.5 text-sm text-[hsl(210_28%_97%)]">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Structured sessions</span>
+                      <span className="text-xs text-[hsl(220_12%_58%)]">{workoutStatisticsView?.totalSessions ?? 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Legacy sessions</span>
+                      <span className="text-xs text-[hsl(220_12%_58%)]">{workoutHistory?.legacySessions.length ?? 0}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1190,7 +1381,164 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  {chartData.length > 1 ? (
+                  {isWorkoutTrackerSurface ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                        <div className={statCardBase}>
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Weekly Volume</div>
+                              <div className="mt-1 text-sm text-[hsl(220_12%_58%)]">
+                                Unit-safe weekly total for the workout tracker.
+                              </div>
+                            </div>
+                            <div className="text-sm text-[hsl(210_28%_97%)]">
+                              {workoutLoadUnit ?? "--"}
+                            </div>
+                          </div>
+                          {workoutGraphView?.weeklyVolume.length ? (
+                            <div className="h-56">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={workoutGraphView.weeklyVolume}>
+                                  <defs>
+                                    <linearGradient id={`workout-weekly-${tracker.id}`} x1="0" y1="0" x2="0" y2="1">
+                                      <stop offset="0%" stopColor="hsl(266 73% 63%)" stopOpacity={0.35} />
+                                      <stop offset="100%" stopColor="hsl(266 73% 63%)" stopOpacity={0} />
+                                    </linearGradient>
+                                  </defs>
+                                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                                  <YAxis hide domain={["auto", "auto"]} />
+                                  <Tooltip content={<CustomTooltip />} />
+                                  <Area type="monotone" dataKey="value" stroke="hsl(266 73% 63%)" strokeWidth={2} fill={`url(#workout-weekly-${tracker.id})`} />
+                                </AreaChart>
+                              </ResponsiveContainer>
+                            </div>
+                          ) : (
+                            <div className="surface-card flex h-56 items-center justify-center rounded-2xl text-sm text-[hsl(220_12%_58%)]">
+                              No structured weekly volume yet.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className={statCardBase}>
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Session Volume</div>
+                              <div className="mt-1 text-sm text-[hsl(220_12%_58%)]">
+                                Each structured workout session, ordered by date.
+                              </div>
+                            </div>
+                            <div className="text-sm text-[hsl(210_28%_97%)]">
+                              {workoutLoadUnit ?? "--"}
+                            </div>
+                          </div>
+                          {workoutGraphView?.sessionVolume.length ? (
+                            <div className="h-56">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={workoutGraphView.sessionVolume}>
+                                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                                  <YAxis hide domain={["auto", "auto"]} />
+                                  <Tooltip content={<CustomTooltip />} />
+                                  <Line type="monotone" dataKey="value" stroke="hsl(160 62% 45%)" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          ) : (
+                            <div className="surface-card flex h-56 items-center justify-center rounded-2xl text-sm text-[hsl(220_12%_58%)]">
+                              No structured sessions to chart yet.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className={statCardBase}>
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Exercise Progress</div>
+                            <div className="mt-1 text-sm text-[hsl(220_12%_58%)]">
+                              Compare the selected exercise across structured workouts.
+                            </div>
+                          </div>
+                          <div className="min-w-[240px]">
+                            <CyberpunkSelect
+                              value={selectedWorkoutExerciseId}
+                              onValueChange={(value) => setSelectedWorkoutExerciseId(typeof value === "string" ? value : null)}
+                              options={workoutExerciseOptions}
+                              placeholder="Select exercise"
+                            />
+                          </div>
+                        </div>
+
+                        {selectedWorkoutExerciseProgress?.sessionCount ? (
+                          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                              <div className="mb-2 text-xs uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Session volume</div>
+                              {selectedWorkoutExerciseProgressView?.points.length ? (
+                                <div className="h-44">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={selectedWorkoutExerciseProgressView.points}>
+                                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                                      <YAxis hide domain={["auto", "auto"]} />
+                                      <Tooltip content={<CustomTooltip />} />
+                                      <Line type="monotone" dataKey="value" stroke="hsl(266 73% 63%)" strokeWidth={2} dot={{ r: 3 }} />
+                                    </LineChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              ) : (
+                                <div className="flex h-44 items-center justify-center text-sm text-[hsl(220_12%_58%)]">
+                                  No load-based volume for this exercise.
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                              <div className="mb-2 text-xs uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Heaviest load</div>
+                              {selectedWorkoutExerciseProgressView?.heaviestLoadPoints.length ? (
+                                <div className="h-44">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={selectedWorkoutExerciseProgressView.heaviestLoadPoints}>
+                                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                                      <YAxis hide domain={["auto", "auto"]} />
+                                      <Tooltip content={<CustomTooltip />} />
+                                      <Line type="monotone" dataKey="value" stroke="hsl(160 62% 45%)" strokeWidth={2} dot={{ r: 3 }} />
+                                    </LineChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              ) : (
+                                <div className="flex h-44 items-center justify-center text-sm text-[hsl(220_12%_58%)]">
+                                  No heaviest-load progression yet.
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                              <div className="mb-2 text-xs uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Best set volume</div>
+                              {selectedWorkoutExerciseProgressView?.bestSetVolumePoints.length ? (
+                                <div className="h-44">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={selectedWorkoutExerciseProgressView.bestSetVolumePoints}>
+                                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                                      <YAxis hide domain={["auto", "auto"]} />
+                                      <Tooltip content={<CustomTooltip />} />
+                                      <Line type="monotone" dataKey="value" stroke="hsl(45 93% 58%)" strokeWidth={2} dot={{ r: 3 }} />
+                                    </LineChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              ) : (
+                                <div className="flex h-44 items-center justify-center text-sm text-[hsl(220_12%_58%)]">
+                                  No best-set-volume progression yet.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="surface-card rounded-2xl p-4 text-sm text-[hsl(220_12%_58%)]">
+                            Select an exercise to inspect its progression. Bodyweight-only sessions remain visible in history, but they do not generate fake load progression.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : chartData.length > 1 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       {isWeightType && chartType === "area" ? (
                         <LineChart data={chartData}>
@@ -1877,7 +2225,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
             ) : isExerciseTracker ? (
               <div className="space-y-4">
                 {historyEntries.map((entry) => {
-                  const workout = entry.workout ?? null
+                  const workout = entry.workout ?? workoutSessionByEntryId.get(entry.id) ?? null
                   const legacyWorkout = !workout
                   const asset = entry.assetId != null ? assets.get(entry.assetId) : null
                   return (
@@ -1902,24 +2250,36 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                           {new Date(entry.timestamp).toLocaleDateString()}
                         </div>
                         <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] uppercase tracking-normal text-white/45">
-                          {legacyWorkout ? "Legacy" : `${workout?.totalSets ?? 0} set${(workout?.totalSets ?? 0) === 1 ? "" : "s"}`}
+                          {legacyWorkout
+                            ? "Legacy / unstructured"
+                            : `${workout?.totalSets ?? 0} set${(workout?.totalSets ?? 0) === 1 ? "" : "s"} · ${workout?.exercises.length ?? 0} exercise${(workout?.exercises.length ?? 0) === 1 ? "" : "s"}`
+                          }
                         </span>
                       </div>
 
                       <div className="mb-1 text-sm text-white/90">
-                        {workout?.title || workout?.routine?.name || entry.note || "Workout session"}
+                        {workout?.sessionName || workout?.title || workout?.routine?.name || entry.note || "Workout session"}
                       </div>
-                      {workout?.routine && (
-                        <div className="mb-2 text-xs text-white/50">
-                          Routine: {workout.routine.name}
-                          {workout.routine.notes ? ` · ${workout.routine.notes}` : ""}
+                      {workout && (
+                        <div className="mb-2 space-y-1 text-xs text-white/50">
+                          <div>
+                            {workout.routine ? `Routine: ${workout.routine.name}` : "Standalone workout"}
+                            {workout.routine?.notes ? ` · ${workout.routine.notes}` : ""}
+                          </div>
+                          <div>
+                            {workout.durationMinutes != null ? `${workout.durationMinutes} min` : "Duration not set"}
+                            {" · "}
+                            {workout.totalVolume != null
+                              ? `Volume ${workout.totalVolume.toFixed(1)} ${workout.loadUnit}`
+                              : "Bodyweight / no external load"}
+                          </div>
+                          {(workout.note || entry.note) && (
+                            <div className="text-sm text-white/60">{workout.note || entry.note}</div>
+                          )}
                         </div>
                       )}
                       {workout ? (
                         <div className="space-y-3">
-                          {workout.note && workout.note !== workout.title && (
-                            <div className="text-sm text-white/60">{workout.note}</div>
-                          )}
                           <div className="space-y-2">
                             {workout.exercises.map((exercise) => (
                               <div key={exercise.exerciseId} className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
@@ -1931,6 +2291,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                                     <div className="text-xs text-white/45">
                                       {exercise.category}
                                       {exercise.equipment ? ` · ${exercise.equipment}` : ""}
+                                      {exercise.bodyPartSnapshot?.length ? ` · ${exercise.bodyPartSnapshot.join(", ")}` : ""}
                                     </div>
                                   </div>
                                   <div className="text-xs text-white/45">
@@ -1945,7 +2306,9 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                                     >
                                       Set {set.setIndex}
                                       {set.reps != null ? ` · ${set.reps} reps` : ""}
-                                      {set.weight != null ? ` · ${set.weight} ${set.weightUnit ?? "kg"}` : ""}
+                                      {set.weight != null
+                                        ? ` · ${set.weight} ${set.weightUnit ?? workout.loadUnit}`
+                                        : " · bodyweight"}
                                       {set.isWarmup ? " · warmup" : ""}
                                     </span>
                                   ))}
@@ -1958,6 +2321,11 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
                         <div className="text-sm text-white/60">Unstructured legacy exercise entry</div>
                       )}
 
+                      {legacyWorkout && (
+                        <div className="mt-2 text-xs uppercase tracking-[0.18em] text-white/35">
+                          Legacy rows remain readable, but they do not count toward structured volume or PRs.
+                        </div>
+                      )}
                       {legacyWorkout && entry.note && (
                         <div className="mt-2 text-sm text-white/60">{entry.note}</div>
                       )}

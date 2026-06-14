@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { ChevronLeft, ChevronRight, Bell, Clock, Check, Eye, EyeOff } from "lucide-react"
 import { cn } from "@shared/utils"
 import type { Reminder, Entry } from "@shared/store"
-import { useTrackers, useCalendarMonth, useStats, useReminders, useEntries, useTags } from "@shared/queries"
+import { useTrackers, useCalendarMonth, useStats, useReminders, useEntries, useTags, useWorkoutCalendar } from "@shared/queries"
 import { TimelineView } from "./components/TimelineView"
 import { TagChips } from "@features/tags/components/TagChips"
 import type { CalendarDayEntry } from "@contracts/features/calendar"
@@ -38,6 +38,11 @@ export function CalendarPage() {
   const currentYear = currentDate.getFullYear()
   const currentMonth = currentDate.getMonth()
   const { data: calendarData } = useCalendarMonth(currentYear, currentMonth)
+  const exerciseTracker = useMemo(
+    () => trackers.find((tracker) => getTrackerIdentity(tracker) === "exercise" || tracker.icon === "dumbbell" || tracker.name.toLowerCase().includes("workout") || tracker.name.toLowerCase().includes("exercise")),
+    [trackers],
+  )
+  const { data: workoutCalendar } = useWorkoutCalendar(exerciseTracker?.id ?? 0, currentYear, currentMonth, !!exerciseTracker)
 
   const activeDays = calendarData?.activeDays ?? []
   const entriesByDate = useMemo(
@@ -56,6 +61,20 @@ export function CalendarPage() {
     const dateStr = new Date(currentYear, currentMonth, selectedDay).toISOString().slice(0, 10)
     return entriesByDate[dateStr] ?? []
   }, [entriesByDate, selectedDay, currentMonth, currentYear])
+  const selectedDayDateStr = selectedDay
+    ? new Date(currentYear, currentMonth, selectedDay).toISOString().slice(0, 10)
+    : null
+  const selectedDayWorkoutSessions = useMemo(
+    () => {
+      if (!selectedDayDateStr || !exerciseTracker) return []
+      return workoutCalendar?.entriesByDate[selectedDayDateStr] ?? []
+    },
+    [exerciseTracker, selectedDayDateStr, workoutCalendar],
+  )
+  const selectedDayNonWorkoutEntries = useMemo(
+    () => selectedDayEntries.filter((entry) => !exerciseTracker || entry.trackerId !== exerciseTracker.id),
+    [exerciseTracker, selectedDayEntries],
+  )
   const { data: allEntries = [] } = useEntries()
   const allEntriesById = useMemo(
     () => new Map(allEntries.map((entry) => [entry.id, entry])),
@@ -452,187 +471,279 @@ export function CalendarPage() {
                   <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                     <div>
                       <h4 className="section-kicker mb-3">Entries</h4>
-                      {selectedDayEntries.length > 0 ? (
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                          {selectedDayEntries.map((entry) => {
-                            const detailedEntry = allEntriesById.get(entry.id) ?? null
-                            const tracker = trackers.find((t) => t.id === entry.trackerId)
-                            const displayUnit = entry.unit ?? (tracker?.config?.unit as string | undefined)
-                            const trackerNameLower = tracker?.name.toLowerCase() ?? ""
-                            const isMoodEntry = trackerNameLower.includes("mood") || trackerNameLower.includes("feeling") || tracker?.icon === "smile"
-                            const isTaskEntry = !!entry.taskState
-                            const isGamingTracker = tracker ? getTrackerIdentity(tracker) === "gaming" : false
-                            const isFoodTracker = tracker ? getTrackerIdentity(tracker) === "diet" : false
-                            const isHealthTracker = tracker ? getTrackerIdentity(tracker) === "health" : false
-                            const isIntakeTracker = tracker ? getTrackerIdentity(tracker) === "intake" : false
-                            const isBooksTracker = tracker ? getTrackerIdentity(tracker) === "books" : false
-                            const gaming = entry.gaming?.structured ? entry.gaming : null
-                            const food = entry.food?.structured ? entry.food : null
-                            const health = entry.health?.structured ? entry.health : null
-                            const intake = entry.intake?.structured ? entry.intake : null
-                            const legacyGaming = isGamingTracker && !gaming
-                            const legacyFood = isFoodTracker && !food
-                            const legacyHealth = isHealthTracker && !health
-                            const legacyIntake = isIntakeTracker && !intake
-                            const book = isBooksTracker && detailedEntry ? getBookLifecycleRecord(detailedEntry as Entry) : null
-                            const moodScore = isMoodEntry ? clampMoodScore(entry.value) : null
-                            const entryTime = new Date(entry.timestamp).toLocaleTimeString(undefined, {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
+                      {selectedDayWorkoutSessions.length > 0 || selectedDayNonWorkoutEntries.length > 0 ? (
+                        <div className="space-y-5">
+                          {selectedDayWorkoutSessions.length > 0 && (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <h5 className="section-kicker">Structured workouts</h5>
+                                <span className="text-xs text-[hsl(var(--muted-foreground))]">{selectedDayWorkoutSessions.length}</span>
+                              </div>
+                              <div className="space-y-4">
+                                {selectedDayWorkoutSessions.map((session) => {
+                                  const sourceEntry = allEntriesById.get(session.entryId) ?? null
+                                  const sessionTags = sourceEntry?.tagIds ?? []
+                                  const sessionTime = new Date(session.timestamp).toLocaleTimeString(undefined, {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })
+                                  return (
+                                    <div
+                                      key={session.entryId}
+                                      className="surface-card rounded-2xl p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-[hsl(var(--border)/0.82)] hover:shadow-[0_12px_24px_rgba(2,6,23,0.12)]"
+                                    >
+                                      <div className="mb-2 flex items-start justify-between gap-3">
+                                        <div>
+                                          <div className="font-medium text-[hsl(var(--foreground))]">
+                                            {session.sessionName || session.title || session.routine?.name || "Workout session"}
+                                          </div>
+                                          <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+                                            {session.routine ? `Routine: ${session.routine.name}` : "Standalone workout"}
+                                            {session.durationMinutes != null ? ` · ${session.durationMinutes} min` : ""}
+                                            {session.totalSets != null ? ` · ${session.totalSets} sets` : ""}
+                                            {" · "}
+                                            {session.totalVolume != null ? `${session.totalVolume.toFixed(1)} ${session.loadUnit}` : "Bodyweight / no external load"}
+                                          </div>
+                                        </div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{sessionTime}</div>
+                                      </div>
 
-                            return (
-                              <div
-                                key={entry.id}
-                                className="surface-card rounded-2xl p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-[hsl(var(--border)/0.82)] hover:shadow-[0_12px_24px_rgba(2,6,23,0.12)]"
-                              >
-                                <div className="mb-2 flex items-center justify-between gap-3">
-                                  <span className="font-medium text-[hsl(var(--foreground))]">
-                                    {tracker?.name || "Unknown"}
-                                  </span>
+                                      {session.note && (
+                                        <p className="mb-2 text-sm text-[hsl(var(--muted-foreground))]">{session.note}</p>
+                                      )}
+
+                                      <div className="space-y-2">
+                                        {session.exercises.map((exercise) => (
+                                          <div key={exercise.exerciseId} className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-3">
+                                            <div className="flex items-center justify-between gap-3">
+                                              <div>
+                                                <div className="text-sm font-medium text-[hsl(var(--foreground))]">{exercise.exerciseName}</div>
+                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                  {exercise.equipment ? `${exercise.equipment}` : "No equipment"}
+                                                  {exercise.bodyPartSnapshot?.length ? ` · ${exercise.bodyPartSnapshot.join(", ")}` : ""}
+                                                </div>
+                                              </div>
+                                              <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                {exercise.sets.length} set{exercise.sets.length === 1 ? "" : "s"}
+                                              </div>
+                                            </div>
+                                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                              {exercise.sets.map((set) => (
+                                                <span
+                                                  key={`${session.entryId}-${exercise.exerciseId}-${set.setIndex}`}
+                                                  className="rounded-full border border-[hsl(var(--border)/0.62)] bg-white/[0.02] px-2 py-0.5 text-xs text-[hsl(var(--muted-foreground))]"
+                                                >
+                                                  Set {set.setIndex}
+                                                  {set.reps != null ? ` · ${set.reps} reps` : ""}
+                                                  {set.weight != null ? ` · ${set.weight} ${set.weightUnit ?? session.loadUnit}` : " · bodyweight"}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+
+                                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-[hsl(var(--muted-foreground))]">
+                                        <span className="rounded-full border border-[hsl(var(--border)/0.62)] bg-white/[0.03] px-2 py-0.5">
+                                          {session.totalVolume != null ? `Volume ${session.totalVolume.toFixed(1)} ${session.loadUnit}` : "No external load"}
+                                        </span>
+                                        {sourceEntry?.note && (
+                                          <span className="rounded-full border border-[hsl(var(--border)/0.62)] bg-white/[0.03] px-2 py-0.5">
+                                            Note: {sourceEntry.note}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <TagChips tagIds={sessionTags} tags={tags} limit={3} className="mt-3" />
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          {selectedDayNonWorkoutEntries.length > 0 && (
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                              {selectedDayNonWorkoutEntries.map((entry) => {
+                                const detailedEntry = allEntriesById.get(entry.id) ?? null
+                                const tracker = trackers.find((t) => t.id === entry.trackerId)
+                                const displayUnit = entry.unit ?? (tracker?.config?.unit as string | undefined)
+                                const trackerNameLower = tracker?.name.toLowerCase() ?? ""
+                                const isMoodEntry = trackerNameLower.includes("mood") || trackerNameLower.includes("feeling") || tracker?.icon === "smile"
+                                const isTaskEntry = !!entry.taskState
+                                const isGamingTracker = tracker ? getTrackerIdentity(tracker) === "gaming" : false
+                                const isFoodTracker = tracker ? getTrackerIdentity(tracker) === "diet" : false
+                                const isHealthTracker = tracker ? getTrackerIdentity(tracker) === "health" : false
+                                const isIntakeTracker = tracker ? getTrackerIdentity(tracker) === "intake" : false
+                                const isBooksTracker = tracker ? getTrackerIdentity(tracker) === "books" : false
+                                const gaming = entry.gaming?.structured ? entry.gaming : null
+                                const food = entry.food?.structured ? entry.food : null
+                                const health = entry.health?.structured ? entry.health : null
+                                const intake = entry.intake?.structured ? entry.intake : null
+                                const legacyGaming = isGamingTracker && !gaming
+                                const legacyFood = isFoodTracker && !food
+                                const legacyHealth = isHealthTracker && !health
+                                const legacyIntake = isIntakeTracker && !intake
+                                const book = isBooksTracker && detailedEntry ? getBookLifecycleRecord(detailedEntry as Entry) : null
+                                const moodScore = isMoodEntry ? clampMoodScore(entry.value) : null
+                                const entryTime = new Date(entry.timestamp).toLocaleTimeString(undefined, {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+
+                                return (
                                   <div
-                                    className="h-2 w-2 rounded-full"
-                                    style={{ backgroundColor: tracker?.color || "hsl(266 73% 63%)" }}
-                                  />
-                                </div>
-                                <p className="text-2xl font-display font-bold text-[hsl(var(--primary))]">
-                                  {isBooksTracker && book
-                                    ? (book.action === "legacy" ? "Legacy" : getBookActionLabel(book.action))
-                                    : isTaskEntry
-                                      ? (entry.taskState === "postponed" ? "Postponed" : "Task")
-                                      : gaming
-                                        ? `${gaming.estimatedHours}h`
-                                        : isMoodEntry && moodScore != null
-                                          ? `${moodScore}/10`
-                                          : legacyGaming
-                                            ? "Legacy"
-                                            : entry.value ?? "—"}
-                                  {!isTaskEntry && !isMoodEntry && !isBooksTracker && displayUnit && (
-                                    <span className="ml-1 text-sm font-normal text-[hsl(var(--muted-foreground))]">
-                                      {displayUnit}
-                                    </span>
-                                  )}
-                                </p>
-                                {isTaskEntry && (
-                                  <div className="mt-1 flex flex-wrap gap-1.5">
-                                    <span className={cn(
-                                      "rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-normal",
-                                      entry.taskState === "postponed"
-                                        ? "border-amber-300/30 bg-amber-300/10 text-amber-300"
-                                        : "border-emerald-300/25 bg-emerald-300/10 text-emerald-300"
-                                    )}>
-                                      {entry.taskState === "postponed" ? "Postponed" : "Actionable"}
-                                    </span>
-                                    {entry.taskActiveDate && entry.taskState === "postponed" && (
-                                      <span className="rounded-full border border-[hsl(var(--border)/0.5)] px-2 py-0.5 text-[11px] text-[hsl(var(--muted-foreground))]">
-                                        Active {entry.taskActiveDate}
+                                    key={entry.id}
+                                    className="surface-card rounded-2xl p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-[hsl(var(--border)/0.82)] hover:shadow-[0_12px_24px_rgba(2,6,23,0.12)]"
+                                  >
+                                    <div className="mb-2 flex items-center justify-between gap-3">
+                                      <span className="font-medium text-[hsl(var(--foreground))]">
+                                        {tracker?.name || "Unknown"}
                                       </span>
+                                      <div
+                                        className="h-2 w-2 rounded-full"
+                                        style={{ backgroundColor: tracker?.color || "hsl(266 73% 63%)" }}
+                                      />
+                                    </div>
+                                    <p className="text-2xl font-display font-bold text-[hsl(var(--primary))]">
+                                      {isBooksTracker && book
+                                        ? (book.action === "legacy" ? "Legacy" : getBookActionLabel(book.action))
+                                        : isTaskEntry
+                                          ? (entry.taskState === "postponed" ? "Postponed" : "Task")
+                                          : gaming
+                                            ? `${gaming.estimatedHours}h`
+                                            : isMoodEntry && moodScore != null
+                                              ? `${moodScore}/10`
+                                              : legacyGaming
+                                                ? "Legacy"
+                                                : entry.value ?? "—"}
+                                      {!isTaskEntry && !isMoodEntry && !isBooksTracker && displayUnit && (
+                                        <span className="ml-1 text-sm font-normal text-[hsl(var(--muted-foreground))]">
+                                          {displayUnit}
+                                        </span>
+                                      )}
+                                    </p>
+                                    {isTaskEntry && (
+                                      <div className="mt-1 flex flex-wrap gap-1.5">
+                                        <span className={cn(
+                                          "rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-normal",
+                                          entry.taskState === "postponed"
+                                            ? "border-amber-300/30 bg-amber-300/10 text-amber-300"
+                                            : "border-emerald-300/25 bg-emerald-300/10 text-emerald-300"
+                                        )}>
+                                          {entry.taskState === "postponed" ? "Postponed" : "Actionable"}
+                                        </span>
+                                        {entry.taskActiveDate && entry.taskState === "postponed" && (
+                                          <span className="rounded-full border border-[hsl(var(--border)/0.5)] px-2 py-0.5 text-[11px] text-[hsl(var(--muted-foreground))]">
+                                            Active {entry.taskActiveDate}
+                                          </span>
+                                        )}
+                                      </div>
                                     )}
-                                  </div>
-                                )}
-                                {isMoodEntry && moodScore != null && (
-                                  <p className="mt-1 text-sm" style={{ color: moodScoreToColor(moodScore) }}>
-                                    {moodScoreToLabel(moodScore)}
-                                  </p>
-                                )}
-                                {isBooksTracker && book && (
-                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                    {book.title}
-                                  </p>
-                                )}
-                                {legacyGaming && (
-                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                    Unstructured legacy game entry
-                                  </p>
-                                )}
-                                {legacyGaming && entry.note && (
-                                  <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
-                                )}
-                                {isBooksTracker && book && book.rating != null && (
-                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                    {book.rating.toFixed(1)}/5
-                                  </p>
-                                )}
-                                {isBooksTracker && book && book.action === "legacy" && entry.note && (
-                                  <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
-                                )}
-                                {food && (
-                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                    {food.foodName}
-                                  </p>
-                                )}
-                                {food && (
-                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                    {food.calories != null ? `${Math.round(food.calories)} kcal` : "Calories not set"}
-                                    {food.mealType ? ` · ${food.mealType}` : ""}
-                                  </p>
-                                )}
-                                {legacyFood && (
-                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                    Unstructured legacy food entry
-                                  </p>
-                                )}
-                                {legacyFood && entry.note && (
-                                  <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
-                                )}
-                                {health && (
-                                  <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                    {health.category}
-                                    {health.severity != null ? ` · ${formatSeverityDisplay(health.severity)}` : ""}
-                                  </p>
-                                )}
-                                {health && entry.note && (
-                                    <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
-                                )}
-                                {legacyHealth && (
-                                    <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                    Unstructured legacy health entry
-                                  </p>
-                                )}
-                                {legacyHealth && entry.note && (
-                                    <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
-                                )}
-                                {intake && (
-                                    <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                    {isMoodEntry && moodScore != null && (
+                                      <p className="mt-1 text-sm" style={{ color: moodScoreToColor(moodScore) }}>
+                                        {moodScoreToLabel(moodScore)}
+                                      </p>
+                                    )}
+                                    {isBooksTracker && book && (
+                                      <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                        {book.title}
+                                      </p>
+                                    )}
+                                    {legacyGaming && (
+                                      <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                        Unstructured legacy game entry
+                                      </p>
+                                    )}
+                                    {legacyGaming && entry.note && (
+                                      <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                    )}
+                                    {isBooksTracker && book && book.rating != null && (
+                                      <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                        {book.rating.toFixed(1)}/5
+                                      </p>
+                                    )}
+                                    {isBooksTracker && book && book.action === "legacy" && entry.note && (
+                                      <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                    )}
+                                    {food && (
+                                      <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                        {food.foodName}
+                                      </p>
+                                    )}
+                                    {food && (
+                                      <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                        {food.calories != null ? `${Math.round(food.calories)} kcal` : "Calories not set"}
+                                        {food.mealType ? ` · ${food.mealType}` : ""}
+                                      </p>
+                                    )}
+                                    {legacyFood && (
+                                      <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                        Unstructured legacy food entry
+                                      </p>
+                                    )}
+                                    {legacyFood && entry.note && (
+                                      <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                    )}
+                                    {health && (
+                                      <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                        {health.category}
+                                        {health.severity != null ? ` · ${formatSeverityDisplay(health.severity)}` : ""}
+                                      </p>
+                                    )}
+                                    {health && entry.note && (
+                                      <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                    )}
+                                    {legacyHealth && (
+                                      <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                        Unstructured legacy health entry
+                                      </p>
+                                    )}
+                                    {legacyHealth && entry.note && (
+                                      <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                    )}
+                                    {intake && (
+                                      <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
                                         {intake.itemType}
                                         {intake.variant ? ` · ${intake.variant}` : ""}
-                                    </p>
-                                )}
-                                {intake && (
-                                    <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                      </p>
+                                    )}
+                                    {intake && (
+                                      <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
                                         {formatIntakeDosageDisplay(intake.dosage, intake.unit)}
-                                    </p>
-                                )}
-                                {legacyIntake && (
-                                    <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                      </p>
+                                    )}
+                                    {legacyIntake && (
+                                      <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
                                         Unstructured legacy intake entry
-                                    </p>
-                                )}
-                                {legacyIntake && entry.note && (
-                                    <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
-                                )}
-                                {(entry as CalendarDayEntry).waist != null && (
-                                    <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                      </p>
+                                    )}
+                                    {legacyIntake && entry.note && (
+                                      <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                    )}
+                                    {(entry as CalendarDayEntry).waist != null && (
+                                      <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
                                         Waist {(entry as CalendarDayEntry).waist}
                                         {(entry as CalendarDayEntry).waistUnit ? ` ${(entry as CalendarDayEntry).waistUnit}` : ""}
-                                    </p>
-                                )}
-                                {entry.note && !gaming && !legacyGaming && !isBooksTracker && !food && !legacyFood && !health && !legacyHealth && !intake && !legacyIntake && (
-                                    <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
-                                )}
-                                {gaming && (
-                                  <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{gaming.gameTitle}</p>
-                                )}
-                                <TagChips
-                                  tagIds={(entry as CalendarDayEntry).tagIds}
-                                  tags={tags}
-                                  limit={3}
-                                  className="mt-2"
-                                />
-                                <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))/0.8]">{entryTime}</p>
-                              </div>
-                            )
-                          })}
+                                      </p>
+                                    )}
+                                    {entry.note && !gaming && !legacyGaming && !isBooksTracker && !food && !legacyFood && !health && !legacyHealth && !intake && !legacyIntake && (
+                                      <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
+                                    )}
+                                    {gaming && (
+                                      <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{gaming.gameTitle}</p>
+                                    )}
+                                    <TagChips
+                                      tagIds={(entry as CalendarDayEntry).tagIds}
+                                      tags={tags}
+                                      limit={3}
+                                      className="mt-2"
+                                    />
+                                    <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))/0.8]">{entryTime}</p>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="surface-card rounded-2xl py-6 text-center">

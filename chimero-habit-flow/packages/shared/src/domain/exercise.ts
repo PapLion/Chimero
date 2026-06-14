@@ -187,10 +187,15 @@ export function buildLegacyWorkoutSessionReadModel(entry: Pick<Entry, 'id' | 'tr
     null
 
   const totalSets = exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0)
-  const totalVolume = exercises.reduce((sum, exercise) => sum + exercise.sets.reduce((setSum, set) => {
-    if (set.reps == null || set.load == null) return setSum
-    return setSum + set.reps * set.load
-  }, 0), 0)
+  let totalVolume = 0
+  let hasVolume = false
+  for (const exercise of exercises) {
+    for (const set of exercise.sets) {
+      if (set.reps == null || set.load == null) continue
+      totalVolume += set.reps * set.load
+      hasVolume = true
+    }
+  }
 
   return {
     structured: true,
@@ -205,7 +210,7 @@ export function buildLegacyWorkoutSessionReadModel(entry: Pick<Entry, 'id' | 'tr
     loadUnit,
     durationMinutes: null,
     totalSets,
-    totalVolume: Number.isFinite(totalVolume) ? totalVolume : null,
+    totalVolume: hasVolume && Number.isFinite(totalVolume) ? totalVolume : null,
     completedAt: completedAt ?? null,
     routine: null,
     exercises,

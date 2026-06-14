@@ -107,6 +107,23 @@ function toString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
+function computeSetVolume(reps: number | null, load: number | null): number | null {
+  if (reps == null || load == null) return null
+  return reps * load
+}
+
+function computeExerciseVolume(exercise: WorkoutExerciseReadModel): number | null {
+  let total = 0
+  let hasVolume = false
+  for (const set of exercise.sets) {
+    const setVolume = computeSetVolume(set.reps, set.load)
+    if (setVolume == null) continue
+    total += setVolume
+    hasVolume = true
+  }
+  return hasVolume ? total : null
+}
+
 export function buildWorkoutSetReadModel(row: JsonRecord, loadUnit: WorkoutWeightUnit | null): WorkoutSetReadModel {
   const load = toNumber(row.load ?? row.weight ?? row.value)
   const reps = toNumber(row.reps ?? row.repetitions ?? row.count)
@@ -126,8 +143,9 @@ export function buildWorkoutExerciseReadModel(
   row: JsonRecord,
   loadUnit: WorkoutWeightUnit | null,
   setRows: JsonRecord[] = [],
+  fallbackKey: string = 'unknown-exercise',
 ): WorkoutExerciseReadModel {
-  const exerciseId = toString(row.exerciseId ?? row.exercise_id ?? row.sourceExerciseId ?? row.source_exercise_id ?? row.id) ?? 'unknown-exercise'
+  const exerciseId = toString(row.exerciseId ?? row.exercise_id ?? row.sourceExerciseId ?? row.source_exercise_id ?? row.id) ?? fallbackKey
   const exerciseName = toString(row.exerciseName ?? row.exercise_name ?? row.name) ?? exerciseId
   return {
     exerciseId,
@@ -147,14 +165,14 @@ export function buildWorkoutExerciseReadModel(
   }
 }
 
-export function buildWorkoutRoutineExerciseReadModel(row: JsonRecord): WorkoutRoutineExerciseReadModel {
+export function buildWorkoutRoutineExerciseReadModel(row: JsonRecord, fallbackKey: string = 'unknown-exercise'): WorkoutRoutineExerciseReadModel {
   const orderIndex = Number(row.orderIndex ?? row.order_index ?? 0)
   const targetSets = Number(row.targetSets ?? row.target_sets ?? 1)
   const targetReps = toNumber(row.targetReps ?? row.target_reps)
   const defaultLoad = toNumber(row.defaultLoad ?? row.default_load)
   return {
     id: Number(row.id ?? 0),
-    exerciseId: toString(row.exerciseId ?? row.exercise_key ?? row.sourceExerciseId ?? row.source_exercise_id ?? row.id) ?? 'unknown-exercise',
+    exerciseId: toString(row.exerciseId ?? row.exercise_key ?? row.sourceExerciseId ?? row.source_exercise_id ?? row.id) ?? fallbackKey,
     sourceExerciseId: toString(row.sourceExerciseId ?? row.source_exercise_id),
     exerciseName: toString(row.exerciseName ?? row.exercise_name ?? row.name) ?? 'Exercise',
     category: toString(row.categorySnapshot ?? row.category_snapshot ?? row.category),
@@ -181,7 +199,7 @@ export function buildWorkoutRoutineReadModel(row: JsonRecord, exercises: JsonRec
     loadUnit,
     createdAt: row.createdAt == null && row.created_at == null ? null : Number(row.createdAt ?? row.created_at),
     updatedAt: row.updatedAt == null && row.updated_at == null ? null : Number(row.updatedAt ?? row.updated_at),
-    exercises: exercises.map((exercise) => buildWorkoutRoutineExerciseReadModel(exercise)),
+    exercises: exercises.map((exercise, index) => buildWorkoutRoutineExerciseReadModel(exercise, `unknown-exercise-${index + 1}`)),
   }
 }
 
@@ -208,18 +226,20 @@ export function buildWorkoutSessionReadModel(input: {
   if (!loadUnit && exercisesSource.length === 0 && routineExercises.length === 0) return undefined
   if (!loadUnit) return undefined
 
-  const exercises = (exercisesSource.length > 0 ? exercisesSource : routineExercises).map((exerciseRow) => {
+  const exercises = (exercisesSource.length > 0 ? exercisesSource : routineExercises).map((exerciseRow, index) => {
     const exerciseSets = sessionSets.filter((setRow) => Number(setRow.sessionExerciseId ?? setRow.session_exercise_id) === Number(exerciseRow.id ?? exerciseRow.sessionExerciseId ?? exerciseRow.session_exercise_id))
-    return buildWorkoutExerciseReadModel(exerciseRow, loadUnit, exerciseSets)
+    return buildWorkoutExerciseReadModel(exerciseRow, loadUnit, exerciseSets, `unknown-exercise-${index + 1}`)
   })
 
   const totalSets = exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0)
-  const totalVolume = exercises.reduce((sum, exercise) => {
-    return sum + exercise.sets.reduce((setSum, set) => {
-      if (set.reps == null || set.load == null) return setSum
-      return setSum + set.reps * set.load
-    }, 0)
-  }, 0)
+  let totalVolume = 0
+  let hasVolume = false
+  for (const exercise of exercises) {
+    const exerciseVolume = computeExerciseVolume(exercise)
+    if (exerciseVolume == null) continue
+    totalVolume += exerciseVolume
+    hasVolume = true
+  }
 
   const routine = input.routineRow
     ? buildWorkoutRoutineReadModel(input.routineRow, routineExercises)
@@ -246,7 +266,7 @@ export function buildWorkoutSessionReadModel(input: {
       ? null
       : Number(sessionRow?.durationMinutes ?? sessionRow?.duration_minutes),
     totalSets,
-    totalVolume: Number.isFinite(totalVolume) ? totalVolume : null,
+    totalVolume: hasVolume && Number.isFinite(totalVolume) ? totalVolume : null,
     completedAt: sessionRow?.completedAt == null && sessionRow?.completed_at == null ? null : Number(sessionRow?.completedAt ?? sessionRow?.completed_at),
     routine,
     exercises,
@@ -327,11 +347,12 @@ export function buildWorkoutStatisticsReadModel(input: {
   const msPerDay = 24 * 60 * 60 * 1000
   const sessionsThisWeek = unitMatchedSessions.filter((session) => now - session.timestamp <= 7 * msPerDay).length
   const lastSession = unitMatchedSessions[0] ?? null
-  const weeklyVolume = unitMatchedSessions
+  const volumeSessions = unitMatchedSessions.filter((session) => session.totalVolume != null)
+  const weeklyVolume = volumeSessions
     .filter((session) => now - session.timestamp <= 7 * msPerDay)
     .reduce((sum, session) => sum + (session.totalVolume ?? 0), 0)
-  const totalVolume = unitMatchedSessions.reduce((sum, session) => sum + (session.totalVolume ?? 0), 0)
-  const averageSessionVolume = unitMatchedSessions.length > 0 ? totalVolume / unitMatchedSessions.length : null
+  const totalVolume = volumeSessions.reduce((sum, session) => sum + (session.totalVolume ?? 0), 0)
+  const averageSessionVolume = volumeSessions.length > 0 ? totalVolume / volumeSessions.length : null
   const durationSessions = unitMatchedSessions.filter((session) => session.durationMinutes != null)
   const averageDurationMinutes = durationSessions.length > 0
     ? durationSessions.reduce((sum, session) => sum + (session.durationMinutes ?? 0), 0) / durationSessions.length
@@ -406,15 +427,18 @@ export function buildWorkoutGraphReadModel(input: {
 
   for (const session of unitMatchedSessions) {
     const date = session.dateStr
-    const volume = session.totalVolume ?? 0
-    sessionVolume.push({ date, value: volume, loadUnit: session.loadUnit })
+    if (session.totalVolume != null) {
+      sessionVolume.push({ date, value: session.totalVolume, loadUnit: session.loadUnit })
+    }
     const weekDate = new Date(session.timestamp)
     const day = weekDate.getDay()
     const diff = weekDate.getDate() - day + (day === 0 ? -6 : 1)
     weekDate.setDate(diff)
     weekDate.setHours(0, 0, 0, 0)
     const weekKey = weekDate.toISOString().slice(0, 10)
-    weeklyVolumeByWeek.set(weekKey, (weeklyVolumeByWeek.get(weekKey) ?? 0) + volume)
+    if (session.totalVolume != null) {
+      weeklyVolumeByWeek.set(weekKey, (weeklyVolumeByWeek.get(weekKey) ?? 0) + session.totalVolume)
+    }
 
     for (const exercise of session.exercises) {
       const current = exerciseVolumeById.get(exercise.exerciseId) ?? {
@@ -422,7 +446,10 @@ export function buildWorkoutGraphReadModel(input: {
         exerciseName: exercise.exerciseName,
         points: [],
       }
-      current.points.push({ date, value: exercise.sets.reduce((sum, set) => sum + ((set.load ?? 0) * (set.reps ?? 0)), 0), loadUnit: session.loadUnit })
+      const exerciseVolume = computeExerciseVolume(exercise)
+      if (exerciseVolume != null) {
+        current.points.push({ date, value: exerciseVolume, loadUnit: session.loadUnit })
+      }
       exerciseVolumeById.set(exercise.exerciseId, current)
       for (const set of exercise.sets) {
         if (set.load != null && session.loadUnit) {
@@ -486,6 +513,8 @@ export function buildExerciseProgressReadModel(input: {
   sessions: WorkoutSessionReadModel[]
 }): ExerciseProgressReadModel {
   const points: Array<{ date: string; value: number }> = []
+  const heaviestLoadPoints: Array<{ date: string; value: number }> = []
+  const bestSetVolumePoints: Array<{ date: string; value: number }> = []
   let heaviestLoad: number | null = null
   let bestSetVolume: number | null = null
   let sessionCount = 0
@@ -495,17 +524,25 @@ export function buildExerciseProgressReadModel(input: {
     const exercise = session.exercises.find((item) => item.exerciseId === input.exerciseId)
     if (!exercise) continue
     sessionCount += 1
-    const sessionVolume = exercise.sets.reduce((sum, set) => sum + ((set.load ?? 0) * (set.reps ?? 0)), 0)
-    points.push({ date: session.dateStr, value: sessionVolume })
+    const sessionVolume = computeExerciseVolume(exercise)
+    if (sessionVolume != null) {
+      points.push({ date: session.dateStr, value: sessionVolume })
+    }
+    let sessionHeaviestLoad: number | null = null
+    let sessionBestSetVolume: number | null = null
     for (const set of exercise.sets) {
       if (set.load != null) {
         heaviestLoad = heaviestLoad == null ? set.load : Math.max(heaviestLoad, set.load)
+        sessionHeaviestLoad = sessionHeaviestLoad == null ? set.load : Math.max(sessionHeaviestLoad, set.load)
       }
       if (set.load != null && set.reps != null) {
         const setVolume = set.load * set.reps
         bestSetVolume = bestSetVolume == null ? setVolume : Math.max(bestSetVolume, setVolume)
+        sessionBestSetVolume = sessionBestSetVolume == null ? setVolume : Math.max(sessionBestSetVolume, setVolume)
       }
     }
+    if (sessionHeaviestLoad != null) heaviestLoadPoints.push({ date: session.dateStr, value: sessionHeaviestLoad })
+    if (sessionBestSetVolume != null) bestSetVolumePoints.push({ date: session.dateStr, value: sessionBestSetVolume })
   }
 
   return {
@@ -513,6 +550,8 @@ export function buildExerciseProgressReadModel(input: {
     exerciseName: input.exerciseName,
     loadUnit: input.loadUnit,
     points,
+    heaviestLoadPoints,
+    bestSetVolumePoints,
     heaviestLoad,
     bestSetVolume,
     sessionCount,

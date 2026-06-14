@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => ({
   useDeleteHealthSymptomEntryMutationMock: vi.fn(),
   useUpdateEntryMutationMock: vi.fn(),
   useWeightDetailMock: vi.fn(),
+  useWorkoutHistoryMock: vi.fn(),
+  useWorkoutStatisticsMock: vi.fn(),
+  useWorkoutGraphMock: vi.fn(),
+  useExerciseProgressMock: vi.fn(),
   useTagsMock: vi.fn(),
   useBookMock: vi.fn(),
   useToastMock: vi.fn(),
@@ -34,6 +38,10 @@ vi.mock('@shared/queries', () => ({
   useDeleteHealthSymptomEntryMutation: mocks.useDeleteHealthSymptomEntryMutationMock,
   useUpdateEntryMutation: mocks.useUpdateEntryMutationMock,
   useWeightDetail: mocks.useWeightDetailMock,
+  useWorkoutHistory: mocks.useWorkoutHistoryMock,
+  useWorkoutStatistics: mocks.useWorkoutStatisticsMock,
+  useWorkoutGraph: mocks.useWorkoutGraphMock,
+  useExerciseProgress: mocks.useExerciseProgressMock,
   useTags: mocks.useTagsMock,
   useBook: mocks.useBookMock,
 }))
@@ -113,6 +121,10 @@ describe('TrackerDetailView books rating surface', () => {
     mocks.useDeleteHealthSymptomEntryMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useUpdateEntryMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useWeightDetailMock.mockReturnValue({ data: undefined })
+    mocks.useWorkoutHistoryMock.mockReturnValue({ data: { trackerId: tracker.id, structuredSessions: [], legacySessions: [], totalSessions: 0, totalStructuredSessions: 0, totalLegacySessions: 0 } })
+    mocks.useWorkoutStatisticsMock.mockReturnValue({ data: null })
+    mocks.useWorkoutGraphMock.mockReturnValue({ data: null })
+    mocks.useExerciseProgressMock.mockReturnValue({ data: null })
     mocks.useTagsMock.mockReturnValue({ data: [] })
     mocks.useToastMock.mockReturnValue({
       info: vi.fn(),

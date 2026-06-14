@@ -818,6 +818,8 @@ export interface ExerciseProgressReadModel {
   exerciseName: string
   loadUnit: WorkoutWeightUnit
   points: Array<{ date: string; value: number }>
+  heaviestLoadPoints: Array<{ date: string; value: number }>
+  bestSetVolumePoints: Array<{ date: string; value: number }>
   heaviestLoad: number | null
   bestSetVolume: number | null
   sessionCount: number
