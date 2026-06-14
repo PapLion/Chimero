@@ -82,7 +82,9 @@ vi.mock('@contracts/features/tracking', () => ({
 }))
 
 vi.mock('@features/entry/modals/EditEntryDialog', () => ({
-  EditEntryDialog: () => null,
+  EditEntryDialog: ({ entry, open }: { entry: Entry | null; open: boolean }) => (
+    open ? <div data-testid="edit-entry-dialog">{entry?.workout?.structured ? 'structured' : 'generic'}</div> : null
+  ),
 }))
 
 vi.mock('@features/books/components/BookEntryDialog', () => ({
@@ -361,6 +363,14 @@ describe('TrackerDetailView exercise surface', () => {
     expect(screen.getAllByText((_, node) => node?.textContent?.includes('Session Volume') ?? false).length).toBeGreaterThan(0)
     expect(await screen.findByText('Exercise Progress')).toBeTruthy()
     expect(await screen.findByLabelText('Select exercise')).toBeTruthy()
+  })
+
+  it('opens the structured workout editor when editing a structured exercise entry', async () => {
+    render(<TrackerDetailView trackerId={tracker.id} selectedDate={selectedDate} assets={new Map()} />)
+
+    fireEvent.click(screen.getAllByTitle('Edit entry (Shift+RightClick)')[1])
+
+    expect((await screen.findByTestId('edit-entry-dialog')).textContent).toBe('structured')
   })
 })
 

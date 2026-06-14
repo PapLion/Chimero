@@ -460,7 +460,7 @@ export function updateWorkoutSession(entryId: number, updates: UpdateWorkoutSess
       }
     }
     if (updates.tagIds !== undefined) replaceEntryTags(entryId, updates.tagIds)
-  })
+  })()
 
   return getWorkoutSession(entryId)
 }
@@ -582,7 +582,7 @@ export function updateWorkoutRoutine(routineId: number, updates: UpdateWorkoutRo
         exercise.defaultLoad ?? null,
       )
     }
-  })
+  })()
   return getWorkoutRoutine(routineId)
 }
 

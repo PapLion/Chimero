@@ -162,6 +162,13 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
   const handleEditEntry = (e: MouseEvent, entry: Entry) => {
     e.stopPropagation()
     e.preventDefault()
+    if (isExerciseTracker) {
+      const workout = entry.workout ?? workoutSessionByEntryId.get(entry.id) ?? null
+      if (workout?.structured) {
+        setEditingEntry({ ...entry, workout })
+        return
+      }
+    }
     setEditingEntry(entry)
   }
 

@@ -17,6 +17,7 @@ import type { IntakeItemType, MealType, MeasurementUnit, Tracker, WeightUnit } f
 import { clampMoodScore } from "@contracts/domain"
 import { getTrackerIdentity } from "@contracts/features/tracking"
 import { getEntryConfig } from "../entry-config"
+import { StructuredWorkoutEditDialog } from "./StructuredWorkoutEditDialog"
 
 interface EditEntryDialogProps {
     entry: Entry | null
@@ -380,6 +381,22 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     }
 
     if (!tracker) return null
+    if (isExerciseTracker && entry?.workout?.structured) {
+        return (
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="sm:max-w-3xl min-w-0 overflow-hidden p-0">
+                    <div className="max-h-[85vh] overflow-y-auto">
+                        <StructuredWorkoutEditDialog
+                            entry={entry}
+                            tracker={tracker}
+                            open={open}
+                            onOpenChange={onOpenChange}
+                        />
+                    </div>
+                </DialogContent>
+            </Dialog>
+        )
+    }
     const isPending = updateEntryMutation.isPending || updateWeightEntryMutation.isPending || updateGamingEntryMutation.isPending || updateFoodEntryMutation.isPending || updateIntakeEntryMutation.isPending || updateHealthSymptomEntryMutation.isPending || updateWorkoutSessionMutation.isPending
     const handleOpenChange = (nextOpen: boolean) => {
         if (!nextOpen && isPending) return
