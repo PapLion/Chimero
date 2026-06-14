@@ -15,7 +15,7 @@ import type {
   WeightEntry,
   AssetLink,
 } from '@contracts/contracts'
-import { buildWorkoutSessionReadModel } from '@contracts/domain'
+import { buildLegacyWorkoutSessionReadModel } from '@contracts/domain'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
 function parseJsonObject(value: unknown): Record<string, unknown> {
@@ -119,7 +119,7 @@ export function mapEntry(row: Record<string, unknown>): Entry {
   const bookTitleKey = row.bookTitleKey ?? row.book_title_key
   const bookActivityType = row.bookActivityType ?? row.book_activity_type
   const socialInteractions = mapSocialInteractions(row.socialInteractions ?? row.social_interactions)
-  const workout = buildWorkoutSessionReadModel({
+  const workout = buildLegacyWorkoutSessionReadModel({
     id: row.id as number,
     trackerId: (row.trackerId ?? row.tracker_id) as number,
     value: (row.value as number) ?? null,

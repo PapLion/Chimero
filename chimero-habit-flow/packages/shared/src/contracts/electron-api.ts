@@ -59,6 +59,22 @@ import type {
   WeightEntryResponse,
   GamingDetailResponse,
   GamingEntryResponse,
+  CreateWorkoutRoutineRequest,
+  CreateWorkoutSessionRequest,
+  DeleteWorkoutRoutineResponse,
+  ExerciseProgressReadModel,
+  InstantiateWorkoutFromRoutineRequest,
+  ListWorkoutRoutinesResponse,
+  SaveWorkoutAsRoutineRequest,
+  UpdateWorkoutRoutineRequest,
+  UpdateWorkoutSessionRequest,
+  WorkoutCalendarReadModel,
+  WorkoutGraphReadModel,
+  WorkoutHistoryReadModel,
+  WorkoutHomeReadModel,
+  WorkoutRoutineDetailResponse,
+  WorkoutSessionDetailResponse,
+  WorkoutStatisticsReadModel,
 } from './app-types'
 import type { DashboardLayoutItem, DashboardStats } from '../features/dashboard'
 import type { CalendarMonthData } from '../features/calendar'
@@ -146,6 +162,23 @@ export interface ElectronApi {
   getBookHistory: (trackerId: number, options?: { limit?: number }) => Promise<BookHistoryItem[]>
   getBookStats: (trackerId: number, options?: { limit?: number }) => Promise<BookStatisticsReadModel>
   getBookSelectedDaySummary: (trackerId: number, selectedDate: string, options?: { limit?: number }) => Promise<BookSelectedDaySummaryReadModel>
+  getWorkoutSession: (entryId: number) => Promise<WorkoutSessionDetailResponse | null>
+  getWorkoutHistory: (trackerId: number, options?: { limit?: number }) => Promise<WorkoutHistoryReadModel>
+  createWorkoutSession: (data: CreateWorkoutSessionRequest) => Promise<WorkoutSessionDetailResponse | null>
+  updateWorkoutSession: (entryId: number, updates: UpdateWorkoutSessionRequest) => Promise<WorkoutSessionDetailResponse | null>
+  deleteWorkoutSession: (entryId: number) => Promise<boolean>
+  getWorkoutRoutines: (trackerId: number) => Promise<ListWorkoutRoutinesResponse>
+  getWorkoutRoutine: (routineId: number) => Promise<WorkoutRoutineDetailResponse | null>
+  createWorkoutRoutine: (data: CreateWorkoutRoutineRequest) => Promise<WorkoutRoutineDetailResponse | null>
+  updateWorkoutRoutine: (routineId: number, updates: UpdateWorkoutRoutineRequest) => Promise<WorkoutRoutineDetailResponse | null>
+  deleteWorkoutRoutine: (routineId: number) => Promise<DeleteWorkoutRoutineResponse>
+  instantiateWorkoutFromRoutine: (data: InstantiateWorkoutFromRoutineRequest) => Promise<CreateWorkoutSessionRequest | null>
+  saveWorkoutAsRoutine: (data: SaveWorkoutAsRoutineRequest) => Promise<WorkoutRoutineDetailResponse | null>
+  getWorkoutHome: (trackerId: number) => Promise<WorkoutHomeReadModel | null>
+  getWorkoutStatistics: (trackerId: number) => Promise<WorkoutStatisticsReadModel | null>
+  getWorkoutGraph: (trackerId: number) => Promise<WorkoutGraphReadModel | null>
+  getWorkoutCalendar: (trackerId: number, year: number, month: number) => Promise<WorkoutCalendarReadModel>
+  getExerciseProgress: (trackerId: number, exerciseId: string) => Promise<ExerciseProgressReadModel | null>
   getContacts: (options?: { sortBy?: 'name' | 'most-talked-to' | 'least-talked-to' }) => Promise<Contact[]>
   getContact: (id: number) => Promise<Contact | null>
   createContact: (data: ContactInsert) => Promise<Contact | null>

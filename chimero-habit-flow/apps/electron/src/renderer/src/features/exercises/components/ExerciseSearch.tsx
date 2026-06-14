@@ -25,9 +25,10 @@ export interface SelectedExercise {
 interface ExerciseSearchProps {
   onExerciseSelect: (exercise: SelectedExercise) => void
   selectedExercises: SelectedExercise[]
+  loadUnit?: "kg" | "lb"
 }
 
-export function ExerciseSearch({ onExerciseSelect, selectedExercises }: ExerciseSearchProps) {
+export function ExerciseSearch({ onExerciseSelect, selectedExercises, loadUnit = "kg" }: ExerciseSearchProps) {
   // === TODOS LOS HOOKS PRIMERO — NINGÚN RETURN ANTES DE AQUÍ ===
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
@@ -46,14 +47,6 @@ export function ExerciseSearch({ onExerciseSelect, selectedExercises }: Exercise
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300)
     return () => clearTimeout(timer)
-  }, [searchQuery])
-
-  // Reset selected exercise state when search query changes
-  useEffect(() => {
-    setSelectedExercise(null)
-    setSets("")
-    setReps("")
-    setWeight("")
   }, [searchQuery])
 
   // === DERIVADOS (no son hooks) ===
@@ -111,7 +104,7 @@ export function ExerciseSearch({ onExerciseSelect, selectedExercises }: Exercise
     const parts: string[] = []
     if (exercise.sets) parts.push(`${exercise.sets}`)
     if (exercise.reps) parts.push(`x${exercise.reps}`)
-    if (exercise.weight) parts.push(`${exercise.weight}kg`)
+    if (exercise.weight) parts.push(`${exercise.weight}${loadUnit}`)
     return parts.length > 0 ? parts.join(" ") : ""
   }
 
@@ -237,7 +230,7 @@ export function ExerciseSearch({ onExerciseSelect, selectedExercises }: Exercise
                   step="0.5"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[hsl(210_12%_47%)]">
-                  kg
+                  {loadUnit}
                 </span>
               </div>
             </div>

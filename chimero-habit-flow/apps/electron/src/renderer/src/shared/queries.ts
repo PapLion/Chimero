@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type { Tracker, Entry } from './store'
-import type { BaseEntryRequest, Book, BookActivityResponse, BookResponse, ContactInteractionInsert, ContactProfileBlockInput, ContactReminderSettingsInput, ContactUpdate, CreateBookActivityRequest, CreateBookRequest, CreateFoodEntryRequest, CreateGamingEntryRequest, CreateHealthSymptomRequest, CreateIntakeEntryRequest, CreateWeightEntryRequest, EntryUpdateRequest, FoodDetailResponse, FoodEntryResponse, GamingDetailResponse, GamingEntryResponse, HealthDetailResponse, HealthHomeWidgetReadModel, HealthSymptomResponse, IntakeDetailResponse, IntakeEntryResponse, IntakeHomeWidgetReadModel, SetTrackerGoalRequest, TrackerConfig, UpdateBookActivityRequest, UpdateBookRequest, UpdateFoodEntryRequest, UpdateGamingEntryRequest, UpdateHealthSymptomRequest, UpdateIntakeEntryRequest, UpdateWeightEntryRequest } from '@contracts/contracts'
+import type { BaseEntryRequest, Book, BookActivityResponse, BookResponse, ContactInteractionInsert, ContactProfileBlockInput, ContactReminderSettingsInput, ContactUpdate, CreateBookActivityRequest, CreateBookRequest, CreateFoodEntryRequest, CreateGamingEntryRequest, CreateHealthSymptomRequest, CreateIntakeEntryRequest, CreateWeightEntryRequest, CreateWorkoutRoutineRequest, CreateWorkoutSessionRequest, DeleteWorkoutRoutineResponse, EntryUpdateRequest, ExerciseProgressReadModel, FoodDetailResponse, FoodEntryResponse, GamingDetailResponse, GamingEntryResponse, HealthDetailResponse, HealthHomeWidgetReadModel, HealthSymptomResponse, InstantiateWorkoutFromRoutineRequest, IntakeDetailResponse, IntakeEntryResponse, IntakeHomeWidgetReadModel, ListWorkoutRoutinesResponse, SaveWorkoutAsRoutineRequest, SetTrackerGoalRequest, TrackerConfig, UpdateBookActivityRequest, UpdateBookRequest, UpdateFoodEntryRequest, UpdateGamingEntryRequest, UpdateHealthSymptomRequest, UpdateIntakeEntryRequest, UpdateWeightEntryRequest, UpdateWorkoutRoutineRequest, UpdateWorkoutSessionRequest, WorkoutCalendarReadModel, WorkoutGraphReadModel, WorkoutHistoryReadModel, WorkoutHomeReadModel, WorkoutRoutineDetailResponse, WorkoutSessionDetailResponse, WorkoutStatisticsReadModel } from '@contracts/contracts'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
 export const queryKeys = {
@@ -47,6 +47,24 @@ export const queryKeys = {
   booksRoot: ['books'] as const,
   book: (bookId: number) => ['book', bookId] as const,
   bookRoot: ['book'] as const,
+  workoutSession: (entryId: number) => ['workout-session', entryId] as const,
+  workoutSessionRoot: ['workout-session'] as const,
+  workoutHistory: (trackerId: number, limit?: number) => ['workout-history', trackerId, limit] as const,
+  workoutHistoryRoot: ['workout-history'] as const,
+  workoutRoutines: (trackerId: number) => ['workout-routines', trackerId] as const,
+  workoutRoutinesRoot: ['workout-routines'] as const,
+  workoutRoutine: (routineId: number) => ['workout-routine', routineId] as const,
+  workoutRoutineRoot: ['workout-routine'] as const,
+  workoutHome: (trackerId: number) => ['workout-home', trackerId] as const,
+  workoutHomeRoot: ['workout-home'] as const,
+  workoutStatistics: (trackerId: number) => ['workout-statistics', trackerId] as const,
+  workoutStatisticsRoot: ['workout-statistics'] as const,
+  workoutGraph: (trackerId: number) => ['workout-graph', trackerId] as const,
+  workoutGraphRoot: ['workout-graph'] as const,
+  workoutCalendar: (trackerId: number, year: number, month: number) => ['workout-calendar', trackerId, year, month] as const,
+  workoutCalendarRoot: ['workout-calendar'] as const,
+  exerciseProgress: (trackerId: number, exerciseId: string) => ['exercise-progress', trackerId, exerciseId] as const,
+  exerciseProgressRoot: ['exercise-progress'] as const,
   // Contacts
   contacts: ['contacts'] as const,
   contactsSorted: (sortBy?: 'name' | 'most-talked-to' | 'least-talked-to') => ['contacts', sortBy ?? 'name'] as const,
@@ -235,6 +253,87 @@ export function useBooks(enabled = true) {
     queryKey: queryKeys.booksRoot,
     queryFn: () => api.getBooks() as Promise<Book[]>,
     enabled,
+    staleTime: 15_000,
+  })
+}
+
+export function useWorkoutSession(entryId: number | null | undefined, enabled = true) {
+  return useQuery({
+    queryKey: entryId == null ? queryKeys.workoutSessionRoot : queryKeys.workoutSession(entryId),
+    queryFn: () => api.getWorkoutSession(entryId as number) as Promise<WorkoutSessionDetailResponse | null>,
+    enabled: enabled && entryId != null,
+    staleTime: 15_000,
+  })
+}
+
+export function useWorkoutHistory(trackerId: number, enabled = true, limit = 365) {
+  return useQuery({
+    queryKey: queryKeys.workoutHistory(trackerId, limit),
+    queryFn: () => api.getWorkoutHistory(trackerId, { limit }) as Promise<WorkoutHistoryReadModel>,
+    enabled: enabled && !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
+export function useWorkoutRoutines(trackerId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.workoutRoutines(trackerId),
+    queryFn: () => api.getWorkoutRoutines(trackerId) as Promise<ListWorkoutRoutinesResponse>,
+    enabled: enabled && !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
+export function useWorkoutRoutine(routineId: number | null | undefined, enabled = true) {
+  return useQuery({
+    queryKey: routineId == null ? queryKeys.workoutRoutineRoot : queryKeys.workoutRoutine(routineId),
+    queryFn: () => api.getWorkoutRoutine(routineId as number) as Promise<WorkoutRoutineDetailResponse | null>,
+    enabled: enabled && routineId != null,
+    staleTime: 15_000,
+  })
+}
+
+export function useWorkoutHome(trackerId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.workoutHome(trackerId),
+    queryFn: () => api.getWorkoutHome(trackerId) as Promise<WorkoutHomeReadModel | null>,
+    enabled: enabled && !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
+export function useWorkoutStatistics(trackerId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.workoutStatistics(trackerId),
+    queryFn: () => api.getWorkoutStatistics(trackerId) as Promise<WorkoutStatisticsReadModel | null>,
+    enabled: enabled && !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
+export function useWorkoutGraph(trackerId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.workoutGraph(trackerId),
+    queryFn: () => api.getWorkoutGraph(trackerId) as Promise<WorkoutGraphReadModel | null>,
+    enabled: enabled && !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
+export function useWorkoutCalendar(trackerId: number, year: number, month: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.workoutCalendar(trackerId, year, month),
+    queryFn: () => api.getWorkoutCalendar(trackerId, year, month) as Promise<WorkoutCalendarReadModel>,
+    enabled: enabled && !!trackerId,
+    staleTime: 15_000,
+  })
+}
+
+export function useExerciseProgress(trackerId: number, exerciseId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.exerciseProgress(trackerId, exerciseId),
+    queryFn: () => api.getExerciseProgress(trackerId, exerciseId) as Promise<ExerciseProgressReadModel | null>,
+    enabled: enabled && !!trackerId && !!exerciseId,
     staleTime: 15_000,
   })
 }
@@ -463,6 +562,110 @@ export function useDeleteBookReadActivityMutation() {
       qc.invalidateQueries({ queryKey: queryKeys.stats })
       qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
       qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
+    },
+  })
+}
+
+export function useCreateWorkoutSessionMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateWorkoutSessionRequest) => api.createWorkoutSession(data) as Promise<WorkoutSessionDetailResponse | null>,
+    onSuccess: (_, variables) => {
+      const sessionDate = new Date(variables.timestamp)
+      qc.invalidateQueries({ queryKey: queryKeys.workoutHistory(variables.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutHome(variables.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutStatistics(variables.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutGraph(variables.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutCalendar(variables.trackerId, sessionDate.getFullYear(), sessionDate.getMonth()) })
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+    },
+  })
+}
+
+export function useUpdateWorkoutSessionMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ entryId, updates }: { entryId: number; updates: UpdateWorkoutSessionRequest }) =>
+      api.updateWorkoutSession(entryId, updates) as Promise<WorkoutSessionDetailResponse | null>,
+    onSuccess: (result) => {
+      if (!result) return
+      qc.invalidateQueries({ queryKey: queryKeys.workoutSession(result.session.entryId) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutHistory(result.session.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutHome(result.session.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutStatistics(result.session.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutGraph(result.session.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+    },
+  })
+}
+
+export function useDeleteWorkoutSessionMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (entryId: number) => api.deleteWorkoutSession(entryId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.workoutHistoryRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutHomeRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutStatisticsRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutGraphRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.entriesRoot })
+    },
+  })
+}
+
+export function useCreateWorkoutRoutineMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateWorkoutRoutineRequest) => api.createWorkoutRoutine(data) as Promise<WorkoutRoutineDetailResponse | null>,
+    onSuccess: (result) => {
+      if (!result) return
+      qc.invalidateQueries({ queryKey: queryKeys.workoutRoutines(result.routine.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutRoutine(result.routine.id) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutHome(result.routine.trackerId) })
+    },
+  })
+}
+
+export function useUpdateWorkoutRoutineMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ routineId, updates }: { routineId: number; updates: UpdateWorkoutRoutineRequest }) =>
+      api.updateWorkoutRoutine(routineId, updates) as Promise<WorkoutRoutineDetailResponse | null>,
+    onSuccess: (result) => {
+      if (!result) return
+      qc.invalidateQueries({ queryKey: queryKeys.workoutRoutines(result.routine.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutRoutine(result.routine.id) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutHome(result.routine.trackerId) })
+    },
+  })
+}
+
+export function useDeleteWorkoutRoutineMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (routineId: number) => api.deleteWorkoutRoutine(routineId) as Promise<DeleteWorkoutRoutineResponse>,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.workoutRoutinesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutHomeRoot })
+    },
+  })
+}
+
+export function useInstantiateWorkoutFromRoutineMutation() {
+  return useMutation({
+    mutationFn: (data: InstantiateWorkoutFromRoutineRequest) => api.instantiateWorkoutFromRoutine(data),
+  })
+}
+
+export function useSaveWorkoutAsRoutineMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: SaveWorkoutAsRoutineRequest) => api.saveWorkoutAsRoutine(data) as Promise<WorkoutRoutineDetailResponse | null>,
+    onSuccess: (result) => {
+      if (!result) return
+      qc.invalidateQueries({ queryKey: queryKeys.workoutRoutines(result.routine.trackerId) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutRoutine(result.routine.id) })
+      qc.invalidateQueries({ queryKey: queryKeys.workoutHome(result.routine.trackerId) })
     },
   })
 }

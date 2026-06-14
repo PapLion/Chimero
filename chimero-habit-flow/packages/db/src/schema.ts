@@ -321,3 +321,84 @@ export const contactProfileBlocks = sqliteTable("contact_profile_blocks", {
   contactIdx: index("contact_profile_blocks_contact_idx").on(t.contactId),
   orderIdx: index("contact_profile_blocks_order_idx").on(t.contactId, t.orderIndex),
 }));
+
+// --- 9. WORKOUTS (Exercise structured persistence) ---
+export const workoutRoutines = sqliteTable("workout_routines", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  trackerId: integer("tracker_id").references(() => trackers.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  notes: text("notes"),
+  loadUnit: text("load_unit", { enum: ["kg", "lb"] }).notNull(),
+  createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
+  updatedAt: integer("updated_at").default(sql`(strftime('%s', 'now') * 1000)`),
+}, (t) => ({
+  trackerIdx: index("workout_routines_tracker_idx").on(t.trackerId),
+  trackerNameIdx: index("workout_routines_tracker_name_idx").on(t.trackerId, t.name),
+}));
+
+export const workoutRoutineExercises = sqliteTable("workout_routine_exercises", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  routineId: integer("routine_id").references(() => workoutRoutines.id, { onDelete: "cascade" }).notNull(),
+  exerciseKey: text("exercise_key").notNull(),
+  sourceExerciseId: text("source_exercise_id"),
+  exerciseName: text("exercise_name").notNull(),
+  categorySnapshot: text("category_snapshot"),
+  levelSnapshot: text("level_snapshot"),
+  equipmentSnapshot: text("equipment_snapshot"),
+  bodyPartSnapshot: text("body_part_snapshot"),
+  secondaryBodyPartSnapshot: text("secondary_body_part_snapshot"),
+  forceSnapshot: text("force_snapshot"),
+  mechanicSnapshot: text("mechanic_snapshot"),
+  orderIndex: integer("order_index").notNull().default(0),
+  targetSets: integer("target_sets").notNull().default(1),
+  targetReps: integer("target_reps"),
+  defaultLoad: real("default_load"),
+}, (t) => ({
+  routineIdx: index("workout_routine_exercises_routine_idx").on(t.routineId),
+  orderIdx: index("workout_routine_exercises_order_idx").on(t.routineId, t.orderIndex),
+  exerciseIdx: index("workout_routine_exercises_exercise_idx").on(t.exerciseKey),
+}));
+
+export const workoutSessions = sqliteTable("workout_sessions", {
+  entryId: integer("entry_id").primaryKey().references(() => entries.id, { onDelete: "cascade" }),
+  routineId: integer("routine_id").references(() => workoutRoutines.id, { onDelete: "set null" }),
+  sessionName: text("session_name"),
+  durationMinutes: integer("duration_minutes"),
+  loadUnit: text("load_unit", { enum: ["kg", "lb"] }).notNull(),
+  createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
+  updatedAt: integer("updated_at").default(sql`(strftime('%s', 'now') * 1000)`),
+}, (t) => ({
+  routineIdx: index("workout_sessions_routine_idx").on(t.routineId),
+  loadUnitIdx: index("workout_sessions_load_unit_idx").on(t.loadUnit),
+}));
+
+export const workoutSessionExercises = sqliteTable("workout_session_exercises", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sessionEntryId: integer("session_entry_id").references(() => workoutSessions.entryId, { onDelete: "cascade" }).notNull(),
+  exerciseKey: text("exercise_key").notNull(),
+  sourceExerciseId: text("source_exercise_id"),
+  exerciseName: text("exercise_name").notNull(),
+  categorySnapshot: text("category_snapshot"),
+  levelSnapshot: text("level_snapshot"),
+  equipmentSnapshot: text("equipment_snapshot"),
+  bodyPartSnapshot: text("body_part_snapshot"),
+  secondaryBodyPartSnapshot: text("secondary_body_part_snapshot"),
+  forceSnapshot: text("force_snapshot"),
+  mechanicSnapshot: text("mechanic_snapshot"),
+  orderIndex: integer("order_index").notNull().default(0),
+}, (t) => ({
+  sessionIdx: index("workout_session_exercises_session_idx").on(t.sessionEntryId),
+  orderIdx: index("workout_session_exercises_order_idx").on(t.sessionEntryId, t.orderIndex),
+  exerciseIdx: index("workout_session_exercises_exercise_idx").on(t.exerciseKey),
+}));
+
+export const workoutSets = sqliteTable("workout_sets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sessionExerciseId: integer("session_exercise_id").references(() => workoutSessionExercises.id, { onDelete: "cascade" }).notNull(),
+  setIndex: integer("set_index").notNull(),
+  reps: integer("reps"),
+  load: real("load"),
+}, (t) => ({
+  sessionExerciseIdx: index("workout_sets_session_exercise_idx").on(t.sessionExerciseId),
+  setIdx: index("workout_sets_set_idx").on(t.sessionExerciseId, t.setIndex),
+}));

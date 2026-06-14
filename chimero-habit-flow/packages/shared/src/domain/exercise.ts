@@ -78,9 +78,9 @@ function buildWorkoutSets(rawSets: unknown, fallback: WorkoutSetReadModel): Work
       return {
         setIndex: readNumberCandidate(set.setIndex ?? set.setNumber ?? set.index) ?? index + 1,
         reps: readNumberCandidate(set.reps ?? set.repetitions ?? set.count),
+        load: readNumberCandidate(set.load ?? set.weight ?? set.weightValue),
         weight: readNumberCandidate(set.weight ?? set.load ?? set.weightValue),
         weightUnit: normalizeWorkoutWeightUnit(set.weightUnit ?? set.unit ?? fallback.weightUnit),
-        durationSeconds: readNumberCandidate(set.durationSeconds ?? set.duration ?? set.seconds),
         notes: readStringCandidate(set.notes ?? set.note),
         isWarmup: readBooleanCandidate(set.isWarmup ?? set.warmup),
       }
@@ -104,10 +104,11 @@ function buildExerciseFallback(payload: WorkoutMetadata, index: number): Workout
 
   const reps = readNumberCandidate(payload.reps)
   const weight = readNumberCandidate(payload.weight)
-  const weightUnit = normalizeWorkoutWeightUnit(payload.weightUnit ?? payload.unit) ?? (weight != null ? 'kg' : null)
+  const weightUnit = normalizeWorkoutWeightUnit(payload.weightUnit ?? payload.unit)
   const setTemplate: WorkoutSetReadModel = {
     setIndex: 1,
     reps,
+    load: weight,
     weight,
     weightUnit,
   }
@@ -118,8 +119,8 @@ function buildExerciseFallback(payload: WorkoutMetadata, index: number): Workout
     category: readStringCandidate(payload.category) ?? null,
     level: readStringCandidate(payload.level) ?? null,
     equipment: readStringCandidate(payload.equipment) ?? null,
-    primaryMuscles: readStringArrayCandidate(payload.primaryMuscles ?? payload.muscles ?? payload.primaryMuscle),
-    secondaryMuscles: readStringArrayCandidate(payload.secondaryMuscles ?? payload.secondaryMuscle),
+    bodyPartSnapshot: readStringArrayCandidate(payload.bodyPartSnapshot ?? payload.primaryMuscles ?? payload.muscles ?? payload.primaryMuscle),
+    secondaryBodyPartSnapshot: readStringArrayCandidate(payload.secondaryBodyPartSnapshot ?? payload.secondaryMuscles ?? payload.secondaryMuscle),
     force: readStringCandidate(payload.force) ?? null,
     mechanic: readStringCandidate(payload.mechanic) ?? null,
     notes: readStringCandidate(payload.notes ?? payload.note),
@@ -127,7 +128,7 @@ function buildExerciseFallback(payload: WorkoutMetadata, index: number): Workout
   }
 }
 
-function buildRoutine(payload: WorkoutMetadata): WorkoutRoutineReadModel | null {
+function buildRoutine(payload: WorkoutMetadata): Pick<WorkoutRoutineReadModel, 'name' | 'notes'> | null {
   const routinePayload = [
     payload.routine,
     payload.workoutRoutine,
@@ -147,7 +148,7 @@ function buildRoutine(payload: WorkoutMetadata): WorkoutRoutineReadModel | null 
   }
 }
 
-export function buildWorkoutSessionReadModel(entry: Pick<Entry, 'id' | 'trackerId' | 'timestamp' | 'dateStr' | 'note' | 'metadata' | 'value'>): WorkoutSessionReadModel | undefined {
+export function buildLegacyWorkoutSessionReadModel(entry: Pick<Entry, 'id' | 'trackerId' | 'timestamp' | 'dateStr' | 'note' | 'metadata' | 'value'>): WorkoutSessionReadModel | undefined {
   const metadata = readMetadata(entry)
   const rawSession = [
     metadata.workoutSession,
@@ -162,7 +163,8 @@ export function buildWorkoutSessionReadModel(entry: Pick<Entry, 'id' | 'trackerI
     : []
 
   const exercises = exercisePayloads.map((payload, index) => buildExerciseFallback(payload, index))
-  if (exercises.length === 0) return undefined
+  const loadUnit = normalizeWorkoutWeightUnit(rawSession?.loadUnit ?? rawSession?.load_unit ?? metadata.loadUnit ?? metadata.load_unit ?? metadata.unit)
+  if (exercises.length === 0 || !loadUnit) return undefined
 
   const startedAt =
     readNumberCandidate(rawSession?.startedAt ?? rawSession?.startAt ?? rawSession?.timestamp ?? metadata.startedAt) ??
@@ -170,12 +172,13 @@ export function buildWorkoutSessionReadModel(entry: Pick<Entry, 'id' | 'trackerI
   const completedAt =
     readNumberCandidate(rawSession?.completedAt ?? rawSession?.finishedAt ?? rawSession?.endedAt ?? metadata.completedAt)
 
-  const routine = buildRoutine(rawSession ?? metadata)
   const title =
     readStringCandidate(rawSession?.title) ??
     readStringCandidate(rawSession?.name) ??
     readStringCandidate(metadata.title) ??
-    readStringCandidate(metadata.name)
+    readStringCandidate(metadata.name) ??
+    buildRoutine(rawSession ?? metadata)?.name ??
+    null
 
   const sessionNote =
     readStringCandidate(rawSession?.note) ??
@@ -184,18 +187,27 @@ export function buildWorkoutSessionReadModel(entry: Pick<Entry, 'id' | 'trackerI
     null
 
   const totalSets = exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0)
+  const totalVolume = exercises.reduce((sum, exercise) => sum + exercise.sets.reduce((setSum, set) => {
+    if (set.reps == null || set.load == null) return setSum
+    return setSum + set.reps * set.load
+  }, 0), 0)
 
   return {
     structured: true,
     entryId: entry.id,
     trackerId: entry.trackerId,
+    routineId: null,
     timestamp: startedAt,
     dateStr: entry.dateStr,
+    sessionName: title,
     title,
     note: sessionNote,
-    routine,
+    loadUnit,
+    durationMinutes: null,
     totalSets,
+    totalVolume: Number.isFinite(totalVolume) ? totalVolume : null,
     completedAt: completedAt ?? null,
+    routine: null,
     exercises,
   }
 }

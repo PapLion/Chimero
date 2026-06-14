@@ -583,44 +583,261 @@ export type WorkoutWeightUnit = 'kg' | 'lb'
 export interface WorkoutSetReadModel {
   setIndex: number
   reps: number | null
+  load: number | null
   weight: number | null
   weightUnit: WorkoutWeightUnit | null
-  durationSeconds?: number | null
   notes?: string | null
   isWarmup?: boolean
 }
 
 export interface WorkoutExerciseReadModel {
   exerciseId: string
+  sourceExerciseId?: string | null
   exerciseName: string
   category: string | null
   level: string | null
   equipment: string | null
-  primaryMuscles: string[]
-  secondaryMuscles: string[]
+  bodyPartSnapshot?: string[] | null
+  secondaryBodyPartSnapshot?: string[] | null
   force: string | null
   mechanic: string | null
   notes?: string | null
   sets: WorkoutSetReadModel[]
 }
 
+export interface WorkoutRoutineExerciseReadModel {
+  id: number
+  exerciseId: string
+  sourceExerciseId?: string | null
+  exerciseName: string
+  category: string | null
+  level: string | null
+  equipment: string | null
+  bodyPartSnapshot?: string[] | null
+  secondaryBodyPartSnapshot?: string[] | null
+  force: string | null
+  mechanic: string | null
+  orderIndex: number
+  targetSets: number
+  targetReps: number | null
+  defaultLoad: number | null
+}
+
 export interface WorkoutRoutineReadModel {
+  id: number
+  trackerId: number
   name: string
   notes?: string | null
+  loadUnit: WorkoutWeightUnit
+  createdAt: number | null
+  updatedAt: number | null
+  exercises: WorkoutRoutineExerciseReadModel[]
 }
 
 export interface WorkoutSessionReadModel {
   structured: true
   entryId: number
   trackerId: number
+  routineId: number | null
   timestamp: number
   dateStr: string
+  sessionName: string | null
   title: string | null
   note: string | null
-  routine: WorkoutRoutineReadModel | null
+  loadUnit: WorkoutWeightUnit
+  durationMinutes: number | null
   totalSets: number
+  totalVolume: number | null
   completedAt: number | null
+  routine: WorkoutRoutineReadModel | null
   exercises: WorkoutExerciseReadModel[]
+}
+
+export interface WorkoutSessionExerciseInput {
+  exerciseId: string
+  sourceExerciseId?: string | null
+  name: string
+  category?: string | null
+  level?: string | null
+  equipment?: string | null
+  bodyPartSnapshot?: string[] | null
+  secondaryBodyPartSnapshot?: string[] | null
+  force?: string | null
+  mechanic?: string | null
+  orderIndex?: number
+  sets: Array<{
+    setIndex: number
+    reps?: number | null
+    load?: number | null
+    notes?: string | null
+    isWarmup?: boolean
+  }>
+}
+
+export interface WorkoutRoutineExerciseInput {
+  exerciseId: string
+  sourceExerciseId?: string | null
+  name: string
+  category?: string | null
+  level?: string | null
+  equipment?: string | null
+  bodyPartSnapshot?: string[] | null
+  secondaryBodyPartSnapshot?: string[] | null
+  force?: string | null
+  mechanic?: string | null
+  orderIndex: number
+  targetSets: number
+  targetReps?: number | null
+  defaultLoad?: number | null
+}
+
+export interface CreateWorkoutSessionRequest {
+  trackerId: number
+  timestamp: number
+  sessionName?: string | null
+  note?: string | null
+  routineId?: number | null
+  durationMinutes?: number | null
+  loadUnit: WorkoutWeightUnit
+  assetId?: number | null
+  tagIds?: number[]
+  exercises: WorkoutSessionExerciseInput[]
+}
+
+export interface UpdateWorkoutSessionRequest {
+  timestamp?: number
+  sessionName?: string | null
+  note?: string | null
+  routineId?: number | null
+  durationMinutes?: number | null
+  loadUnit?: WorkoutWeightUnit
+  assetId?: number | null
+  tagIds?: number[]
+  exercises?: WorkoutSessionExerciseInput[]
+}
+
+export interface WorkoutSessionDetailResponse {
+  session: WorkoutSessionReadModel
+  tags: Tag[]
+}
+
+export interface WorkoutHistoryItem {
+  session: WorkoutSessionReadModel | LegacyExerciseEntryReadModel
+  tags: Tag[]
+}
+
+export interface WorkoutHistoryReadModel {
+  trackerId: number
+  structuredSessions: WorkoutSessionReadModel[]
+  legacySessions: LegacyExerciseEntryReadModel[]
+  totalSessions: number
+  totalStructuredSessions: number
+  totalLegacySessions: number
+}
+
+export interface CreateWorkoutRoutineRequest {
+  trackerId: number
+  name: string
+  notes?: string | null
+  loadUnit: WorkoutWeightUnit
+  exercises: WorkoutRoutineExerciseInput[]
+}
+
+export interface UpdateWorkoutRoutineRequest {
+  name?: string
+  notes?: string | null
+  loadUnit?: WorkoutWeightUnit
+  exercises?: WorkoutRoutineExerciseInput[]
+}
+
+export interface WorkoutRoutineDetailResponse {
+  routine: WorkoutRoutineReadModel
+}
+
+export interface ListWorkoutRoutinesResponse {
+  routines: WorkoutRoutineReadModel[]
+}
+
+export interface DeleteWorkoutRoutineResponse {
+  success: boolean
+}
+
+export interface InstantiateWorkoutFromRoutineRequest {
+  routineId: number
+  timestamp: number
+}
+
+export interface SaveWorkoutAsRoutineRequest {
+  sessionEntryId: number
+  name: string
+  notes?: string | null
+}
+
+export interface WorkoutHomeReadModel {
+  trackerId: number
+  title: string
+  loadUnit: WorkoutWeightUnit | null
+  lastSession: WorkoutSessionReadModel | null
+  daysSinceLastSession: number | null
+  sessionsThisWeek: number
+  activeWeekStreak: number
+  latestVolume: number | null
+  recentRoutines: WorkoutRoutineReadModel[]
+}
+
+export interface WorkoutStatisticsReadModel {
+  trackerId: number
+  totalSessions: number
+  sessionsThisWeek: number
+  daysSinceLastWorkout: number | null
+  activeWeekStreak: number
+  weeklyVolume: number | null
+  averageSessionVolume: number | null
+  averageDurationMinutes: number | null
+  frequentExercises: Array<{ exerciseId: string; exerciseName: string; sessions: number }>
+  recentPrs: Array<{ exerciseId: string; exerciseName: string; kind: 'heaviest-load' | 'best-volume'; value: number; loadUnit: WorkoutWeightUnit }>
+}
+
+export interface WorkoutGraphPoint {
+  date: string
+  value: number
+  loadUnit: WorkoutWeightUnit | null
+}
+
+export interface WorkoutGraphReadModel {
+  trackerId: number
+  weeklyVolume: WorkoutGraphPoint[]
+  sessionVolume: WorkoutGraphPoint[]
+  exerciseHeaviestLoad: Array<{ exerciseId: string; exerciseName: string; value: number; loadUnit: WorkoutWeightUnit }>
+  bestSetVolume: Array<{ exerciseId: string; exerciseName: string; value: number; loadUnit: WorkoutWeightUnit }>
+  exerciseVolumeOverTime: Array<{ exerciseId: string; exerciseName: string; points: WorkoutGraphPoint[] }>
+}
+
+export interface ExerciseProgressReadModel {
+  exerciseId: string
+  exerciseName: string
+  loadUnit: WorkoutWeightUnit
+  points: Array<{ date: string; value: number }>
+  heaviestLoad: number | null
+  bestSetVolume: number | null
+  sessionCount: number
+}
+
+export interface WorkoutCalendarReadModel {
+  year: number
+  month: number
+  entriesByDate: Record<string, WorkoutSessionReadModel[]>
+  activeDays: number[]
+}
+
+export interface LegacyExerciseEntryReadModel {
+  entryId: number
+  trackerId: number
+  timestamp: number
+  dateStr: string | null
+  note: string | null
+  loadUnit: WorkoutWeightUnit | null
+  structured: false
 }
 
 export interface CreateBookRequest {

@@ -23,6 +23,11 @@ const mocks = vi.hoisted(() => ({
   useAssetsMock: vi.fn(),
   useTagsMock: vi.fn(),
   useCreateTagMutationMock: vi.fn(),
+  useWorkoutRoutinesMock: vi.fn(),
+  useCreateWorkoutSessionMutationMock: vi.fn(),
+  useDeleteWorkoutRoutineMutationMock: vi.fn(),
+  useInstantiateWorkoutFromRoutineMutationMock: vi.fn(),
+  useSaveWorkoutAsRoutineMutationMock: vi.fn(),
   useToastMock: vi.fn(),
 }))
 
@@ -51,6 +56,11 @@ vi.mock('@shared/queries', () => ({
   useAssets: mocks.useAssetsMock,
   useTags: mocks.useTagsMock,
   useCreateTagMutation: mocks.useCreateTagMutationMock,
+  useWorkoutRoutines: mocks.useWorkoutRoutinesMock,
+  useCreateWorkoutSessionMutation: mocks.useCreateWorkoutSessionMutationMock,
+  useDeleteWorkoutRoutineMutation: mocks.useDeleteWorkoutRoutineMutationMock,
+  useInstantiateWorkoutFromRoutineMutation: mocks.useInstantiateWorkoutFromRoutineMutationMock,
+  useSaveWorkoutAsRoutineMutation: mocks.useSaveWorkoutAsRoutineMutationMock,
 }))
 
 vi.mock('@shared/components/toast', () => ({
@@ -139,6 +149,11 @@ describe('QuickEntry social surface', () => {
     mocks.useFinishBookMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useUpsertReminderMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useCreateTagMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mocks.useWorkoutRoutinesMock.mockReturnValue({ data: { routines: [] } })
+    mocks.useCreateWorkoutSessionMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mocks.useDeleteWorkoutRoutineMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mocks.useInstantiateWorkoutFromRoutineMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mocks.useSaveWorkoutAsRoutineMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useToastMock.mockReturnValue({
       info: vi.fn(),
       success: vi.fn(),

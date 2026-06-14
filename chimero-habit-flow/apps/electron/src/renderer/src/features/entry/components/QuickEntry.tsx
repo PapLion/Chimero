@@ -3,7 +3,7 @@
 import { createPortal } from "react-dom"
 import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, type CSSProperties } from "react"
 import { useAppStore } from "@shared/store"
-import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useBooks, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useAddFoodEntryMutation, useAddIntakeEntryMutation, useAddHealthSymptomEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
+import { useTrackers, useRecentTrackers, useFavoriteTrackers, useEntries, useBooks, useAddEntryMutation, useAddWeightEntryMutation, useAddGamingEntryMutation, useAddFoodEntryMutation, useAddIntakeEntryMutation, useAddHealthSymptomEntryMutation, useCreateBookMutation, useStartBookMutation, useReadBookMutation, useFinishBookMutation, useQuickEntryContext, useUpsertReminderMutation, useAssets, useTags, useCreateTagMutation, useWorkoutRoutines, useCreateWorkoutSessionMutation, useDeleteWorkoutRoutineMutation, useInstantiateWorkoutFromRoutineMutation, useSaveWorkoutAsRoutineMutation } from "@shared/queries"
 import { cn } from "@shared/utils"
 import { getEntryConfig } from "../entry-config"
 import type { Entry, Tracker } from "@shared/store"
@@ -81,6 +81,10 @@ export function QuickEntry() {
   const readBookMutation = useReadBookMutation()
   const finishBookMutation = useFinishBookMutation()
   const createTagMutation = useCreateTagMutation()
+  const createWorkoutSessionMutation = useCreateWorkoutSessionMutation()
+  const deleteWorkoutRoutineMutation = useDeleteWorkoutRoutineMutation()
+  const instantiateWorkoutFromRoutineMutation = useInstantiateWorkoutFromRoutineMutation()
+  const saveWorkoutAsRoutineMutation = useSaveWorkoutAsRoutineMutation()
   const toast = useToast()
 
   const [search, setSearch] = useState("")
@@ -102,6 +106,7 @@ export function QuickEntry() {
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
   const [mode, setMode] = useState<QuickEntryMode>(MODE_ACTIVITY)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [workoutLoadUnit, setWorkoutLoadUnit] = useState<"kg" | "lb">("kg")
 
   // Selected contacts for Social trackers
   const [selectedContacts, setSelectedContacts] = useState<ContactMoodSelection[]>([])
@@ -118,6 +123,18 @@ export function QuickEntry() {
   const [linkedTrackerId, setLinkedTrackerId] = useState<number | undefined>(undefined)
   const bookIdCacheRef = useRef(new Map<string, number>())
   const selectedTrackerData = trackers.find((t) => t.id === selectedTracker)
+  const isExerciseTrackerSelected =
+    !!selectedTrackerData &&
+    (
+      getTrackerIdentity(selectedTrackerData) === "exercise" ||
+      selectedTrackerData.icon === "dumbbell" ||
+      selectedTrackerData.name.toLowerCase().includes("exercise") ||
+      selectedTrackerData.name.toLowerCase().includes("workout") ||
+      selectedTrackerData.name.toLowerCase().includes("gym") ||
+      selectedTrackerData.name.toLowerCase().includes("fitness")
+    )
+  const { data: workoutRoutinesResponse } = useWorkoutRoutines(selectedTracker ?? 0, commandBarOpen && isExerciseTrackerSelected)
+  const workoutRoutines = workoutRoutinesResponse?.routines ?? []
 
   const { data: selectedTrackerEntries = [] } = useEntries(selectedTracker ? { trackerId: selectedTracker } : undefined)
   const { data: books = [] } = useBooks(commandBarOpen && (selectedTrackerData ? isBooksTracker(selectedTrackerData) : false))
@@ -210,6 +227,7 @@ export function QuickEntry() {
       setSelectedTagIds([])
       setAssetPickerOpen(false)
       setMode(MODE_ACTIVITY)
+      setWorkoutLoadUnit("kg")
       setReminderTitle("")
       setReminderDescription("")
       setReminderDate("")
@@ -242,6 +260,7 @@ export function QuickEntry() {
       setSelectedTagIds([])
       setAssetPickerOpen(false)
       setMode(MODE_ACTIVITY)
+      setWorkoutLoadUnit("kg")
       setReminderTitle("")
       setReminderDescription("")
       setReminderDate("")
@@ -367,6 +386,25 @@ export function QuickEntry() {
     return bookId
   }, [createBookMutation, normalizeBookKey, selectedTrackerBookIdsByTitle])
 
+  const updateWorkoutExercise = useCallback((index: number, updater: (exercise: SelectedExercise) => SelectedExercise) => {
+    setSelectedExercises((prev) => prev.map((exercise, exerciseIndex) => (exerciseIndex === index ? updater(exercise) : exercise)))
+  }, [])
+
+  const removeWorkoutExercise = useCallback((index: number) => {
+    setSelectedExercises((prev) => prev.filter((_, exerciseIndex) => exerciseIndex !== index))
+  }, [])
+
+  const moveWorkoutExercise = useCallback((index: number, direction: -1 | 1) => {
+    setSelectedExercises((prev) => {
+      const next = [...prev]
+      const targetIndex = index + direction
+      if (targetIndex < 0 || targetIndex >= next.length) return prev
+      const [item] = next.splice(index, 1)
+      next.splice(targetIndex, 0, item)
+      return next
+    })
+  }, [])
+
   const handleSubmit = useCallback(async () => {
     if (isSubmitting || !selectedTracker) return
 
@@ -404,61 +442,52 @@ export function QuickEntry() {
 
     try {
       if (isExerciseTracker && selectedExercises.length > 0) {
-        const workoutExercises = selectedExercises.map((exercise) => {
+        const workoutExercises = selectedExercises.map((exercise, index) => {
           const setCount = typeof exercise.sets === "number" && Number.isFinite(exercise.sets) && exercise.sets > 0
             ? Math.floor(exercise.sets)
             : 1
           return {
             exerciseId: exercise.exerciseId,
-            exerciseName: exercise.name,
+            sourceExerciseId: null,
+            name: exercise.name,
             category: exercise.category,
             level: exercise.level,
             equipment: exercise.equipment,
-            primaryMuscles: exercise.primaryMuscles,
-            secondaryMuscles: exercise.secondaryMuscles,
+            bodyPartSnapshot: exercise.primaryMuscles,
+            secondaryBodyPartSnapshot: exercise.secondaryMuscles,
             force: exercise.force,
             mechanic: exercise.mechanic,
-            notes: null,
-            sets: Array.from({ length: setCount }, (_, index) => ({
-              setIndex: index + 1,
+            orderIndex: index,
+            sets: Array.from({ length: setCount }, (_, setIndex) => ({
+              setIndex: setIndex + 1,
               reps: exercise.reps ?? null,
-              weight: exercise.weight ?? null,
-              weightUnit: exercise.weight != null ? "kg" : null,
-              durationSeconds: null,
+              load: exercise.weight ?? null,
               notes: null,
               isWarmup: false,
             })),
           }
         })
         const routineName = workoutRoutineName.trim()
-        const workoutSession = {
-          structured: true as const,
-          routine: routineName
-            ? {
-                name: routineName,
-                notes: null,
-              }
-            : null,
-          title: routineName || null,
-          note: note.trim() || null,
-          startedAt: timestamp,
-          completedAt: timestamp,
-          totalSets: workoutExercises.reduce((sum, exercise) => sum + exercise.sets.length, 0),
-          exercises: workoutExercises,
-        }
-
-        await addEntryMutation.mutateAsync({
+        const workoutSession = await createWorkoutSessionMutation.mutateAsync({
           trackerId: selectedTracker,
-          value: selectedExercises.length,
+          timestamp,
+          sessionName: routineName || null,
           note: note.trim() || null,
+          routineId: null,
+          durationMinutes: null,
+          loadUnit: workoutLoadUnit,
           assetId: selectedAssetId,
           tagIds: selectedTagIds,
-          metadata: {
-            exercises: selectedExercises,
-            workoutSession,
-          },
-          timestamp,
+          exercises: workoutExercises,
         })
+
+        if (workoutSession && routineName) {
+          await saveWorkoutAsRoutineMutation.mutateAsync({
+            sessionEntryId: workoutSession.session.entryId,
+            name: routineName,
+            notes: note.trim() || null,
+          })
+        }
 
         toast.success("Workout logged.", trackerData.name)
         setQuickEntryOpen(false)
@@ -1249,13 +1278,183 @@ export function QuickEntry() {
                         />
                       </div>
                     </div>
+                    <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
+                      <div className="space-y-1.5">
+                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                          Save as routine
+                        </label>
+                        <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                          Saving a workout with a name also stores a reusable routine snapshot.
+                        </p>
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">
+                          Load unit
+                        </label>
+                        <CyberpunkSelect
+                          value={workoutLoadUnit}
+                          onValueChange={(value) => setWorkoutLoadUnit(value as "kg" | "lb")}
+                          options={[
+                            { value: "kg", label: "kg" },
+                            { value: "lb", label: "lb" },
+                          ]}
+                        />
+                      </div>
+                    </div>
+                    {workoutRoutines.length > 0 && (
+                      <div className="space-y-2 rounded-2xl border border-white/8 bg-white/[0.03] p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(var(--muted-foreground))]">
+                              Recent routines
+                            </div>
+                            <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+                              Start from a saved routine or delete one you no longer need.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {workoutRoutines.slice(0, 4).map((routine) => (
+                            <div key={routine.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                              <div>
+                                <div className="font-medium text-[hsl(var(--foreground))]">{routine.name}</div>
+                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                  {routine.exercises.length} exercise{routine.exercises.length === 1 ? "" : "s"} · {routine.loadUnit}
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-8 rounded-full px-3"
+                                  onClick={async () => {
+                                    const draft = await instantiateWorkoutFromRoutineMutation.mutateAsync({
+                                      routineId: routine.id,
+                                      timestamp: Date.now(),
+                                    })
+                                    if (!draft) return
+                                    setWorkoutRoutineName(routine.name)
+                                    setWorkoutLoadUnit(routine.loadUnit)
+                                    setSelectedExercises(draft.exercises.map((exercise) => ({
+                                      exerciseId: exercise.exerciseId,
+                                      name: exercise.name,
+                                      category: exercise.category ?? "strength",
+                                      level: exercise.level ?? "",
+                                      equipment: exercise.equipment ?? null,
+                                      primaryMuscles: exercise.bodyPartSnapshot ?? [],
+                                      secondaryMuscles: exercise.secondaryBodyPartSnapshot ?? [],
+                                      force: exercise.force ?? null,
+                                      mechanic: exercise.mechanic ?? null,
+                                      sets: exercise.sets.length,
+                                      reps: exercise.sets[0]?.reps ?? undefined,
+                                      weight: exercise.sets[0]?.load ?? undefined,
+                                    })))
+                                    setNote(draft.note ?? "")
+                                  }}
+                                >
+                                  Start
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-8 rounded-full px-3 text-rose-200 hover:text-rose-100"
+                                  onClick={async () => {
+                                    await deleteWorkoutRoutineMutation.mutateAsync(routine.id)
+                                  }}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <ExerciseSearch
                       onExerciseSelect={(exercise) => setSelectedExercises((prev) => [...prev, exercise])}
                       selectedExercises={selectedExercises}
+                      loadUnit={workoutLoadUnit}
                     />
                     <p className="text-xs text-[hsl(var(--muted-foreground))]">
                       Select at least one exercise to save the workout session. Each exercise keeps its own set, rep, and load snapshot.
                     </p>
+                    {selectedExercises.length > 0 && (
+                      <div className="space-y-3">
+                        {selectedExercises.map((exercise, index) => (
+                          <div key={`${exercise.exerciseId}-${index}`} className="space-y-3 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <div className="font-medium text-[hsl(var(--foreground))]">{exercise.name}</div>
+                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                  {exercise.category}
+                                  {exercise.equipment ? ` · ${exercise.equipment}` : ""}
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <Button type="button" variant="outline" className="h-8 rounded-full px-3" onClick={() => moveWorkoutExercise(index, -1)} disabled={index === 0}>
+                                  Up
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-8 rounded-full px-3"
+                                  onClick={() => moveWorkoutExercise(index, 1)}
+                                  disabled={index === selectedExercises.length - 1}
+                                >
+                                  Down
+                                </Button>
+                                <Button type="button" variant="outline" className="h-8 rounded-full px-3" onClick={() => removeWorkoutExercise(index)}>
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-3">
+                              <div>
+                                <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Sets</label>
+                                <div className="flex items-center gap-2">
+                                  <Button type="button" variant="outline" className="h-9 w-9 rounded-full p-0" onClick={() => updateWorkoutExercise(index, (current) => ({ ...current, sets: Math.max(1, (current.sets ?? 1) - 1) }))}>
+                                    -
+                                  </Button>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    value={exercise.sets ?? 1}
+                                    onChange={(e) => updateWorkoutExercise(index, (current) => ({ ...current, sets: Math.max(1, Number.parseInt(e.target.value || "1", 10) || 1) }))}
+                                    className="bg-white/5 text-[hsl(var(--foreground))]"
+                                  />
+                                  <Button type="button" variant="outline" className="h-9 w-9 rounded-full p-0" onClick={() => updateWorkoutExercise(index, (current) => ({ ...current, sets: (current.sets ?? 1) + 1 }))}>
+                                    +
+                                  </Button>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Reps</label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  step={1}
+                                  value={exercise.reps ?? ""}
+                                  onChange={(e) => updateWorkoutExercise(index, (current) => ({ ...current, reps: e.target.value ? Number.parseInt(e.target.value, 10) || undefined : undefined }))}
+                                  className="bg-white/5 text-[hsl(var(--foreground))]"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Load ({workoutLoadUnit})</label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step={0.5}
+                                  value={exercise.weight ?? ""}
+                                  onChange={(e) => updateWorkoutExercise(index, (current) => ({ ...current, weight: e.target.value ? Number.parseFloat(e.target.value) || undefined : undefined }))}
+                                  className="bg-white/5 text-[hsl(var(--foreground))]"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -1627,7 +1826,7 @@ export function QuickEntry() {
                       loading={isSubmitting}
                       loadingText="Saving entry..."
                     >
-                      Save Entry
+                      {isExerciseTracker ? "Save Workout" : "Save Entry"}
                     </Button>
                   )}
                 </div>

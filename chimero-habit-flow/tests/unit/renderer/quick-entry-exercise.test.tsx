@@ -23,9 +23,16 @@ const mocks = vi.hoisted(() => ({
   useAssetsMock: vi.fn(),
   useTagsMock: vi.fn(),
   useCreateTagMutationMock: vi.fn(),
+  useWorkoutRoutinesMock: vi.fn(),
+  useCreateWorkoutSessionMutationMock: vi.fn(),
+  useDeleteWorkoutRoutineMutationMock: vi.fn(),
+  useInstantiateWorkoutFromRoutineMutationMock: vi.fn(),
+  useSaveWorkoutAsRoutineMutationMock: vi.fn(),
   useToastMock: vi.fn(),
   setQuickEntryOpenMock: vi.fn(),
   addEntryMutateAsyncMock: vi.fn(),
+  createWorkoutSessionMutateAsyncMock: vi.fn(),
+  saveWorkoutAsRoutineMutateAsyncMock: vi.fn(),
 }))
 
 vi.mock('@shared/store', () => ({
@@ -53,6 +60,11 @@ vi.mock('@shared/queries', () => ({
   useAssets: mocks.useAssetsMock,
   useTags: mocks.useTagsMock,
   useCreateTagMutation: mocks.useCreateTagMutationMock,
+  useWorkoutRoutines: mocks.useWorkoutRoutinesMock,
+  useCreateWorkoutSessionMutation: mocks.useCreateWorkoutSessionMutationMock,
+  useDeleteWorkoutRoutineMutation: mocks.useDeleteWorkoutRoutineMutationMock,
+  useInstantiateWorkoutFromRoutineMutation: mocks.useInstantiateWorkoutFromRoutineMutationMock,
+  useSaveWorkoutAsRoutineMutation: mocks.useSaveWorkoutAsRoutineMutationMock,
 }))
 
 vi.mock('@shared/components/toast', () => ({
@@ -114,8 +126,8 @@ vi.mock('@shared/components/ConfirmDeleteDialog', () => ({
 }))
 
 vi.mock('@features/tracking/components/CyberpunkSelect', () => ({
-  CyberpunkSelect: ({ placeholder }: { placeholder?: string }) => (
-    <div data-testid="cyberpunk-select">{placeholder ?? 'select'}</div>
+  CyberpunkSelect: ({ placeholder, value }: { placeholder?: string; value?: string }) => (
+    <div data-testid="cyberpunk-select">{value ?? placeholder ?? 'select'}</div>
   ),
 }))
 
@@ -153,6 +165,7 @@ describe('QuickEntry exercise surface', () => {
     mocks.useQuickEntryContextMock.mockReturnValue({ data: null })
     mocks.useAssetsMock.mockReturnValue({ data: [] })
     mocks.useTagsMock.mockReturnValue({ data: [] })
+    mocks.useWorkoutRoutinesMock.mockReturnValue({ data: { routines: [] } })
     mocks.useAddEntryMutationMock.mockReturnValue({ mutateAsync: mocks.addEntryMutateAsyncMock, isPending: false })
     mocks.useAddWeightEntryMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useAddGamingEntryMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
@@ -165,6 +178,10 @@ describe('QuickEntry exercise surface', () => {
     mocks.useFinishBookMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useUpsertReminderMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     mocks.useCreateTagMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mocks.useCreateWorkoutSessionMutationMock.mockReturnValue({ mutateAsync: mocks.createWorkoutSessionMutateAsyncMock, isPending: false })
+    mocks.useDeleteWorkoutRoutineMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mocks.useInstantiateWorkoutFromRoutineMutationMock.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    mocks.useSaveWorkoutAsRoutineMutationMock.mockReturnValue({ mutateAsync: mocks.saveWorkoutAsRoutineMutateAsyncMock, isPending: false })
     mocks.useToastMock.mockReturnValue({
       info: vi.fn(),
       success: vi.fn(),
@@ -173,6 +190,39 @@ describe('QuickEntry exercise surface', () => {
     })
     mocks.setQuickEntryOpenMock.mockClear()
     mocks.addEntryMutateAsyncMock.mockClear()
+    mocks.createWorkoutSessionMutateAsyncMock.mockResolvedValue({
+      session: {
+        structured: true,
+        entryId: 999,
+        trackerId: 14,
+        routineId: null,
+        timestamp: Date.now(),
+        dateStr: '2026-06-11',
+        sessionName: 'Push day',
+        title: 'Push day',
+        note: 'First working set felt smooth',
+        loadUnit: 'kg',
+        durationMinutes: null,
+        totalSets: 3,
+        totalVolume: 2400,
+        completedAt: Date.now(),
+        routine: null,
+        exercises: [],
+      },
+      tags: [],
+    })
+    mocks.saveWorkoutAsRoutineMutateAsyncMock.mockResolvedValue({
+      routine: {
+        id: 44,
+        trackerId: 14,
+        name: 'Push day',
+        notes: 'First working set felt smooth',
+        loadUnit: 'kg',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        exercises: [],
+      },
+    })
   })
 
   it('shows workout note fields and sends a structured workout session payload', async () => {
@@ -180,6 +230,7 @@ describe('QuickEntry exercise surface', () => {
 
     expect(screen.getByText('Workout routine')).toBeTruthy()
     expect(screen.getByText('Note / context')).toBeTruthy()
+    expect(screen.getByText('Load unit')).toBeTruthy()
     expect(screen.getByText(/select at least one exercise to save the workout session/i)).toBeTruthy()
 
     fireEvent.change(screen.getByPlaceholderText('e.g., Push day, Leg day'), { target: { value: 'Push day' } })
@@ -188,44 +239,35 @@ describe('QuickEntry exercise surface', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: /select exercise/i }))
-    fireEvent.click(screen.getByRole('button', { name: /save entry/i }))
+    fireEvent.click(screen.getByRole('button', { name: /save workout/i }))
 
     await waitFor(() => {
-      expect(mocks.addEntryMutateAsyncMock).toHaveBeenCalledTimes(1)
-      expect(mocks.addEntryMutateAsyncMock).toHaveBeenCalledWith(
+      expect(mocks.createWorkoutSessionMutateAsyncMock).toHaveBeenCalledTimes(1)
+      expect(mocks.createWorkoutSessionMutateAsyncMock).toHaveBeenCalledWith(
         expect.objectContaining({
           trackerId: 14,
-          value: 1,
+          timestamp: expect.any(Number),
+          sessionName: 'Push day',
           note: 'First working set felt smooth',
-          metadata: expect.objectContaining({
-            exercises: expect.arrayContaining([
-              expect.objectContaining({
-                exerciseId: 'bench-press',
-                name: 'Bench Press',
-                sets: 3,
-                reps: 8,
-                weight: 80,
-              }),
-            ]),
-            workoutSession: expect.objectContaining({
-              structured: true,
-              title: 'Push day',
-              note: 'First working set felt smooth',
-              routine: { name: 'Push day', notes: null },
-              totalSets: 3,
-              exercises: expect.arrayContaining([
-                expect.objectContaining({
-                  exerciseId: 'bench-press',
-                  exerciseName: 'Bench Press',
-                  category: 'strength',
-                  equipment: 'barbell',
-                  sets: expect.arrayContaining([
-                    expect.objectContaining({ setIndex: 1, reps: 8, weight: 80, weightUnit: 'kg' }),
-                  ]),
-                }),
+          loadUnit: 'kg',
+          exercises: expect.arrayContaining([
+            expect.objectContaining({
+              exerciseId: 'bench-press',
+              name: 'Bench Press',
+              bodyPartSnapshot: ['chest'],
+              secondaryBodyPartSnapshot: ['triceps', 'shoulders'],
+              sets: expect.arrayContaining([
+                expect.objectContaining({ setIndex: 1, reps: 8, load: 80 }),
               ]),
             }),
-          }),
+          ]),
+        }),
+      )
+      expect(mocks.saveWorkoutAsRoutineMutateAsyncMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionEntryId: 999,
+          name: 'Push day',
+          notes: 'First working set felt smooth',
         }),
       )
       expect(mocks.setQuickEntryOpenMock).toHaveBeenCalledWith(false)

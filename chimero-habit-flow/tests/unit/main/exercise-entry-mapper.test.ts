@@ -15,9 +15,9 @@ describe('Exercise entry mapping', () => {
           routine: { name: 'Strength A', notes: 'Focus on tempo' },
           title: 'Strength A',
           note: 'Heavy compounds',
+          loadUnit: 'kg',
           startedAt: Date.UTC(2026, 5, 11, 13, 0),
           completedAt: Date.UTC(2026, 5, 11, 14, 5),
-          totalSets: 5,
           exercises: [
             {
               exerciseId: 'back-squat',
@@ -25,14 +25,14 @@ describe('Exercise entry mapping', () => {
               category: 'strength',
               level: 'intermediate',
               equipment: 'barbell',
-              primaryMuscles: ['quads', 'glutes'],
-              secondaryMuscles: ['hamstrings'],
+              bodyPartSnapshot: ['quads', 'glutes'],
+              secondaryBodyPartSnapshot: ['hamstrings'],
               force: 'push',
               mechanic: 'compound',
               notes: 'Controlled eccentric',
               sets: [
-                { setIndex: 1, reps: 5, weight: 100, weightUnit: 'kg' },
-                { setIndex: 2, reps: 5, weight: 100, weightUnit: 'kg' },
+                { setIndex: 1, reps: 5, load: 100, weight: 100, weightUnit: 'kg' },
+                { setIndex: 2, reps: 5, load: 100, weight: 100, weightUnit: 'kg' },
               ],
             },
           ],
@@ -47,13 +47,18 @@ describe('Exercise entry mapping', () => {
       structured: true,
       entryId: 88,
       trackerId: 14,
+      routineId: null,
       timestamp: Date.UTC(2026, 5, 11, 13, 0),
       dateStr: '2026-06-11',
+      sessionName: 'Strength A',
       title: 'Strength A',
       note: 'Heavy compounds',
-      routine: { name: 'Strength A', notes: 'Focus on tempo' },
+      loadUnit: 'kg',
+      durationMinutes: null,
       totalSets: 2,
+      totalVolume: 1000,
       completedAt: Date.UTC(2026, 5, 11, 14, 5),
+      routine: null,
       exercises: [
         {
           exerciseId: 'back-squat',
@@ -61,21 +66,21 @@ describe('Exercise entry mapping', () => {
           category: 'strength',
           level: 'intermediate',
           equipment: 'barbell',
-          primaryMuscles: ['quads', 'glutes'],
-          secondaryMuscles: ['hamstrings'],
+          bodyPartSnapshot: ['quads', 'glutes'],
+          secondaryBodyPartSnapshot: ['hamstrings'],
           force: 'push',
           mechanic: 'compound',
           notes: 'Controlled eccentric',
           sets: [
-            { setIndex: 1, reps: 5, weight: 100, weightUnit: 'kg', durationSeconds: null, notes: null, isWarmup: false },
-            { setIndex: 2, reps: 5, weight: 100, weightUnit: 'kg', durationSeconds: null, notes: null, isWarmup: false },
+            { setIndex: 1, reps: 5, load: 100, weight: 100, weightUnit: 'kg', notes: null, isWarmup: false },
+            { setIndex: 2, reps: 5, load: 100, weight: 100, weightUnit: 'kg', notes: null, isWarmup: false },
           ],
         },
       ],
     })
   })
 
-  it('falls back to legacy exercise metadata arrays', () => {
+  it('leaves ambiguous legacy exercise metadata unstructured', () => {
     const entry = mapEntry({
       id: 89,
       tracker_id: 14,
@@ -96,14 +101,6 @@ describe('Exercise entry mapping', () => {
       asset_id: null,
     })
 
-    expect(entry.workout?.totalSets).toBe(3)
-    expect(entry.workout?.exercises[0].exerciseName).toBe('Bench Press')
-    expect(entry.workout?.exercises[0].sets).toHaveLength(3)
-    expect(entry.workout?.exercises[0].sets[0]).toMatchObject({
-      setIndex: 1,
-      reps: 8,
-      weight: 80,
-      weightUnit: 'kg',
-    })
+    expect(entry.workout).toBeUndefined()
   })
 })

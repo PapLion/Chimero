@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createReadStream, existsSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import { getWebDb, getAssetsRoot, getWebDbPath, type WebDb } from '../db'
-import { books, bookActivities, entryHealth, entryIntake, intakeItems, symptoms } from '../../../../packages/db/src/schema'
+import { books, bookActivities, entryHealth, entryIntake, intakeItems, symptoms, workoutRoutines, workoutRoutineExercises, workoutSessions, workoutSessionExercises, workoutSets } from '../../../../packages/db/src/schema'
 import { buildTagTree, resolveInheritedTagIds } from '../../../../packages/shared/src/domain/tags'
 import {
   buildCalendarDayEntry,
@@ -15,6 +15,13 @@ import {
   buildHealthHomeWidgetReadModel,
   buildIntakeDetailReadModel,
   buildIntakeHomeWidgetReadModel,
+  buildWorkoutCalendarReadModel,
+  buildWorkoutGraphReadModel,
+  buildWorkoutHomeReadModel,
+  buildWorkoutLegacyEntryReadModel,
+  buildWorkoutRoutineReadModel,
+  buildWorkoutSessionReadModel,
+  buildWorkoutStatisticsReadModel,
   entryToFoodHistoryItem,
   entryToBookHistoryItem,
   entryToGamingReadModel,
@@ -43,8 +50,29 @@ import {
   validateUnitOptional,
   isTaskTrackerLike,
   parseTaskStateMetadata,
+  normalizeWorkoutWeightUnit,
 } from '../../../../packages/shared/src/domain'
 import { getBookLifecycleRecord } from '../../../../packages/shared/src/features/books'
+import { getAllExercises, getExerciseDbStatus, initExerciseDb, searchExercises } from '../features/exercises'
+import {
+  createWorkoutRoutine,
+  createWorkoutSession,
+  deleteWorkoutRoutine,
+  deleteWorkoutSession,
+  getExerciseProgress,
+  getWorkoutCalendar,
+  getWorkoutGraph,
+  getWorkoutHistory,
+  getWorkoutHome,
+  getWorkoutRoutine,
+  getWorkoutRoutines,
+  getWorkoutStatistics,
+  getWorkoutSession,
+  instantiateWorkoutFromRoutine,
+  saveWorkoutAsRoutine,
+  updateWorkoutRoutine,
+  updateWorkoutSession,
+} from '../features/workouts'
 import { calculateWeightDetail } from '../../../../packages/shared/src/domain/weight'
 import { computeBestStreak, computeCurrentStreak } from '../../../../packages/shared/src/domain/streak'
 import type {
@@ -2991,6 +3019,106 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
     return
   }
 
+  const workoutSessionMatch = path.match(/^\/api\/workouts\/sessions\/(\d+)$/)
+  if (path === '/api/workouts/sessions' && method === 'POST') {
+    json(res, 200, createWorkoutSession(await readBody(req) as any))
+    return
+  }
+
+  if (workoutSessionMatch && method === 'GET') {
+    json(res, 200, getWorkoutSession(Number(workoutSessionMatch[1])))
+    return
+  }
+
+  if (workoutSessionMatch && method === 'PUT') {
+    json(res, 200, updateWorkoutSession(Number(workoutSessionMatch[1]), await readBody(req) as any))
+    return
+  }
+
+  if (workoutSessionMatch && method === 'DELETE') {
+    json(res, 200, deleteWorkoutSession(Number(workoutSessionMatch[1])))
+    return
+  }
+
+  const workoutRoutineMatch = path.match(/^\/api\/workouts\/routines\/(\d+)$/)
+  if (path === '/api/workouts/routines' && method === 'POST') {
+    json(res, 200, createWorkoutRoutine(await readBody(req) as any))
+    return
+  }
+
+  if (workoutRoutineMatch && method === 'GET') {
+    json(res, 200, getWorkoutRoutine(Number(workoutRoutineMatch[1])))
+    return
+  }
+
+  if (workoutRoutineMatch && method === 'PUT') {
+    json(res, 200, updateWorkoutRoutine(Number(workoutRoutineMatch[1]), await readBody(req) as any))
+    return
+  }
+
+  if (workoutRoutineMatch && method === 'DELETE') {
+    json(res, 200, deleteWorkoutRoutine(Number(workoutRoutineMatch[1])))
+    return
+  }
+
+  const workoutHistoryMatch = path.match(/^\/api\/workouts\/trackers\/(\d+)\/history$/)
+  if (workoutHistoryMatch && method === 'GET') {
+    json(res, 200, getWorkoutHistory(Number(workoutHistoryMatch[1]), optionalInt(url.searchParams.get('limit')) ?? 365))
+    return
+  }
+
+  const workoutRoutinesMatch = path.match(/^\/api\/workouts\/trackers\/(\d+)\/routines$/)
+  if (workoutRoutinesMatch && method === 'GET') {
+    json(res, 200, getWorkoutRoutines(Number(workoutRoutinesMatch[1])))
+    return
+  }
+
+  const workoutHomeMatch = path.match(/^\/api\/workouts\/trackers\/(\d+)\/home$/)
+  if (workoutHomeMatch && method === 'GET') {
+    json(res, 200, getWorkoutHome(Number(workoutHomeMatch[1])))
+    return
+  }
+
+  const workoutStatsMatch = path.match(/^\/api\/workouts\/trackers\/(\d+)\/stats$/)
+  if (workoutStatsMatch && method === 'GET') {
+    json(res, 200, getWorkoutStatistics(Number(workoutStatsMatch[1])))
+    return
+  }
+
+  const workoutGraphMatch = path.match(/^\/api\/workouts\/trackers\/(\d+)\/graph$/)
+  if (workoutGraphMatch && method === 'GET') {
+    json(res, 200, getWorkoutGraph(Number(workoutGraphMatch[1])))
+    return
+  }
+
+  const workoutCalendarMatch = path.match(/^\/api\/workouts\/trackers\/(\d+)\/calendar\/(\d+)\/(\d+)$/)
+  if (workoutCalendarMatch && method === 'GET') {
+    json(res, 200, getWorkoutCalendar(Number(workoutCalendarMatch[1]), Number(workoutCalendarMatch[2]), Number(workoutCalendarMatch[3])))
+    return
+  }
+
+  const workoutProgressMatch = path.match(/^\/api\/workouts\/trackers\/(\d+)\/progress\/(.+)$/)
+  if (workoutProgressMatch && method === 'GET') {
+    json(res, 200, getExerciseProgress(Number(workoutProgressMatch[1]), decodeURIComponent(workoutProgressMatch[2])))
+    return
+  }
+
+  if (path === '/api/workouts/routines/instantiate' && method === 'POST') {
+    json(res, 200, instantiateWorkoutFromRoutine(await readBody(req) as any))
+    return
+  }
+
+  const workoutSaveAsRoutineMatch = path.match(/^\/api\/workouts\/sessions\/(\d+)\/save-as-routine$/)
+  if (workoutSaveAsRoutineMatch && method === 'POST') {
+    const body = asRecord(await readBody(req))
+    json(res, 200, saveWorkoutAsRoutine({
+      sessionEntryId: Number(workoutSaveAsRoutineMatch[1]),
+      name: String(body.name ?? '').trim(),
+      notes: body.notes == null ? null : String(body.notes),
+    }))
+    return
+  }
+
   if (path === '/api/contacts' && method === 'GET') {
     const rows = getDb().prepare('SELECT * FROM contacts ORDER BY name ASC').all()
     json(res, 200, rows.map((row) => mapContact(row as JsonRecord)))
@@ -3062,17 +3190,20 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
   }
 
   if (path === '/api/exercises/status' && method === 'GET') {
-    json(res, 200, { status: 'ready', count: 0, error: null, progress: 100 })
+    await initExerciseDb()
+    json(res, 200, getExerciseDbStatus())
     return
   }
 
   if (path === '/api/exercises' && method === 'GET') {
-    json(res, 200, [])
+    await initExerciseDb()
+    json(res, 200, getAllExercises(optionalInt(url.searchParams.get('limit')) ?? 50))
     return
   }
 
   if (path === '/api/exercises/search' && method === 'GET') {
-    json(res, 200, [])
+    await initExerciseDb()
+    json(res, 200, searchExercises(url.searchParams.get('query') ?? '', optionalInt(url.searchParams.get('limit')) ?? 20))
     return
   }
 

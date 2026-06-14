@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { useTrackers, useUpdateEntryMutation, useUpdateWeightEntryMutation, useUpdateGamingEntryMutation, useUpdateFoodEntryMutation, useUpdateIntakeEntryMutation, useUpdateHealthSymptomEntryMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
+import { useTrackers, useUpdateEntryMutation, useUpdateWeightEntryMutation, useUpdateGamingEntryMutation, useUpdateFoodEntryMutation, useUpdateIntakeEntryMutation, useUpdateHealthSymptomEntryMutation, useUpdateWorkoutSessionMutation, useAssets, useTags, useCreateTagMutation } from "@shared/queries"
 import { Dialog, DialogContent, DialogTitle } from "@packages/ui/dialog"
 import { Input } from "@packages/ui/input"
 import { format } from "date-fns"
@@ -49,6 +49,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     const updateFoodEntryMutation = useUpdateFoodEntryMutation()
     const updateIntakeEntryMutation = useUpdateIntakeEntryMutation()
     const updateHealthSymptomEntryMutation = useUpdateHealthSymptomEntryMutation()
+    const updateWorkoutSessionMutation = useUpdateWorkoutSessionMutation()
     const createTagMutation = useCreateTagMutation()
     const qc = useQueryClient()
     const toast = useToast()
@@ -148,6 +149,16 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     }, [open, entry])
 
     const tracker = entry ? trackers.find((t) => t.id === entry.trackerId) : null
+    const isExerciseTracker =
+        !!tracker &&
+        (
+            getTrackerIdentity(tracker) === "exercise" ||
+            tracker.icon === "dumbbell" ||
+            tracker.name.toLowerCase().includes("exercise") ||
+            tracker.name.toLowerCase().includes("workout") ||
+            tracker.name.toLowerCase().includes("gym") ||
+            tracker.name.toLowerCase().includes("fitness")
+        )
     const isGamingTracker = tracker ? getTrackerIdentity(tracker) === "gaming" : false
     const isFoodTracker = tracker ? getTrackerIdentity(tracker) === "diet" : false
     const isIntakeTracker = tracker ? getTrackerIdentity(tracker) === "intake" : false
@@ -249,6 +260,40 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                         timestamp,
                     },
                 })
+            } else if (isExerciseTracker && entry.workout?.structured) {
+                const workoutExercises = entry.workout.exercises.map((exercise) => ({
+                    exerciseId: exercise.exerciseId,
+                    sourceExerciseId: exercise.sourceExerciseId ?? null,
+                    name: exercise.exerciseName,
+                    category: exercise.category,
+                    level: exercise.level,
+                    equipment: exercise.equipment,
+                    bodyPartSnapshot: exercise.bodyPartSnapshot ?? [],
+                    secondaryBodyPartSnapshot: exercise.secondaryBodyPartSnapshot ?? [],
+                    force: exercise.force,
+                    mechanic: exercise.mechanic,
+                    sets: exercise.sets.map((set) => ({
+                        setIndex: set.setIndex,
+                        reps: set.reps ?? null,
+                        load: set.load ?? null,
+                        notes: set.notes ?? null,
+                        isWarmup: set.isWarmup ?? false,
+                    })),
+                }))
+                await updateWorkoutSessionMutation.mutateAsync({
+                    entryId: entry.id,
+                    updates: {
+                        timestamp,
+                        sessionName: entry.workout.sessionName ?? entry.workout.title ?? null,
+                        note: note.trim() || null,
+                        routineId: entry.workout.routineId ?? undefined,
+                        durationMinutes: entry.workout.durationMinutes ?? undefined,
+                        loadUnit: entry.workout.loadUnit,
+                        assetId: selectedAssetId,
+                        tagIds: selectedTagIds,
+                        exercises: workoutExercises,
+                    },
+                })
             } else if (isWeightTracker) {
                 if (parsedValue == null) return
                 const parsedWaist = waist.trim() ? parseFloat(waist) : null
@@ -335,7 +380,7 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     }
 
     if (!tracker) return null
-    const isPending = updateEntryMutation.isPending || updateWeightEntryMutation.isPending || updateGamingEntryMutation.isPending || updateFoodEntryMutation.isPending || updateIntakeEntryMutation.isPending || updateHealthSymptomEntryMutation.isPending
+    const isPending = updateEntryMutation.isPending || updateWeightEntryMutation.isPending || updateGamingEntryMutation.isPending || updateFoodEntryMutation.isPending || updateIntakeEntryMutation.isPending || updateHealthSymptomEntryMutation.isPending || updateWorkoutSessionMutation.isPending
     const handleOpenChange = (nextOpen: boolean) => {
         if (!nextOpen && isPending) return
         onOpenChange(nextOpen)

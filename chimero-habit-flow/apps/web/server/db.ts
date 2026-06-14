@@ -20,6 +20,7 @@ const require = createRequire(import.meta.url)
 
 let dbPromise: Promise<WebDb> | null = null
 let cachedDbPath: string | null = null
+let resolvedDb: WebDb | null = null
 
 function normalizeValue(value: unknown): SqlParam {
   if (value === undefined || value === null) return null
@@ -264,7 +265,19 @@ export function getWebDb(): Promise<WebDb> {
   const dbPath = getWebDbPath()
   if (!dbPromise || cachedDbPath !== dbPath) {
     cachedDbPath = dbPath
-    dbPromise = createWebDb(dbPath)
+    resolvedDb = null
+    dbPromise = createWebDb(dbPath).then((db) => {
+      resolvedDb = db
+      return db
+    })
   }
   return dbPromise
+}
+
+export function getWebDbSync(): WebDb {
+  const dbPath = getWebDbPath()
+  if (cachedDbPath !== dbPath || !resolvedDb) {
+    throw new Error('Web database has not been initialized yet')
+  }
+  return resolvedDb
 }

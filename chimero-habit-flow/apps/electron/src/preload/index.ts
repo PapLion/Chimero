@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ElectronApi, TrackerConfig } from '@contracts/contracts'
+import type { ElectronApi, TrackerConfig, CreateWorkoutRoutineRequest, CreateWorkoutSessionRequest, InstantiateWorkoutFromRoutineRequest, SaveWorkoutAsRoutineRequest, UpdateWorkoutRoutineRequest, UpdateWorkoutSessionRequest } from '@contracts/contracts'
 
 const api: ElectronApi = {
   getTrackers: () => ipcRenderer.invoke('get-trackers'),
@@ -98,6 +98,23 @@ const api: ElectronApi = {
   getBookStats: (trackerId, options) => ipcRenderer.invoke('get-book-stats', trackerId, options),
   getBookSelectedDaySummary: (trackerId, selectedDate, options) =>
     ipcRenderer.invoke('get-book-selected-day-summary', trackerId, selectedDate, options),
+  getWorkoutSession: (entryId: number) => ipcRenderer.invoke('get-workout-session', entryId),
+  getWorkoutHistory: (trackerId: number, options?: { limit?: number }) => ipcRenderer.invoke('get-workout-history', trackerId, options),
+  createWorkoutSession: (data: CreateWorkoutSessionRequest) => ipcRenderer.invoke('create-workout-session', data),
+  updateWorkoutSession: (entryId: number, updates: UpdateWorkoutSessionRequest) => ipcRenderer.invoke('update-workout-session', entryId, updates),
+  deleteWorkoutSession: (entryId: number) => ipcRenderer.invoke('delete-workout-session', entryId),
+  getWorkoutRoutines: (trackerId: number) => ipcRenderer.invoke('get-workout-routines', trackerId),
+  getWorkoutRoutine: (routineId: number) => ipcRenderer.invoke('get-workout-routine', routineId),
+  createWorkoutRoutine: (data: CreateWorkoutRoutineRequest) => ipcRenderer.invoke('create-workout-routine', data),
+  updateWorkoutRoutine: (routineId: number, updates: UpdateWorkoutRoutineRequest) => ipcRenderer.invoke('update-workout-routine', routineId, updates),
+  deleteWorkoutRoutine: (routineId: number) => ipcRenderer.invoke('delete-workout-routine', routineId),
+  instantiateWorkoutFromRoutine: (data: InstantiateWorkoutFromRoutineRequest) => ipcRenderer.invoke('instantiate-workout-from-routine', data),
+  saveWorkoutAsRoutine: (data: SaveWorkoutAsRoutineRequest) => ipcRenderer.invoke('save-workout-as-routine', data),
+  getWorkoutHome: (trackerId: number) => ipcRenderer.invoke('get-workout-home', trackerId),
+  getWorkoutStatistics: (trackerId: number) => ipcRenderer.invoke('get-workout-statistics', trackerId),
+  getWorkoutGraph: (trackerId: number) => ipcRenderer.invoke('get-workout-graph', trackerId),
+  getWorkoutCalendar: (trackerId: number, year: number, month: number) => ipcRenderer.invoke('get-workout-calendar', trackerId, year, month),
+  getExerciseProgress: (trackerId: number, exerciseId: string) => ipcRenderer.invoke('get-exercise-progress', trackerId, exerciseId),
   // Contacts (Personal CRM)
   getContacts: (options?: { sortBy?: 'name' | 'most-talked-to' | 'least-talked-to' }) => ipcRenderer.invoke('get-contacts', options),
   getContact: (id: number) => ipcRenderer.invoke('get-contact', id),

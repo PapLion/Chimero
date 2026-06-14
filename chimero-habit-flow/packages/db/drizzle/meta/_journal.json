@@ -64,6 +64,13 @@
       "when": 1781016000000,
       "tag": "0008_social_crm_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1781016600000,
+      "tag": "0009_workout_structured_persistence",
+      "breakpoints": true
     }
   ]
 }
