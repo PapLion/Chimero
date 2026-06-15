@@ -25,6 +25,7 @@ import { Scale, Smile, Dumbbell, Users, CheckSquare, Wallet, Command, Bell, Acti
 import { clampMoodScore } from "@contracts/domain"
 import { getTrackerIdentity, isBooksTracker } from "@contracts/features/tracking"
 import type { IntakeItemType, MealType, SocialMethod } from "@contracts/contracts"
+import { buildSocialQuickEntryRequest, validateSocialQuickEntryDraft, type SocialQuickEntryDraft } from "../social-quick-entry"
 
 const iconMap: Record<string, LucideIcon> = {
   scale: Scale,
@@ -410,12 +411,33 @@ export function QuickEntry() {
 
     const trackerData = trackers.find((t) => t.id === selectedTracker)
     if (!trackerData) return
-    const timestamp = Date.now()
 
     const isSocialTracker =
       trackerData.icon === "users" ||
       trackerData.name.toLowerCase().includes("social") ||
       trackerData.name.toLowerCase().includes("connection")
+
+    const socialDraft = isSocialTracker
+      ? {
+          trackerId: selectedTracker,
+          contacts: selectedContacts.map((contact) => ({
+            contactId: contact.contactId,
+            moodImpact: contact.moodImpact,
+          })),
+          method: socialMethod,
+          note,
+          tagIds: selectedTagIds,
+          assetId: selectedAssetId,
+        }
+      : null
+    const socialDraftValidation = socialDraft ? validateSocialQuickEntryDraft(socialDraft) : null
+
+    if (isSocialTracker && socialDraftValidation) {
+      toast.error("We couldn't save that Social check-in.", socialDraftValidation)
+      return
+    }
+
+    const timestamp = Date.now()
 
     const isExerciseTracker =
       getTrackerIdentity(trackerData) === "exercise" ||
@@ -630,6 +652,10 @@ export function QuickEntry() {
         return
       }
 
+      const socialRequest = socialDraft
+        ? buildSocialQuickEntryRequest(socialDraft, timestamp)
+        : null
+
       await addEntryMutation.mutateAsync({
         trackerId: selectedTracker,
         value: entryValue,
@@ -638,14 +664,7 @@ export function QuickEntry() {
         tagIds: selectedTagIds,
         metadata: {},
         timestamp,
-        socialInteractions: isSocialTracker
-          ? selectedContacts.map((contact) => ({
-              contactId: contact.contactId,
-              moodImpact: contact.mood,
-              method: socialMethod,
-              notes: entryNote,
-            }))
-          : undefined,
+        socialInteractions: socialRequest?.socialInteractions,
       })
 
       if (isSocialTracker && selectedContacts.length > 0) {
@@ -813,6 +832,21 @@ export function QuickEntry() {
   const isHealthTracker = selectedTrackerData ? getTrackerIdentity(selectedTrackerData) === "health" : false
   const isIntakeTracker = selectedTrackerData ? getTrackerIdentity(selectedTrackerData) === "intake" : false
   const isBooksTrackerSelected = selectedTrackerData ? isBooksTracker(selectedTrackerData) : false
+  const socialDraft = useMemo<SocialQuickEntryDraft | null>(() => {
+    if (!isSocialTracker || !selectedTracker) return null
+    return {
+      trackerId: selectedTracker,
+      contacts: selectedContacts.map((contact) => ({
+        contactId: contact.contactId,
+        moodImpact: contact.moodImpact,
+      })),
+      method: socialMethod,
+      note,
+      tagIds: selectedTagIds,
+      assetId: selectedAssetId,
+    }
+  }, [isSocialTracker, note, selectedAssetId, selectedContacts, selectedTagIds, selectedTracker, socialMethod])
+  const socialDraftValidation = socialDraft ? validateSocialQuickEntryDraft(socialDraft) : null
 
   const renderTrackerList = (trackerList: typeof trackers, title: string) => {
     if (trackerList.length === 0) return null
@@ -1810,7 +1844,7 @@ export function QuickEntry() {
                         isExerciseTracker
                           ? selectedExercises.length === 0 // Exercise trackers need at least one exercise selected
                           : isSocialTracker
-                            ? selectedContacts.length === 0 // Social trackers need at least one contact selected
+                            ? !!socialDraftValidation // Social trackers need a valid contact draft
                           : isHealthTracker
                             ? !healthSymptomName.trim() || (value.trim() !== "" && (!Number.isFinite(parseFloat(value)) || !Number.isInteger(parseFloat(value)) || parseFloat(value) < 1 || parseFloat(value) > 10))
                             : isIntakeTracker
@@ -1830,9 +1864,9 @@ export function QuickEntry() {
                     </Button>
                   )}
                 </div>
-                {isSocialTracker && selectedContacts.length === 0 && (
+                {isSocialTracker && socialDraftValidation && (
                   <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">
-                    Select at least one contact to enable Social check-in saving.
+                    {socialDraftValidation}
                   </p>
                 )}
               </form>

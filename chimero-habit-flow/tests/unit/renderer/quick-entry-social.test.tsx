@@ -168,6 +168,6 @@ describe('QuickEntry social surface', () => {
     expect(await screen.findByText('Method')).toBeTruthy()
     expect(screen.getByText('Note / context')).toBeTruthy()
     expect(screen.getByPlaceholderText('What did you talk about?')).toBeTruthy()
-    expect(screen.getByText(/Select at least one contact to enable Social check-in saving/i)).toBeTruthy()
+    expect(screen.getByText(/Select at least one contact to save a Social check-in/i)).toBeTruthy()
   })
 })

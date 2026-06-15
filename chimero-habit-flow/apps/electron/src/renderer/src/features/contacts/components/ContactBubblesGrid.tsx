@@ -7,12 +7,12 @@ import { Input } from "@packages/ui/input"
 import { Button } from "@packages/ui/button"
 import { cn } from "@shared/utils"
 import { CyberpunkSelect } from "@features/tracking/components/CyberpunkSelect"
-import type { ContactSortBy } from "@contracts/contracts"
+import type { ContactSortBy, SocialMoodImpact } from "@contracts/contracts"
 import type { Contact } from "@packages/db"
 
 export interface ContactMoodSelection {
   contactId: number
-  mood: "positive" | "negative" | "neutral"
+  moodImpact: SocialMoodImpact
 }
 
 interface ContactBubblesGridProps {
@@ -26,7 +26,7 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
   const { setCurrentPage, setSelectedContactId } = useAppStore()
 
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedContacts, setSelectedContacts] = useState<Map<number, "positive" | "negative" | "neutral">>(new Map())
+  const [selectedContacts, setSelectedContacts] = useState<Map<number, SocialMoodImpact>>(new Map())
 
   // Filter contacts by search query
   const filteredContacts = useMemo(() => {
@@ -54,7 +54,7 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
 
     const currentMood = selectedContacts.get(contactId)
 
-    let newMood: "positive" | "negative" | "neutral" | undefined
+    let newMood: SocialMoodImpact | undefined
     const newMap = new Map(selectedContacts)
 
     if (!currentMood) {
@@ -77,9 +77,40 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
     setSelectedContacts(newMap)
 
     // Convert Map to array and notify parent
-    const selectionArray: ContactMoodSelection[] = Array.from(newMap.entries()).map(([id, mood]): ContactMoodSelection => ({
+    const selectionArray: ContactMoodSelection[] = Array.from(newMap.entries()).map(([id, moodImpact]): ContactMoodSelection => ({
       contactId: id as number,
-      mood: mood as "positive" | "negative" | "neutral",
+      moodImpact: moodImpact as SocialMoodImpact,
+    }))
+    onSelectionChange(selectionArray)
+  }
+
+  const selectedContactDetails = useMemo(() => {
+    return Array.from(selectedContacts.entries())
+      .map(([contactId, moodImpact]) => {
+        const contact = (contacts as Contact[]).find((item) => item.id === contactId)
+        return contact ? { contact, moodImpact } : null
+      })
+      .filter((value): value is { contact: Contact; moodImpact: SocialMoodImpact } => value != null)
+  }, [contacts, selectedContacts])
+
+  const setContactMood = (contactId: number, moodImpact: SocialMoodImpact) => {
+    const nextMap = new Map(selectedContacts)
+    nextMap.set(contactId, moodImpact)
+    setSelectedContacts(nextMap)
+    const selectionArray: ContactMoodSelection[] = Array.from(nextMap.entries()).map(([id, nextMoodImpact]): ContactMoodSelection => ({
+      contactId: id as number,
+      moodImpact: nextMoodImpact as SocialMoodImpact,
+    }))
+    onSelectionChange(selectionArray)
+  }
+
+  const removeSelectedContact = (contactId: number) => {
+    const nextMap = new Map(selectedContacts)
+    nextMap.delete(contactId)
+    setSelectedContacts(nextMap)
+    const selectionArray: ContactMoodSelection[] = Array.from(nextMap.entries()).map(([id, moodImpact]): ContactMoodSelection => ({
+      contactId: id as number,
+      moodImpact: moodImpact as SocialMoodImpact,
     }))
     onSelectionChange(selectionArray)
   }
@@ -199,6 +230,8 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
               key={contact.id}
               type="button"
               onClick={(e) => handleBubbleClick(contact.id, e)}
+              aria-label={`${contact.name}, ${mood || "not selected"}`}
+              aria-pressed={isSelected}
               className={cn(
                 "relative flex h-14 w-14 items-center justify-center rounded-full border-2 transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-[hsl(266_73%_63%/0.45)]",
                 isSelected
@@ -222,6 +255,74 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
           )
         })}
       </div>
+
+      {selectedContactDetails.length > 0 && (
+        <div className="space-y-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">
+            Selected contacts
+          </div>
+          <div className="space-y-2">
+            {selectedContactDetails.map(({ contact, moodImpact }) => {
+              const avatarAsset = contact.avatarAssetId ? assetsMap.get(contact.avatarAssetId) : null
+              const avatarUrl = avatarAsset?.thumbnailUrl || avatarAsset?.assetUrl || null
+              return (
+                <div
+                  key={contact.id}
+                  className="surface-card flex flex-wrap items-center gap-3 rounded-2xl border border-white/8 px-3 py-3"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/[0.05] text-xs font-semibold text-[hsl(210_28%_97%)]">
+                      {avatarUrl ? (
+                        <img
+                          src={avatarUrl}
+                          alt={contact.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        getInitials(contact.name)
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-[hsl(210_28%_97%)]">{contact.name}</div>
+                      <div className="text-xs text-[hsl(220_12%_58%)]">Mood impact</div>
+                    </div>
+                  </div>
+
+                  <div className="ml-auto flex flex-wrap items-center gap-2">
+                    {([
+                      { value: "positive", label: "Positive", className: "border-green-500/40 bg-green-500/10 text-green-100" },
+                      { value: "neutral", label: "Neutral", className: "border-purple-500/40 bg-purple-500/10 text-purple-100" },
+                      { value: "negative", label: "Negative", className: "border-red-500/40 bg-red-500/10 text-red-100" },
+                    ] as const).map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setContactMood(contact.id, option.value)}
+                        aria-pressed={moodImpact === option.value}
+                        className={cn(
+                          "rounded-full border px-3 py-1.5 text-xs font-medium transition-all duration-200 ease-out",
+                          moodImpact === option.value
+                            ? option.className
+                            : "border-white/10 bg-white/[0.03] text-[hsl(220_12%_68%)] hover:border-white/20 hover:bg-white/[0.05]",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => removeSelectedContact(contact.id)}
+                      className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-[hsl(220_12%_68%)] transition-all duration-200 ease-out hover:border-white/20 hover:bg-white/[0.05]"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Mood Legend */}
       <div className="surface-chip flex items-center gap-4 rounded-xl px-4 py-3 text-xs text-[hsl(220_12%_58%)]">
