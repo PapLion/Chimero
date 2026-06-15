@@ -463,6 +463,35 @@ export function QuickEntry() {
     setIsSubmitting(true)
 
     try {
+      if (isSocialTracker) {
+        const socialRequest = socialDraft
+          ? buildSocialQuickEntryRequest(socialDraft, timestamp)
+          : null
+
+        await addEntryMutation.mutateAsync({
+          trackerId: selectedTracker,
+          value: null,
+          note: note.trim() || null,
+          assetId: selectedAssetId,
+          tagIds: selectedTagIds,
+          metadata: {},
+          timestamp,
+          socialInteractions: socialRequest?.socialInteractions,
+        })
+
+        if (selectedContacts.length > 0) {
+          toast.success(
+            "Check-in saved.",
+            `You logged time with ${selectedContacts.length} contact${selectedContacts.length === 1 ? "" : "s"}.`,
+          )
+        } else {
+          toast.success("Entry saved.", trackerData.name)
+        }
+
+        setQuickEntryOpen(false)
+        return
+      }
+
       if (isExerciseTracker && selectedExercises.length > 0) {
         const workoutExercises = selectedExercises.map((exercise, index) => {
           const setCount = typeof exercise.sets === "number" && Number.isFinite(exercise.sets) && exercise.sets > 0
@@ -652,10 +681,6 @@ export function QuickEntry() {
         return
       }
 
-      const socialRequest = socialDraft
-        ? buildSocialQuickEntryRequest(socialDraft, timestamp)
-        : null
-
       await addEntryMutation.mutateAsync({
         trackerId: selectedTracker,
         value: entryValue,
@@ -664,17 +689,10 @@ export function QuickEntry() {
         tagIds: selectedTagIds,
         metadata: {},
         timestamp,
-        socialInteractions: socialRequest?.socialInteractions,
+        socialInteractions: undefined,
       })
 
-      if (isSocialTracker && selectedContacts.length > 0) {
-        toast.success(
-          "Check-in saved.",
-          `You logged time with ${selectedContacts.length} contact${selectedContacts.length === 1 ? "" : "s"}.`,
-        )
-      } else {
-        toast.success("Entry saved.", trackerData.name)
-      }
+      toast.success("Entry saved.", trackerData.name)
 
       setQuickEntryOpen(false)
     } catch (error) {

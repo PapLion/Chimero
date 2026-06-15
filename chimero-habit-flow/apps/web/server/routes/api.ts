@@ -51,6 +51,9 @@ import {
   isTaskTrackerLike,
   parseTaskStateMetadata,
   normalizeWorkoutWeightUnit,
+  computeContactLastTalkedTimestamp,
+  normalizeSocialMethod,
+  normalizeSocialMoodImpact,
 } from '../../../../packages/shared/src/domain'
 import { getBookLifecycleRecord } from '../../../../packages/shared/src/features/books'
 import { getAllExercises, getExerciseDbStatus, initExerciseDb, searchExercises } from '../features/exercises'
@@ -498,6 +501,57 @@ function replaceEntryTags(entryId: number, tagIds?: unknown): void {
   for (const tagId of normalized) insert.run(entryId, tagId)
 }
 
+type ValidatedSocialInteraction = {
+  contactId: number
+  method: SocialMethod
+  moodImpact: ContactInteraction['moodImpact']
+  notes: string | null
+}
+
+function normalizeSocialInteractions(data: BaseEntryRequest | EntryUpdateRequest): ValidatedSocialInteraction[] {
+  return (data.socialInteractions ?? []).map((interaction, index) => {
+    const contactId = Number(interaction.contactId)
+    if (!Number.isInteger(contactId) || contactId <= 0) {
+      throw new Error(`Invalid Social contact ID at index ${index}`)
+    }
+    const method = normalizeSocialMethod(interaction.method)
+    if (!method) {
+      throw new Error(`Invalid Social method at index ${index}`)
+    }
+    const moodImpact = normalizeSocialMoodImpact(interaction.moodImpact)
+    if (!moodImpact) {
+      throw new Error(`Invalid Social mood impact at index ${index}`)
+    }
+    return {
+      contactId,
+      method,
+      moodImpact,
+      notes: interaction.notes ?? null,
+    }
+  })
+}
+
+function isSocialTracker(trackerId: number): boolean {
+  const row = getDb().prepare('SELECT * FROM trackers WHERE id = ? LIMIT 1').get(trackerId)
+  if (!row) return false
+  return getTrackerIdentity(mapTracker(row as JsonRecord)) === 'social'
+}
+
+function refreshContactsLastTalked(contactIds: number[]): void {
+  const uniqueIds = Array.from(new Set(contactIds)).filter((id) => Number.isInteger(id) && id > 0)
+  for (const contactId of uniqueIds) {
+    const rows = getDb()
+      .prepare('SELECT timestamp FROM contact_interactions WHERE contact_id = ? ORDER BY timestamp DESC LIMIT 1')
+      .all(contactId) as Array<{ timestamp: number }>
+    const timestamp = computeContactLastTalkedTimestamp(rows) ?? null
+    getDb().prepare('UPDATE contacts SET date_last_talked = ?, last_talked_at = ? WHERE id = ?').run(
+      timestamp == null ? null : formatDateStr(timestamp),
+      timestamp,
+      contactId,
+    )
+  }
+}
+
 function withTagIds(entries: Entry[]): Entry[] {
   const tagIdsByEntry = getEntryTagIds(entries.map((entry) => entry.id))
   return entries.map((entry) => ({ ...entry, tagIds: tagIdsByEntry.get(entry.id) ?? [] }))
@@ -613,6 +667,10 @@ function addEntry(data: BaseEntryRequest): Entry | null {
   if (isGamingTracker(data.trackerId)) throw new Error('Use add-gaming-entry for Gaming entries')
   if (isFoodTracker(data.trackerId)) throw new Error('Use add-food-entry for structured Food entries')
   if (isIntakeTracker(data.trackerId)) throw new Error('Use add-intake-entry for structured intake entries')
+  const socialInteractions = normalizeSocialInteractions(data)
+  if (socialInteractions.length > 0 && !isSocialTracker(data.trackerId)) {
+    throw new Error('Structured Social interactions require the Social tracker')
+  }
   const dateStr = formatDateStr(data.timestamp)
   const candidateEntry = mapEntry({
     id: 0,
@@ -676,12 +734,30 @@ function addEntry(data: BaseEntryRequest): Entry | null {
         dateStr,
       })
     const id = Number(result.lastInsertRowid)
+    if (socialInteractions.length > 0) {
+      for (const interaction of socialInteractions) {
+        getDb()
+          .prepare('INSERT INTO contact_interactions (contact_id, entry_id, mood, mood_impact, method, timestamp, notes) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .run(interaction.contactId, id, interaction.moodImpact, interaction.moodImpact, interaction.method, data.timestamp, interaction.notes)
+      }
+      refreshContactsLastTalked(socialInteractions.map((interaction) => interaction.contactId))
+    }
     replaceEntryTags(id, data.tagIds)
     return id
-  })
+  })()
   if (insert == null) return null
   const row = getDb().prepare('SELECT * FROM entries WHERE id = ?').get(insert)
-  return row ? withTagIds([mapEntry(row as JsonRecord)])[0] : null
+  if (!row) return null
+  const entry = withTagIds([mapEntry(row as JsonRecord)])[0]
+  if (!entry) return null
+  if (socialInteractions.length === 0) return entry
+  const linkedRows = getDb()
+    .prepare('SELECT * FROM contact_interactions WHERE entry_id = ? ORDER BY id ASC')
+    .all(insert)
+  return {
+    ...entry,
+    socialInteractions: linkedRows.map((interaction) => mapContactInteraction(interaction as JsonRecord)),
+  }
 }
 
 function updateEntry(id: number, updates: EntryUpdateRequest): Entry | null {

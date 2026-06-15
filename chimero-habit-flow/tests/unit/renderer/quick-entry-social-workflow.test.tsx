@@ -219,4 +219,45 @@ describe('QuickEntry social workflow', () => {
       expect((screen.getByRole('button', { name: /save entry/i }) as HTMLButtonElement).disabled).toBe(false)
     })
   })
+
+  it('submits a Social check-in through the visible Save Entry button without requiring a numeric value', async () => {
+    render(<QuickEntry />)
+
+    fireEvent.click(screen.getByRole('button', { name: /jack robert, not selected/i }))
+    fireEvent.click(screen.getByRole('button', { name: /annabelle, not selected/i }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Positive' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Text' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Call' }))
+    fireEvent.change(screen.getByPlaceholderText('What did you talk about?'), {
+      target: { value: 'Planning the weekend' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /save entry/i }))
+
+    await waitFor(() => {
+      expect(mocks.addEntryMutateAsyncMock).toHaveBeenCalledTimes(1)
+    })
+
+    expect(mocks.addEntryMutateAsyncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trackerId: 7,
+        value: null,
+        note: 'Planning the weekend',
+        socialInteractions: [
+          expect.objectContaining({
+            contactId: 1,
+            moodImpact: 'positive',
+            method: 'call',
+            notes: 'Planning the weekend',
+          }),
+          expect.objectContaining({
+            contactId: 2,
+            moodImpact: 'neutral',
+            method: 'call',
+            notes: 'Planning the weekend',
+          }),
+        ],
+      }),
+    )
+  })
 })
