@@ -260,4 +260,40 @@ describe('QuickEntry social workflow', () => {
       }),
     )
   })
+
+  it('keeps duplicate Social submits from firing while the save is pending', async () => {
+    let resolveSave: (() => void) | null = null
+    const pendingSave = new Promise<void>((resolve) => {
+      resolveSave = resolve
+    })
+    mocks.addEntryMutateAsyncMock.mockReturnValue(pendingSave)
+
+    render(<QuickEntry />)
+
+    fireEvent.click(screen.getByRole('button', { name: /jack robert, not selected/i }))
+    fireEvent.click(screen.getByRole('button', { name: /annabelle, not selected/i }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Positive' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Text' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Call' }))
+    fireEvent.change(screen.getByPlaceholderText('What did you talk about?'), {
+      target: { value: 'Planning the weekend' },
+    })
+
+    const saveButton = screen.getByRole('button', { name: /save entry/i }) as HTMLButtonElement
+    fireEvent.click(saveButton)
+
+    await waitFor(() => {
+      expect(saveButton.disabled).toBe(true)
+    })
+
+    fireEvent.click(saveButton)
+
+    expect(mocks.addEntryMutateAsyncMock).toHaveBeenCalledTimes(1)
+
+    resolveSave?.()
+
+    await waitFor(() => {
+      expect(mocks.setQuickEntryOpenMock).toHaveBeenCalledWith(false)
+    })
+  })
 })
