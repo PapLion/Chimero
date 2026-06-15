@@ -394,6 +394,8 @@ export function useAddEntryMutation() {
       qc.invalidateQueries({ queryKey: queryKeys.taskEntriesRoot })
       if (variables.socialInteractions && variables.socialInteractions.length > 0) {
         qc.invalidateQueries({ queryKey: queryKeys.contacts })
+        qc.invalidateQueries({ queryKey: ['contact'] })
+        qc.invalidateQueries({ queryKey: ['contact-interactions'] })
         variables.socialInteractions.forEach((interaction) => {
           qc.invalidateQueries({ queryKey: queryKeys.contactInteractions(interaction.contactId) })
         })
@@ -979,6 +981,9 @@ export function useUpdateEntryMutation() {
       qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
       qc.invalidateQueries({ queryKey: queryKeys.weightDetailRoot })
       qc.invalidateQueries({ queryKey: queryKeys.taskEntriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.contacts })
+      qc.invalidateQueries({ queryKey: ['contact'] })
+      qc.invalidateQueries({ queryKey: ['contact-interactions'] })
       qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
     },
   })
@@ -994,6 +999,9 @@ export function useDeleteEntryMutation() {
       qc.invalidateQueries({ queryKey: queryKeys.stats })
       qc.invalidateQueries({ queryKey: queryKeys.calendarMonthRoot })
       qc.invalidateQueries({ queryKey: queryKeys.taskEntriesRoot })
+      qc.invalidateQueries({ queryKey: queryKeys.contacts })
+      qc.invalidateQueries({ queryKey: ['contact'] })
+      qc.invalidateQueries({ queryKey: ['contact-interactions'] })
       qc.refetchQueries({ queryKey: queryKeys.entriesRoot, type: 'active' })
     },
   })
@@ -1085,6 +1093,7 @@ export function useCreateContactInteractionMutation() {
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: queryKeys.contactInteractions(variables.contactId) })
       qc.invalidateQueries({ queryKey: queryKeys.contacts })
+      qc.invalidateQueries({ queryKey: ['contact'] })
     },
   })
 }

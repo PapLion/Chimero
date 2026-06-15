@@ -7,6 +7,7 @@ Social is both a tracker for logged interactions and a small personal CRM surfac
 ## 2. Current Implementation Status
 
 - Status: LINKED_SOCIAL_CRM_FOUNDATION_PARTIAL.
+- Canonical structured Social writes require `entryId`, `method`, and `moodImpact`; legacy `mood` remains read-only compatibility data.
 - New Quick Entry Social submissions write the base `entries` row and linked `contact_interactions` rows transactionally through `add-entry`.
 - New structured interactions are created with `entryId` set to the new Social entry ID. New Quick Entry Social writes must not create `entryId: null` interactions.
 - Existing `contact_interactions.entryId = null` rows remain readable legacy/unstructured interaction history. They are not backfilled, guessed, or deleted.
@@ -14,6 +15,7 @@ Social is both a tracker for logged interactions and a small personal CRM surfac
 - Contact reminder/attention settings are persisted as a lightweight foundation: birthday awareness days before, and check-in attention after N days.
 - Contact profile blocks are persisted with title, body, type, and order. The renderer supports create/edit/delete and move up/down reorder. There is no draggable or masonry layout guarantee.
 - Contact sorting supports name, most talked to, and least talked to using linked structured interactions. Legacy null-entry interactions do not count toward structured frequency metrics.
+- `lastTalkedAt` is the canonical runtime source of truth for contact recency. `dateLastTalked` is maintained for compatibility reads.
 - Web parity is limited to existing web API mapper compatibility for contacts/interactions. No new web-only architecture is introduced.
 - No Mood correlation UI, AI suggestions, OS-level notifications, complex scheduling, contact import/sync, enterprise CRM, or unsafe legacy backfill is implemented.
 
@@ -112,9 +114,9 @@ Social is both a tracker for logged interactions and a small personal CRM surfac
 
 - Entry flow computes `dateStr` from entry `timestamp`.
 - New linked interactions use the Social entry timestamp.
-- `lastTalkedAt` and `dateLastTalked` are refreshed from the newest remaining interaction for a contact.
+- `lastTalkedAt` is refreshed from the newest remaining interaction for a contact. `dateLastTalked` is synchronized as a compatibility field.
 - Likes, dislikes, and traits are stored as JSON string arrays.
-- Unknown legacy method values map to `null` at the API boundary instead of widening the shared contract.
+- Unknown legacy method values stay readable as legacy data, but new structured writes are validated against the canonical Social method union.
 
 ### 4. Persistence Plan
 
@@ -175,7 +177,7 @@ Write flow for structured Social entry:
 
 ### 9. Transaction Rules
 
-- New structured Social entry create/update/delete runs in the entry transaction with linked interactions and tag replacement.
+- New structured Social entry create/update/delete runs transactionally in the entry handler with linked interactions and tag replacement.
 - Contact profile/reminder/block CRUD is independent.
 - Legacy null-entry interactions remain readable and are not altered by structured entry transactions.
 

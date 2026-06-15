@@ -1,9 +1,11 @@
 import { ipcMain } from 'electron'
 import { asc, eq, desc } from 'drizzle-orm'
-import { contacts, contactInteractions, contactProfileBlocks, contactReminderSettings } from '@packages/db'
+import { contacts, contactInteractions, contactProfileBlocks, contactReminderSettings, entries, trackers } from '@packages/db'
 import { getDb as db } from '@packages/db/database'
-import { mapContact, mapContactInteraction, mapContactProfileBlock, mapContactReminderSettings } from '../../shared/mappers'
+import { mapContact, mapContactInteraction, mapContactProfileBlock, mapContactReminderSettings, mapTracker } from '../../shared/mappers'
 import type { ContactInsert, ContactUpdate, ContactInteractionInsert, ContactProfileBlockInput, ContactReminderSettingsInput } from '@contracts/contracts'
+import { computeContactLastTalkedTimestamp, normalizeSocialMethod, normalizeSocialMoodImpact } from '@contracts/domain'
+import { getTrackerIdentity } from '@contracts/features/tracking'
 
 function encodeList(value?: string[] | null): string | null | undefined {
   if (value === undefined) return undefined
@@ -13,6 +15,20 @@ function encodeList(value?: string[] | null): string | null | undefined {
 function formatDateStr(timestamp: number): string {
   const d = new Date(timestamp)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function refreshContactLastTalked(tx: any, contactId: number): void {
+  const rows = tx
+    .select({ timestamp: contactInteractions.timestamp })
+    .from(contactInteractions)
+    .where(eq(contactInteractions.contactId, contactId))
+    .orderBy(desc(contactInteractions.timestamp))
+    .all()
+  const timestamp = computeContactLastTalkedTimestamp(rows as Array<{ timestamp: number }>)
+  tx.update(contacts).set({
+    lastTalkedAt: timestamp,
+    dateLastTalked: timestamp == null ? null : formatDateStr(timestamp),
+  }).where(eq(contacts.id, contactId)).run()
 }
 
 export function registerContactHandlers(): void {
@@ -124,25 +140,55 @@ export function registerContactHandlers(): void {
 
   ipcMain.handle('create-contact-interaction', async (_, data: ContactInteractionInsert) => {
     try {
-      const moodImpact = data.moodImpact ?? data.mood ?? 'neutral'
-      if (!data.contactId || !data.entryId) {
+      const contactId = Number(data.contactId)
+      const entryId = Number(data.entryId)
+      const method = normalizeSocialMethod(data.method)
+      const moodImpact = normalizeSocialMoodImpact(data.moodImpact)
+      if (!Number.isInteger(contactId) || contactId <= 0 || !Number.isInteger(entryId) || entryId <= 0 || !method || !moodImpact) {
         throw new Error('Invalid interaction data')
       }
-      const timestamp = Date.now()
-      const [inserted] = await db()
-        .insert(contactInteractions)
-        .values({
-          contactId: data.contactId,
-          entryId: data.entryId,
+      const inserted = db().transaction((tx) => {
+        const [contactRow] = tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.id, contactId)).limit(1).all()
+        if (!contactRow) {
+          throw new Error('Unknown contact')
+        }
+        const [entryRow] = tx.select({ trackerId: entries.trackerId }).from(entries).where(eq(entries.id, entryId)).limit(1).all()
+        if (!entryRow) {
+          throw new Error('Unknown entry')
+        }
+        const [trackerRow] = tx
+          .select({
+            id: trackers.id,
+            name: trackers.name,
+            icon: trackers.icon,
+            config: trackers.config,
+          })
+          .from(trackers)
+          .where(eq(trackers.id, entryRow.trackerId))
+          .limit(1)
+          .all()
+        if (!trackerRow || getTrackerIdentity(mapTracker(trackerRow as Record<string, unknown>)) !== 'social') {
+          throw new Error('Structured contact interactions require a Social entry')
+        }
+        const timestamp = Date.now()
+        const result = tx.insert(contactInteractions).values({
+          contactId,
+          entryId,
           mood: moodImpact,
           moodImpact,
-          method: data.method ?? null,
+          method,
           timestamp,
           notes: data.notes ?? null,
-        })
-        .returning()
-
-      await db().update(contacts).set({ dateLastTalked: formatDateStr(timestamp), lastTalkedAt: timestamp }).where(eq(contacts.id, data.contactId))
+        }).run()
+        const [row] = tx
+          .select()
+          .from(contactInteractions)
+          .where(eq(contactInteractions.id, Number(result.lastInsertRowid)))
+          .limit(1)
+          .all()
+        refreshContactLastTalked(tx, contactId)
+        return row ?? null
+      })
 
       return inserted ? mapContactInteraction(inserted as Record<string, unknown>) : null
     } catch (e) {

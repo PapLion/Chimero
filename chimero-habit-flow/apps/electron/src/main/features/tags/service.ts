@@ -18,7 +18,7 @@ function normalizeTagIds(tagIds?: number[]): number[] {
   return Array.from(new Set(tagIds.filter((id) => Number.isInteger(id) && id > 0)))
 }
 
-async function validateReplacementTagIds(tagIds?: number[], database: TagMutationDb = getDb()): Promise<number[] | null> {
+export async function validateReplacementTagIds(tagIds?: number[], database: TagMutationDb = getDb()): Promise<number[] | null> {
   if (!Array.isArray(tagIds)) return null
   const normalized = normalizeTagIds(tagIds)
   if (normalized.length === 0) return []

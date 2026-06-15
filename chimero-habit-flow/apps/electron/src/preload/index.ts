@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ElectronApi, TrackerConfig, CreateWorkoutRoutineRequest, CreateWorkoutSessionRequest, InstantiateWorkoutFromRoutineRequest, SaveWorkoutAsRoutineRequest, UpdateWorkoutRoutineRequest, UpdateWorkoutSessionRequest } from '@contracts/contracts'
+import type { BaseEntryRequest, ContactInteractionInsert, ElectronApi, EntryUpdateRequest, TrackerConfig, CreateWorkoutRoutineRequest, CreateWorkoutSessionRequest, InstantiateWorkoutFromRoutineRequest, SaveWorkoutAsRoutineRequest, UpdateWorkoutRoutineRequest, UpdateWorkoutSessionRequest } from '@contracts/contracts'
 
 const api: ElectronApi = {
   getTrackers: () => ipcRenderer.invoke('get-trackers'),
@@ -8,9 +8,9 @@ const api: ElectronApi = {
   deleteTracker: (id: number) => ipcRenderer.invoke('delete-tracker', id),
   getEntries: (options?: { limit?: number; trackerId?: number }) =>
     ipcRenderer.invoke('get-entries', options),
-  addEntry: (data: { trackerId: number; value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp: number; assetId?: number | null; tagIds?: number[]; socialInteractions?: Array<{ contactId: number; method?: string | null; moodImpact?: "positive" | "negative" | "neutral" | null; mood?: "positive" | "negative" | "neutral" | null; notes?: string | null }> }) =>
+  addEntry: (data: BaseEntryRequest) =>
     ipcRenderer.invoke('add-entry', data),
-  updateEntry: (id: number, updates: { value?: number | null; note?: string | null; metadata?: Record<string, unknown>; timestamp?: number; assetId?: number | null; tagIds?: number[]; socialInteractions?: Array<{ contactId: number; method?: string | null; moodImpact?: "positive" | "negative" | "neutral" | null; mood?: "positive" | "negative" | "neutral" | null; notes?: string | null }> }) =>
+  updateEntry: (id: number, updates: EntryUpdateRequest) =>
     ipcRenderer.invoke('update-entry', id, updates),
   deleteEntry: (id: number) => ipcRenderer.invoke('delete-entry', id),
   getQuickEntryContext: () => ipcRenderer.invoke('get-quick-entry-context'),
@@ -123,7 +123,7 @@ const api: ElectronApi = {
   updateContact: (id: number, updates: { name?: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; dateLastTalked?: string | null; lastTalkedAt?: number | null; likes?: string[] | null; dislikes?: string[] | null; traits?: string[] | null; hasKids?: boolean | null; kidsNotes?: string | null; notes?: string | null }) =>
     ipcRenderer.invoke('update-contact', id, updates),
   deleteContact: (id: number) => ipcRenderer.invoke('delete-contact', id),
-  createContactInteraction: (data: { contactId: number; entryId?: number | null; method?: string | null; moodImpact?: "positive" | "negative" | "neutral" | null; mood?: "positive" | "negative" | "neutral" | null; notes?: string | null }) =>
+  createContactInteraction: (data: ContactInteractionInsert) =>
     ipcRenderer.invoke('create-contact-interaction', data),
   getContactInteractions: (contactId: number) => ipcRenderer.invoke('get-contact-interactions', contactId),
   getContactReminderSettings: (contactId: number) => ipcRenderer.invoke('get-contact-reminder-settings', contactId),

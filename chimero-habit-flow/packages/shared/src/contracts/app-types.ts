@@ -1350,16 +1350,15 @@ export type ContactInteractionMethod = SocialMethod
 
 export interface ContactInteractionDraft {
   contactId: number
-  method?: ContactInteractionMethod | null
-  moodImpact?: ContactMoodImpact | null
-  mood?: ContactMoodImpact | null
+  method: ContactInteractionMethod
+  moodImpact: ContactMoodImpact
   notes?: string | null
 }
 
 export interface ContactInteraction {
   id: number
   contactId: number
-  entryId?: number | null
+  entryId: number | null
   method?: ContactInteractionMethod | null
   moodImpact: ContactMoodImpact
   mood?: ContactMoodImpact
@@ -1369,10 +1368,9 @@ export interface ContactInteraction {
 
 export interface ContactInteractionInsert {
   contactId: number
-  entryId?: number | null
-  method?: ContactInteractionMethod | null
-  moodImpact?: ContactMoodImpact | null
-  mood?: ContactMoodImpact | null
+  entryId: number
+  method: ContactInteractionMethod
+  moodImpact: ContactMoodImpact
   notes?: string | null
 }
 

@@ -32,8 +32,26 @@ export function validateSocialMoodImpact(value: unknown): value is SocialMoodImp
   return typeof value === 'string' && SOCIAL_MOOD_IMPACTS.includes(value as SocialMoodImpact)
 }
 
+export function normalizeSocialMethod(value: unknown): SocialMethod | null {
+  return validateSocialMethod(value) ? value : null
+}
+
+export function normalizeSocialMoodImpact(value: unknown): SocialMoodImpact | null {
+  return validateSocialMoodImpact(value) ? value : null
+}
+
 function structuredInteractions<T extends Pick<ContactInteraction, 'entryId'>>(interactions: T[]): T[] {
   return interactions.filter((interaction) => interaction.entryId != null)
+}
+
+export function computeContactLastTalkedTimestamp(interactions: Pick<ContactInteraction, 'timestamp'>[]): number | null {
+  let latest: number | null = null
+  for (const interaction of interactions) {
+    const timestamp = Number(interaction.timestamp)
+    if (!Number.isFinite(timestamp)) continue
+    if (latest == null || timestamp > latest) latest = timestamp
+  }
+  return latest
 }
 
 export function daysSinceLastTalked(contact: Pick<Contact, 'lastTalkedAt' | 'dateLastTalked'>, today = new Date()): number | null {
@@ -126,11 +144,8 @@ export function computeMethodFrequency(interactions: Pick<ContactInteraction, 'e
 export function computeMoodImpactDistribution(interactions: Pick<ContactInteraction, 'entryId' | 'moodImpact' | 'mood'>[]): Map<SocialMoodImpact, number> {
   const counts = new Map<SocialMoodImpact, number>()
   structuredInteractions(interactions).forEach((interaction) => {
-    const moodImpact = validateSocialMoodImpact(interaction.moodImpact)
-      ? interaction.moodImpact
-      : validateSocialMoodImpact(interaction.mood)
-        ? interaction.mood
-        : null
+    const moodImpact = normalizeSocialMoodImpact(interaction.moodImpact)
+      ?? normalizeSocialMoodImpact(interaction.mood)
     if (!moodImpact) return
     counts.set(moodImpact, (counts.get(moodImpact) ?? 0) + 1)
   })

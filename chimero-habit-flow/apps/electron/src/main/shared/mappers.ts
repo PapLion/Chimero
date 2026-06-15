@@ -3,7 +3,6 @@ import type {
   ContactInteraction,
   ContactProfileBlock,
   ContactReminderSettings,
-  SocialMethod,
   SocialInteractionReadModel,
   Entry,
   MealType,
@@ -16,6 +15,7 @@ import type {
   AssetLink,
 } from '@contracts/contracts'
 import { buildLegacyWorkoutSessionReadModel } from '@contracts/domain'
+import { normalizeSocialMoodImpact, normalizeSocialMethod } from '@contracts/domain'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
 function parseJsonObject(value: unknown): Record<string, unknown> {
@@ -54,8 +54,8 @@ function mapSocialInteractions(value: unknown): SocialInteractionReadModel[] | u
       contactId,
       contactName: (row.contactName ?? row.contact_name ?? null) as string | null,
       contactInitials: (row.contactInitials ?? row.contact_initials ?? null) as string | null,
-      method: (row.method ?? null) as SocialInteractionReadModel['method'],
-      moodImpact: (row.moodImpact ?? row.mood_impact ?? row.mood ?? 'neutral') as SocialInteractionReadModel['moodImpact'],
+      method: normalizeSocialMethod(row.method ?? null),
+      moodImpact: normalizeSocialMoodImpact(row.moodImpact ?? row.mood_impact ?? row.mood) ?? 'neutral',
       note: (row.note ?? row.notes ?? null) as string | null,
     })
   }
@@ -337,15 +337,13 @@ export function mapContact(row: Record<string, unknown>): Contact {
 }
 
 export function mapContactInteraction(row: Record<string, unknown>): ContactInteraction {
-  const moodImpact = (row.moodImpact ?? row.mood_impact ?? row.mood ?? 'neutral') as 'positive' | 'negative' | 'neutral'
+  const moodImpact = normalizeSocialMoodImpact(row.moodImpact ?? row.mood_impact ?? row.mood) ?? 'neutral'
   const methodRaw = row.method
-  const method = typeof methodRaw === 'string' && ['in-person', 'call', 'text', 'video', 'other'].includes(methodRaw)
-    ? methodRaw as SocialMethod
-    : null
+  const method = normalizeSocialMethod(methodRaw)
   return {
     id: row.id as number,
     contactId: (row.contactId ?? row.contact_id) as number,
-    entryId: (row.entryId ?? row.entry_id) as number | null,
+    entryId: (row.entryId ?? row.entry_id ?? null) as number | null,
     method,
     moodImpact,
     mood: moodImpact,

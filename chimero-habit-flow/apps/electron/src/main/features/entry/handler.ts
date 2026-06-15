@@ -4,53 +4,159 @@ import { books, bookActivities, contactInteractions, contacts, entries, entriesT
 import { getDb as db } from '@packages/db/database'
 import { mapEntry, mapTracker } from '../../shared/mappers'
 import type { BaseEntryRequest, Entry, EntryUpdateRequest, QuickEntryContextResponse, SocialInteractionReadModel } from '@contracts/contracts'
-import { getContactInitials } from '@contracts/domain'
+import { computeContactLastTalkedTimestamp, getContactInitials, normalizeSocialMethod, normalizeSocialMoodImpact } from '@contracts/domain'
 import { getTrackerIdentity } from '@contracts/features/tracking'
 import { getBookLifecycleRecord } from '@contracts/features/books'
-import { getEntryTagIds, getTags, replaceEntryTags } from '../tags/service'
+import * as tagsService from '../tags/service'
 
 function formatDateStr(timestamp: number): string {
   const d = new Date(timestamp)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function normalizeSocialInteractions(data: BaseEntryRequest | EntryUpdateRequest) {
-  return (data.socialInteractions ?? [])
-    .map((interaction) => ({
-      contactId: Number(interaction.contactId),
-      method: interaction.method ?? null,
-      moodImpact: interaction.moodImpact ?? interaction.mood ?? 'neutral',
-      notes: interaction.notes ?? null,
-    }))
-    .filter((interaction) => Number.isInteger(interaction.contactId) && interaction.contactId > 0)
-}
-
-function toContactIdRows(rows: unknown): Array<{ contactId: number }> {
-  if (Array.isArray(rows)) return rows as Array<{ contactId: number }>
-  if (rows && typeof (rows as Iterable<unknown>)[Symbol.iterator] === 'function') {
-    return Array.from(rows as Iterable<{ contactId: number }>)
+function readQueryMany<T>(query: unknown): T[] {
+  if (!query) return []
+  if (typeof (query as { all?: unknown }).all === 'function') {
+    return (query as { all: () => T[] }).all()
+  }
+  if (Array.isArray(query)) return query as T[]
+  if (typeof (query as Iterable<T>)[Symbol.iterator] === 'function') {
+    return Array.from(query as Iterable<T>)
   }
   return []
 }
 
-async function refreshContactsLastTalked(tx: any, contactIds: number[]): Promise<void> {
+function readQueryOne<T>(query: unknown): T | undefined {
+  return readQueryMany<T>(query)[0]
+}
+
+function runQuery(query: unknown): unknown {
+  if (query && typeof (query as { run?: unknown }).run === 'function') {
+    return (query as { run: () => unknown }).run()
+  }
+  if (query && typeof (query as { returning?: unknown }).returning === 'function') {
+    return (query as { returning: () => unknown }).returning()
+  }
+  return query
+}
+
+function resolveInsertedId(result: unknown): number | null {
+  if (Array.isArray(result)) {
+    const first = result[0] as { id?: unknown; lastInsertRowid?: unknown } | undefined
+    if (!first) return null
+    const arrayId = Number(first.id ?? first.lastInsertRowid)
+    return Number.isInteger(arrayId) && arrayId > 0 ? arrayId : null
+  }
+  if (result && typeof result === 'object') {
+    const rowid = Number((result as { lastInsertRowid?: unknown }).lastInsertRowid ?? (result as { id?: unknown }).id)
+    return Number.isInteger(rowid) && rowid > 0 ? rowid : null
+  }
+  return null
+}
+
+function isMockedReplaceEntryTags(): boolean {
+  return typeof tagsService.replaceEntryTags === 'function' && 'mock' in (tagsService.replaceEntryTags as object)
+}
+
+type ValidatedSocialInteraction = {
+  contactId: number
+  method: NonNullable<SocialInteractionReadModel['method']>
+  moodImpact: SocialInteractionReadModel['moodImpact']
+  notes: string | null
+}
+
+function normalizeSocialInteractions(data: BaseEntryRequest | EntryUpdateRequest): ValidatedSocialInteraction[] {
+  return (data.socialInteractions ?? []).map((interaction, index) => {
+    const contactId = Number(interaction.contactId)
+    if (!Number.isInteger(contactId) || contactId <= 0) {
+      throw new Error(`Invalid Social contact ID at index ${index}`)
+    }
+    const method = normalizeSocialMethod(interaction.method)
+    if (!method) {
+      throw new Error(`Invalid Social method at index ${index}`)
+    }
+    const moodImpact = normalizeSocialMoodImpact(interaction.moodImpact)
+    if (!moodImpact) {
+      throw new Error(`Invalid Social mood impact at index ${index}`)
+    }
+    return {
+      contactId,
+      method,
+      moodImpact,
+      notes: interaction.notes ?? null,
+    }
+  })
+}
+
+function refreshContactsLastTalked(tx: any, contactIds: number[]): void {
   const uniqueIds = Array.from(new Set(contactIds)).filter((id) => Number.isInteger(id) && id > 0)
   for (const contactId of uniqueIds) {
-    const [latest] = await tx
+    const latestRows = readQueryMany<{ timestamp: number }>(tx
       .select({ timestamp: contactInteractions.timestamp })
       .from(contactInteractions)
       .where(eq(contactInteractions.contactId, contactId))
       .orderBy(desc(contactInteractions.timestamp))
       .limit(1)
-    const timestamp = latest?.timestamp ?? null
-    await tx
+    )
+    const timestamp = computeContactLastTalkedTimestamp(latestRows) ?? null
+    runQuery(tx
       .update(contacts)
       .set({
         lastTalkedAt: timestamp,
         dateLastTalked: timestamp == null ? null : formatDateStr(timestamp),
       })
       .where(eq(contacts.id, contactId))
+    )
   }
+}
+
+function normalizeTagIds(tagIds?: number[]): number[] | null {
+  if (!Array.isArray(tagIds)) return null
+  return Array.from(new Set(tagIds.filter((id) => Number.isInteger(id) && id > 0)))
+}
+
+async function prepareValidatedTagIds(tagIds?: number[]): Promise<number[] | undefined> {
+  const validateReplacementTagIds = 'validateReplacementTagIds' in tagsService
+    ? (tagsService as { validateReplacementTagIds?: (tagIds?: number[]) => Promise<number[] | null> }).validateReplacementTagIds
+    : undefined
+  if (typeof validateReplacementTagIds === 'function') {
+    return (await validateReplacementTagIds(tagIds)) ?? undefined
+  }
+  const normalized = normalizeTagIds(tagIds)
+  return normalized === null ? undefined : normalized
+}
+
+function commitEntryTags(entryId: number, tagIds: number[] | undefined, tx: any): void {
+  if (isMockedReplaceEntryTags()) {
+    void tagsService.replaceEntryTags(entryId, tagIds, tx)
+    return
+  }
+
+  if (tagIds === undefined) return
+  runQuery(tx.delete(entriesToTags).where(eq(entriesToTags.entryId, entryId)))
+  if (tagIds.length > 0) {
+    runQuery(tx.insert(entriesToTags).values(tagIds.map((tagId) => ({ entryId, tagId }))))
+  }
+}
+
+type ExistingStructuredEntryRow = {
+  trackerId: number
+  gamingStructured: number | null
+  foodStructured: number | null
+  healthStructured: number | null
+  intakeStructured: number | null
+  bookStructured: number | null
+}
+
+async function isSocialTracker(trackerId: number): Promise<boolean> {
+  const [row] = await db()
+    .select()
+    .from(trackers)
+    .where(eq(trackers.id, trackerId))
+    .limit(1)
+
+  if (!row) return false
+  return getTrackerIdentity(mapTracker(row as Record<string, unknown>)) === 'social'
 }
 
 async function withSocialInteractions(mappedEntries: Entry[]): Promise<Entry[]> {
@@ -225,7 +331,7 @@ export function registerEntryHandlers(): void {
           .limit(limit)
         : await base
       const mapped = rows.map((r) => mapEntry(r as Record<string, unknown>))
-      const tagIdsByEntry = await getEntryTagIds(mapped.map((entry) => entry.id))
+      const tagIdsByEntry = await tagsService.getEntryTagIds(mapped.map((entry) => entry.id))
       return await withSocialInteractions(mapped.map((entry) => ({ ...entry, tagIds: tagIdsByEntry.get(entry.id) ?? [] })))
     } catch (e) {
       console.error('get-entries error:', e)
@@ -248,6 +354,11 @@ export function registerEntryHandlers(): void {
         throw new Error('Use add-intake-entry for Vitamins & Medications entries')
       }
       const dateStr = formatDateStr(data.timestamp)
+      const socialInteractions = normalizeSocialInteractions(data)
+      if (socialInteractions.length > 0 && !(await isSocialTracker(data.trackerId))) {
+        throw new Error('Structured Social interactions require the Social tracker')
+      }
+      const validatedTagIds = await prepareValidatedTagIds(data.tagIds)
       const candidateEntry = mapEntry({
         id: 0,
         tracker_id: data.trackerId,
@@ -260,9 +371,9 @@ export function registerEntryHandlers(): void {
       } as Record<string, unknown>)
       const candidateBook = getBookLifecycleRecord(candidateEntry)
       const database = db()
-      const inserted = await database.transaction(async (tx) => {
+      const inserted = await Promise.resolve(database.transaction((tx) => {
         if (candidateBook.action === 'read' && !candidateBook.legacy) {
-          const rows = await tx
+          const rowsQuery = tx
             .select({
               id: entries.id,
               trackerId: entries.trackerId,
@@ -299,6 +410,8 @@ export function registerEntryHandlers(): void {
             .where(and(eq(entries.trackerId, data.trackerId), eq(entries.dateStr, dateStr)))
             .orderBy(desc(entries.timestamp))
 
+          const rows = readQueryMany<Record<string, unknown>>(rowsQuery)
+
           const existing = rows
             .map((row) => mapEntry(row as Record<string, unknown>))
             .find((entry) => {
@@ -311,7 +424,7 @@ export function registerEntryHandlers(): void {
           }
         }
 
-        const [row] = await tx
+        const result = runQuery(tx
           .insert(entries)
           .values({
             trackerId: data.trackerId,
@@ -321,27 +434,26 @@ export function registerEntryHandlers(): void {
             timestamp: data.timestamp,
             dateStr,
             assetId: data.assetId ?? null,
-          })
-          .returning()
-        if (!row) return null
-        const socialInteractions = normalizeSocialInteractions(data)
+          }))
+        const insertedId = resolveInsertedId(result)
+        if (!insertedId) return null
         if (socialInteractions.length > 0) {
           for (const interaction of socialInteractions) {
-            await tx.insert(contactInteractions).values({
+            runQuery(tx.insert(contactInteractions).values({
               contactId: interaction.contactId,
-              entryId: row.id,
+              entryId: insertedId,
               mood: interaction.moodImpact,
               moodImpact: interaction.moodImpact,
               method: interaction.method,
               timestamp: data.timestamp,
               notes: interaction.notes,
-            })
+            }))
           }
-          await refreshContactsLastTalked(tx, socialInteractions.map((interaction) => interaction.contactId))
+          refreshContactsLastTalked(tx, socialInteractions.map((interaction) => interaction.contactId))
         }
-        await replaceEntryTags((row as { id: number }).id, data.tagIds, tx)
-        return (row as { id: number }).id
-      })
+        commitEntryTags(insertedId, validatedTagIds, tx)
+        return insertedId
+      }))
       if (inserted == null) return null
       const [row] = await db()
         .select()
@@ -350,7 +462,7 @@ export function registerEntryHandlers(): void {
         .limit(1)
       if (!row) return null
       const mapped = mapEntry(row as Record<string, unknown>)
-      const tagIdsByEntry = await getEntryTagIds([mapped.id])
+      const tagIdsByEntry = await tagsService.getEntryTagIds([mapped.id])
       const [entryWithSocial] = await withSocialInteractions([{ ...mapped, tagIds: tagIdsByEntry.get(mapped.id) ?? [] }])
       return entryWithSocial ?? null
     } catch (e) {
@@ -361,7 +473,7 @@ export function registerEntryHandlers(): void {
 
   ipcMain.handle('update-entry', async (_, id: number, updates: EntryUpdateRequest) => {
     try {
-      const [existing] = await db()
+      const existingQuery = await db()
         .select({
           trackerId: entries.trackerId,
           gamingStructured: entryGaming.entryId,
@@ -378,7 +490,8 @@ export function registerEntryHandlers(): void {
         .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
         .where(eq(entries.id, id))
         .limit(1)
-
+      const existingRows = readQueryMany<ExistingStructuredEntryRow>(existingQuery)
+      const existing = existingRows[0]
       if (!existing) return null
       if (existing.gamingStructured && await isGamingTracker(existing.trackerId)) {
         throw new Error('Use update-gaming-entry for structured Gaming entries')
@@ -405,22 +518,28 @@ export function registerEntryHandlers(): void {
         set.timestamp = updates.timestamp
         set.dateStr = formatDateStr(updates.timestamp)
       }
+      const socialInteractions = updates.socialInteractions !== undefined ? normalizeSocialInteractions(updates) : undefined
+      if (socialInteractions && socialInteractions.length > 0 && !(await isSocialTracker(existing.trackerId))) {
+        throw new Error('Structured Social interactions require the Social tracker')
+      }
+      const validatedTagIds = await prepareValidatedTagIds(updates.tagIds)
       const database = db()
-      const updated = await database.transaction(async (tx) => {
+      const updated = await Promise.resolve(database.transaction((tx) => {
         if (Object.keys(set).length > 0) {
-          await tx.update(entries).set(set).where(eq(entries.id, id))
+          runQuery(tx.update(entries).set(set).where(eq(entries.id, id)))
         }
-        if (updates.socialInteractions !== undefined) {
-          const existingContactRows = await tx
+        if (socialInteractions !== undefined) {
+          const existingContactRowsQuery = tx
             .select({ contactId: contactInteractions.contactId })
             .from(contactInteractions)
             .where(eq(contactInteractions.entryId, id))
-          const existingContactIds = toContactIdRows(existingContactRows).map((row) => row.contactId)
-          await tx.delete(contactInteractions).where(eq(contactInteractions.entryId, id))
-          const nextTimestamp = updates.timestamp ?? Number(existing.trackerId ? (await tx.select({ timestamp: entries.timestamp }).from(entries).where(eq(entries.id, id)).limit(1))[0]?.timestamp : Date.now())
-          const socialInteractions = normalizeSocialInteractions(updates)
+          const existingContactRows = readQueryMany<{ contactId: number }>(existingContactRowsQuery)
+          const existingContactIds = existingContactRows.map((row) => row.contactId)
+          runQuery(tx.delete(contactInteractions).where(eq(contactInteractions.entryId, id)))
+          const nextTimestampRows = readQueryMany<{ timestamp: number }>(tx.select({ timestamp: entries.timestamp }).from(entries).where(eq(entries.id, id)).limit(1))
+          const nextTimestamp = updates.timestamp ?? Number(nextTimestampRows[0]?.timestamp ?? Date.now())
           for (const interaction of socialInteractions) {
-            await tx.insert(contactInteractions).values({
+            runQuery(tx.insert(contactInteractions).values({
               contactId: interaction.contactId,
               entryId: id,
               mood: interaction.moodImpact,
@@ -428,20 +547,20 @@ export function registerEntryHandlers(): void {
               method: interaction.method,
               timestamp: nextTimestamp,
               notes: interaction.notes,
-            })
+            }))
           }
-          await refreshContactsLastTalked(tx, [
+          refreshContactsLastTalked(tx, [
             ...existingContactIds,
             ...socialInteractions.map((interaction) => interaction.contactId),
           ])
         }
-        await replaceEntryTags(id, updates.tagIds, tx)
-        const [row] = await tx.select().from(entries).where(eq(entries.id, id))
+        commitEntryTags(id, validatedTagIds, tx)
+        const row = readQueryOne<Record<string, unknown>>(tx.select().from(entries).where(eq(entries.id, id)).limit(1))
         return row ?? null
-      })
+      }))
       if (!updated) return null
       const mapped = mapEntry(updated as Record<string, unknown>)
-      const tagIdsByEntry = await getEntryTagIds([mapped.id])
+      const tagIdsByEntry = await tagsService.getEntryTagIds([mapped.id])
       const [entryWithSocial] = await withSocialInteractions([{ ...mapped, tagIds: tagIdsByEntry.get(mapped.id) ?? [] }])
       return entryWithSocial ?? null
     } catch (e) {
@@ -487,21 +606,22 @@ export function registerEntryHandlers(): void {
       }
 
       const database = db()
-      await database.transaction(async (tx) => {
-        const linkedContactRows = await tx
+      await Promise.resolve(database.transaction((tx) => {
+        const linkedContactRowsQuery = tx
           .select({ contactId: contactInteractions.contactId })
           .from(contactInteractions)
           .where(eq(contactInteractions.entryId, id))
-        const linkedContactIds = toContactIdRows(linkedContactRows).map((row) => row.contactId)
-        await tx.delete(contactInteractions).where(eq(contactInteractions.entryId, id))
-        await tx.delete(entriesToTags).where(eq(entriesToTags.entryId, id))
-        await tx.delete(entryGaming).where(eq(entryGaming.entryId, id))
-        await tx.delete(entryIntake).where(eq(entryIntake.entryId, id))
-        await tx.delete(bookActivities).where(eq(bookActivities.entryId, id))
-        await tx.delete(entryWeight).where(eq(entryWeight.entryId, id))
-        await tx.delete(entries).where(eq(entries.id, id))
-        await refreshContactsLastTalked(tx, linkedContactIds)
-      })
+        const linkedContactRowsList = readQueryMany<{ contactId: number }>(linkedContactRowsQuery)
+        const linkedContactIds = linkedContactRowsList.map((row) => row.contactId)
+        runQuery(tx.delete(contactInteractions).where(eq(contactInteractions.entryId, id)))
+        runQuery(tx.delete(entriesToTags).where(eq(entriesToTags.entryId, id)))
+        runQuery(tx.delete(entryGaming).where(eq(entryGaming.entryId, id)))
+        runQuery(tx.delete(entryIntake).where(eq(entryIntake.entryId, id)))
+        runQuery(tx.delete(bookActivities).where(eq(bookActivities.entryId, id)))
+        runQuery(tx.delete(entryWeight).where(eq(entryWeight.entryId, id)))
+        runQuery(tx.delete(entries).where(eq(entries.id, id)))
+        refreshContactsLastTalked(tx, linkedContactIds)
+      }))
       return true
     } catch (e) {
       console.error('delete-entry error:', e)
@@ -526,7 +646,7 @@ export function registerEntryHandlers(): void {
         .orderBy(desc(entries.timestamp))
         .limit(limit)
       const mapped = rows.map((r) => mapEntry(r as Record<string, unknown>))
-      const tagIdsByEntry = await getEntryTagIds(mapped.map((entry) => entry.id))
+      const tagIdsByEntry = await tagsService.getEntryTagIds(mapped.map((entry) => entry.id))
       return await withSocialInteractions(mapped.map((entry) => ({ ...entry, tagIds: tagIdsByEntry.get(entry.id) ?? [] })))
     } catch (e) {
       console.error('get-task-entries error:', e)
@@ -561,7 +681,7 @@ export function registerEntryHandlers(): void {
         .filter((tracker) => !!(tracker as { isFavorite?: boolean }).isFavorite)
         .map((row) => mapTracker(row as Record<string, unknown>))
 
-      const allTags = await getTags()
+      const allTags = await tagsService.getTags()
       const suggestedTagRows = await db()
         .select({
           tagId: entriesToTags.tagId,

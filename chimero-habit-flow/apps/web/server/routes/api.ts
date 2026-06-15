@@ -3147,11 +3147,12 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
   if (contactInteractionsMatch && method === 'POST') {
     const body = await readBody(req) as ContactInteractionInsert
     const contactId = Number(contactInteractionsMatch[1])
+    const timestamp = Date.now()
     const inserted = getDb()
-      .prepare('INSERT INTO contact_interactions (contact_id, entry_id, mood, timestamp, notes) VALUES (?, ?, ?, ?, ?)')
-      .run(contactId, body.entryId ?? null, body.mood, Date.now(), body.notes ?? null)
-    const today = formatDateStr(Date.now())
-    getDb().prepare('UPDATE contacts SET date_last_talked = ? WHERE id = ?').run(today, contactId)
+      .prepare('INSERT INTO contact_interactions (contact_id, entry_id, mood, mood_impact, method, timestamp, notes) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(contactId, body.entryId, body.moodImpact, body.moodImpact, body.method, timestamp, body.notes ?? null)
+    const today = formatDateStr(timestamp)
+    getDb().prepare('UPDATE contacts SET date_last_talked = ?, last_talked_at = ? WHERE id = ?').run(today, timestamp, contactId)
     const row = getDb().prepare('SELECT * FROM contact_interactions WHERE id = ?').get(inserted.lastInsertRowid)
     json(res, 200, row ? mapContactInteraction(row as JsonRecord) : null)
     return
