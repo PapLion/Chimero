@@ -14,8 +14,7 @@ import type {
   WeightEntry,
   AssetLink,
 } from '@contracts/contracts'
-import { buildLegacyWorkoutSessionReadModel } from '@contracts/domain'
-import { normalizeSocialMoodImpact, normalizeSocialMethod } from '@contracts/domain'
+import { buildLegacyWorkoutSessionReadModel, computeContactAge, daysSinceLastTalked, getContactInitials, normalizeSocialMoodImpact, normalizeSocialMethod } from '@contracts/domain'
 import type { AssetWithUrls } from '@contracts/features/assets'
 
 function parseJsonObject(value: unknown): Record<string, unknown> {
@@ -313,26 +312,31 @@ export function mapAsset(row: Record<string, unknown>): AssetWithUrls {
 
 export function mapContact(row: Record<string, unknown>): Contact {
   const name = (row.name as string) ?? ''
-  const dateLastTalked = (row.dateLastTalked ?? row.date_last_talked) as string | null
+  const dateLastTalked = (row.dateLastTalked ?? row.date_last_talked ?? null) as string | null
   const lastTalkedAtRaw = row.lastTalkedAt ?? row.last_talked_at
+  const lastTalkedAt = lastTalkedAtRaw == null
+    ? (dateLastTalked ? Date.parse(`${dateLastTalked}T00:00:00Z`) : null)
+    : Number(lastTalkedAtRaw)
+  const birthday = (row.birthday ?? null) as string | null
   return {
     id: row.id as number,
     name,
-    avatarAssetId: (row.avatarAssetId ?? row.avatar_asset_id) as number | null,
-    initials: name.trim().split(/\s+/).filter(Boolean).map((part) => part[0]).slice(0, 2).join('').toUpperCase() || null,
-    birthday: (row.birthday as string) ?? null,
-    dateMet: (row.dateMet ?? row.date_met) as string | null,
+    avatarAssetId: (row.avatarAssetId ?? row.avatar_asset_id ?? null) as number | null,
+    initials: getContactInitials(name) || null,
+    birthday,
+    age: computeContactAge(birthday),
+    dateMet: (row.dateMet ?? row.date_met ?? null) as string | null,
     dateLastTalked,
-    lastTalkedAt: lastTalkedAtRaw == null
-      ? (dateLastTalked ? Date.parse(`${dateLastTalked}T00:00:00Z`) : null)
-      : Number(lastTalkedAtRaw),
-    likes: parseJsonArray(row.likes),
-    dislikes: parseJsonArray(row.dislikes),
-    traits: parseJsonArray(row.traits),
+    lastTalkedAt,
+    daysSinceLastTalked: daysSinceLastTalked({ lastTalkedAt }),
+    likes: parseJsonArray(row.likes) ?? [],
+    dislikes: parseJsonArray(row.dislikes) ?? [],
+    traits: parseJsonArray(row.traits) ?? [],
     hasKids: row.hasKids !== undefined || row.has_kids !== undefined ? !!(row.hasKids ?? row.has_kids) : null,
-    kidsNotes: (row.kidsNotes ?? row.kids_notes) as string | null,
-    notes: (row.notes as string) ?? null,
-    createdAt: (row.createdAt ?? row.created_at) as number | null,
+    kidsNotes: (row.kidsNotes ?? row.kids_notes ?? null) as string | null,
+    notes: (row.notes ?? null) as string | null,
+    createdAt: (row.createdAt ?? row.created_at ?? null) as number | null,
+    updatedAt: (row.updatedAt ?? row.updated_at ?? null) as number | null,
   }
 }
 
@@ -340,6 +344,7 @@ export function mapContactInteraction(row: Record<string, unknown>): ContactInte
   const moodImpact = normalizeSocialMoodImpact(row.moodImpact ?? row.mood_impact ?? row.mood) ?? 'neutral'
   const methodRaw = row.method
   const method = normalizeSocialMethod(methodRaw)
+  const contactName = (row.contactName ?? row.contact_name ?? null) as string | null
   return {
     id: row.id as number,
     contactId: (row.contactId ?? row.contact_id) as number,
@@ -349,17 +354,32 @@ export function mapContactInteraction(row: Record<string, unknown>): ContactInte
     mood: moodImpact,
     timestamp: row.timestamp as number,
     notes: (row.notes as string) ?? null,
+    structured: (row.entryId ?? row.entry_id ?? null) != null,
+    contactName,
+    contactInitials: contactName ? getContactInitials(contactName) : null,
   }
 }
 
 export function mapContactReminderSettings(row: Record<string, unknown>): ContactReminderSettings {
+  const birthdayReminderEnabled = !!(row.birthdayReminderEnabled ?? row.birthday_reminder_enabled)
+  const checkInReminderEnabled = !!(row.checkInReminderEnabled ?? row.check_in_reminder_enabled)
+  const birthdayReminderDaysBeforeRaw = row.birthdayReminderDaysBefore ?? row.birthday_reminder_days_before
+  const checkInAfterDaysRaw = row.checkInAfterDays ?? row.check_in_after_days
   return {
     id: row.id as number,
     contactId: (row.contactId ?? row.contact_id) as number,
-    birthdayReminderEnabled: !!(row.birthdayReminderEnabled ?? row.birthday_reminder_enabled),
-    birthdayReminderDaysBefore: Number(row.birthdayReminderDaysBefore ?? row.birthday_reminder_days_before ?? 7),
-    checkInReminderEnabled: !!(row.checkInReminderEnabled ?? row.check_in_reminder_enabled),
-    checkInAfterDays: Number(row.checkInAfterDays ?? row.check_in_after_days ?? 14),
+    birthdayReminderEnabled,
+    birthdayReminderDaysBefore: birthdayReminderEnabled
+      ? birthdayReminderDaysBeforeRaw == null
+        ? null
+        : Number(birthdayReminderDaysBeforeRaw)
+      : null,
+    checkInReminderEnabled,
+    checkInAfterDays: checkInReminderEnabled
+      ? checkInAfterDaysRaw == null
+        ? null
+        : Number(checkInAfterDaysRaw)
+      : null,
     createdAt: (row.createdAt ?? row.created_at) as number | null,
     updatedAt: (row.updatedAt ?? row.updated_at) as number | null,
   }

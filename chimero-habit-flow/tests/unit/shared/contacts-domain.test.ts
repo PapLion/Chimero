@@ -3,12 +3,16 @@ import {
   buildBirthdayAwareness,
   buildCheckInAttention,
   computeContactFrequency,
+  computeContactAge,
   computeDaysWithSocialContact,
   computeMethodFrequency,
   computeMoodImpactDistribution,
   daysSinceLastTalked,
   getContactInitials,
   getInitials,
+  formatContactListValue,
+  normalizeContactListValue,
+  normalizeContactName,
   reorderContactProfileBlocks,
   separateSocialEntries,
   sortContactsByTalkFrequency,
@@ -43,6 +47,20 @@ describe('contact CRM read models', () => {
     expect(validateSocialMethod('letter')).toBe(false)
     expect(validateSocialMoodImpact('positive')).toBe(true)
     expect(validateSocialMoodImpact('excited')).toBe(false)
+  })
+
+  it('normalizes contact names and list fields consistently', () => {
+    expect(normalizeContactName('  Jack Robert  ')).toBe('Jack Robert')
+    expect(normalizeContactName('   ')).toBeNull()
+    expect(normalizeContactListValue('sports, gaming, sports')).toEqual(['sports', 'gaming'])
+    expect(normalizeContactListValue(['  coffee  ', '', 'coffee'])).toEqual(['coffee'])
+    expect(formatContactListValue(['one', 'two'])).toBe('one, two')
+  })
+
+  it('derives age around the birthday boundary without persisting a competing value', () => {
+    expect(computeContactAge('1990-06-15', new Date('2026-06-14T12:00:00Z'))).toBe(35)
+    expect(computeContactAge('1990-06-15', new Date('2026-06-15T12:00:00Z'))).toBe(36)
+    expect(computeContactAge(null, new Date('2026-06-15T12:00:00Z'))).toBeNull()
   })
 
   it('derives birthday awareness without claiming a reminder was delivered', () => {

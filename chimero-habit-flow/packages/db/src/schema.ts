@@ -281,6 +281,7 @@ export const contacts = sqliteTable("contacts", {
   kidsNotes: text("kids_notes"),
   notes: text("notes"),
   createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
+  updatedAt: integer("updated_at"),
 });
 
 // --- 8. CONTACT INTERACTIONS (Registro de interacciones con contactos) ---
@@ -299,9 +300,9 @@ export const contactReminderSettings = sqliteTable("contact_reminder_settings", 
   id: integer("id").primaryKey({ autoIncrement: true }),
   contactId: integer("contact_id").references(() => contacts.id, { onDelete: "cascade" }).notNull(),
   birthdayReminderEnabled: integer("birthday_reminder_enabled", { mode: "boolean" }).notNull().default(false),
-  birthdayReminderDaysBefore: integer("birthday_reminder_days_before").notNull().default(7),
+  birthdayReminderDaysBefore: integer("birthday_reminder_days_before"),
   checkInReminderEnabled: integer("check_in_reminder_enabled", { mode: "boolean" }).notNull().default(false),
-  checkInAfterDays: integer("check_in_after_days").notNull().default(14),
+  checkInAfterDays: integer("check_in_after_days"),
   createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
   updatedAt: integer("updated_at").default(sql`(strftime('%s', 'now') * 1000)`),
 }, (t) => ({

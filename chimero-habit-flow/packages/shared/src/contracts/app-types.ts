@@ -1303,9 +1303,11 @@ export interface Contact {
   avatarAssetId?: number | null
   initials?: string | null
   birthday?: string | null
+  age?: number | null
   dateMet?: string | null
   dateLastTalked?: string | null
   lastTalkedAt?: number | null
+  daysSinceLastTalked?: number | null
   likes?: string[] | null
   dislikes?: string[] | null
   traits?: string[] | null
@@ -1313,7 +1315,10 @@ export interface Contact {
   kidsNotes?: string | null
   notes?: string | null
   createdAt: number | null
+  updatedAt?: number | null
 }
+
+export type ContactSortBy = 'name' | 'most-talked-to' | 'least-talked-to' | 'most-recently-talked-to'
 
 export interface ContactInsert {
   name: string
@@ -1364,6 +1369,9 @@ export interface ContactInteraction {
   mood?: ContactMoodImpact
   timestamp: number
   notes?: string | null
+  structured?: boolean
+  contactName?: string | null
+  contactInitials?: string | null
 }
 
 export interface ContactInteractionInsert {
@@ -1413,19 +1421,40 @@ export interface LegacySocialEntryReadModel {
 }
 
 export interface ContactProfileReadModel {
-  contact: Contact
+  contact: ContactProfile
   reminderSettings?: ContactReminderSettings | null
   profileBlocks: ContactProfileBlock[]
   interactions: ContactInteraction[]
+}
+
+export interface ContactProfile {
+  id: number
+  name: string
+  birthday: string | null
+  age: number | null
+  dateMet: string | null
+  lastTalkedAt: number | null
+  daysSinceLastTalked: number | null
+  likes: string[] | null
+  dislikes: string[] | null
+  traits: string[] | null
+  notes: string | null
+  hasKids: boolean | null
+  kidsNotes: string | null
+  avatarAssetId: number | null
+  initials?: string | null
+  createdAt: number | null
+  updatedAt: number | null
+  dateLastTalked?: string | null
 }
 
 export interface ContactReminderSettings {
   id?: number
   contactId: number
   birthdayReminderEnabled: boolean
-  birthdayReminderDaysBefore: number
+  birthdayReminderDaysBefore: number | null
   checkInReminderEnabled: boolean
-  checkInAfterDays: number
+  checkInAfterDays: number | null
   createdAt: number | null
   updatedAt: number | null
 }

@@ -67,7 +67,7 @@ export const queryKeys = {
   exerciseProgressRoot: ['exercise-progress'] as const,
   // Contacts
   contacts: ['contacts'] as const,
-  contactsSorted: (sortBy?: 'name' | 'most-talked-to' | 'least-talked-to') => ['contacts', sortBy ?? 'name'] as const,
+  contactsSorted: (sortBy?: 'name' | 'most-talked-to' | 'least-talked-to' | 'most-recently-talked-to') => ['contacts', sortBy ?? 'name'] as const,
   contact: (id: number) => ['contact', id] as const,
   contactInteractions: (contactId: number) => ['contact-interactions', contactId] as const,
   contactReminderSettings: (contactId: number) => ['contact-reminder-settings', contactId] as const,
@@ -1009,7 +1009,7 @@ export function useDeleteEntryMutation() {
 
 // === CONTACTS (Personal CRM) ===
 
-export function useContacts(options?: { sortBy?: 'name' | 'most-talked-to' | 'least-talked-to' }) {
+export function useContacts(options?: { sortBy?: 'name' | 'most-talked-to' | 'least-talked-to' | 'most-recently-talked-to' }) {
   return useQuery({
     queryKey: queryKeys.contactsSorted(options?.sortBy),
     queryFn: () => api.getContacts(options),
@@ -1069,8 +1069,9 @@ export function useUpdateContactMutation() {
   return useMutation({
     mutationFn: ({ id, updates }: { id: number; updates: ContactUpdate }) =>
       api.updateContact(id, updates),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: queryKeys.contacts })
+      qc.invalidateQueries({ queryKey: queryKeys.contact(variables.id) })
     },
   })
 }
@@ -1079,8 +1080,9 @@ export function useDeleteContactMutation() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => api.deleteContact(id),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       qc.invalidateQueries({ queryKey: queryKeys.contacts })
+      qc.invalidateQueries({ queryKey: queryKeys.contact(id) })
     },
   })
 }
@@ -1093,7 +1095,7 @@ export function useCreateContactInteractionMutation() {
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: queryKeys.contactInteractions(variables.contactId) })
       qc.invalidateQueries({ queryKey: queryKeys.contacts })
-      qc.invalidateQueries({ queryKey: ['contact'] })
+      qc.invalidateQueries({ queryKey: queryKeys.contact(variables.contactId) })
     },
   })
 }
@@ -1105,6 +1107,7 @@ export function useUpsertContactReminderSettingsMutation() {
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: queryKeys.contactReminderSettings(variables.contactId) })
       qc.invalidateQueries({ queryKey: queryKeys.contacts })
+      qc.invalidateQueries({ queryKey: queryKeys.contact(variables.contactId) })
     },
   })
 }
@@ -1115,6 +1118,7 @@ export function useCreateContactProfileBlockMutation() {
     mutationFn: (data: ContactProfileBlockInput) => api.createContactProfileBlock(data),
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: queryKeys.contactProfileBlocks(variables.contactId) })
+      qc.invalidateQueries({ queryKey: queryKeys.contact(variables.contactId) })
     },
   })
 }
@@ -1126,6 +1130,7 @@ export function useUpdateContactProfileBlockMutation() {
       api.updateContactProfileBlock(id, updates).then((block) => ({ block, contactId })),
     onSuccess: ({ contactId }) => {
       qc.invalidateQueries({ queryKey: queryKeys.contactProfileBlocks(contactId) })
+      qc.invalidateQueries({ queryKey: queryKeys.contact(contactId) })
     },
   })
 }
@@ -1134,9 +1139,10 @@ export function useDeleteContactProfileBlockMutation() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, contactId }: { id: number; contactId: number }) =>
-      api.deleteContactProfileBlock(id).then((ok) => ({ ok, contactId })),
+      api.deleteContactProfileBlock(id, contactId).then((ok) => ({ ok, contactId })),
     onSuccess: ({ contactId }) => {
       qc.invalidateQueries({ queryKey: queryKeys.contactProfileBlocks(contactId) })
+      qc.invalidateQueries({ queryKey: queryKeys.contact(contactId) })
     },
   })
 }
@@ -1148,6 +1154,7 @@ export function useReorderContactProfileBlocksMutation() {
       api.reorderContactProfileBlocks(contactId, ids),
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: queryKeys.contactProfileBlocks(variables.contactId) })
+      qc.invalidateQueries({ queryKey: queryKeys.contact(variables.contactId) })
     },
   })
 }

@@ -3130,8 +3130,8 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
     const name = body.name.trim()
     if (!name) throw new Error('Contact name is required')
     const inserted = getDb()
-      .prepare('INSERT INTO contacts (name, avatar_asset_id, birthday, date_met, notes) VALUES (?, ?, ?, ?, ?)')
-      .run(name, body.avatarAssetId ?? null, body.birthday ?? null, body.dateMet ?? null, body.notes ?? null)
+      .prepare('INSERT INTO contacts (name, avatar_asset_id, birthday, date_met, notes, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(name, body.avatarAssetId ?? null, body.birthday ?? null, body.dateMet ?? null, body.notes ?? null, Date.now())
     const row = getDb().prepare('SELECT * FROM contacts WHERE id = ?').get(inserted.lastInsertRowid)
     json(res, 200, row ? mapContact(row as JsonRecord) : null)
     return
@@ -3170,14 +3170,24 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
     const updates = await readBody(req) as ContactUpdate
     const set: string[] = []
     const params: JsonRecord = { id }
-    if (updates.name !== undefined) { set.push('name = @name'); params.name = updates.name }
-    if (updates.avatarAssetId !== undefined) { set.push('avatar_asset_id = @avatarAssetId'); params.avatarAssetId = updates.avatarAssetId }
-    if (updates.birthday !== undefined) { set.push('birthday = @birthday'); params.birthday = updates.birthday }
-    if (updates.dateMet !== undefined) { set.push('date_met = @dateMet'); params.dateMet = updates.dateMet }
-    if (updates.dateLastTalked !== undefined) { set.push('date_last_talked = @dateLastTalked'); params.dateLastTalked = updates.dateLastTalked }
-    if (updates.traits !== undefined) { set.push('traits = @traits'); params.traits = updates.traits ? JSON.stringify(updates.traits) : null }
-    if (updates.notes !== undefined) { set.push('notes = @notes'); params.notes = updates.notes }
-    if (set.length === 0) { json(res, 200, null); return }
+    let hasUpdate = false
+    if (updates.name !== undefined) { set.push('name = @name'); params.name = updates.name; hasUpdate = true }
+    if (updates.avatarAssetId !== undefined) { set.push('avatar_asset_id = @avatarAssetId'); params.avatarAssetId = updates.avatarAssetId; hasUpdate = true }
+    if (updates.birthday !== undefined) { set.push('birthday = @birthday'); params.birthday = updates.birthday; hasUpdate = true }
+    if (updates.dateMet !== undefined) { set.push('date_met = @dateMet'); params.dateMet = updates.dateMet; hasUpdate = true }
+    if (updates.dateLastTalked !== undefined || updates.lastTalkedAt !== undefined) {
+      const normalizedDate = updates.dateLastTalked ? updates.dateLastTalked : (updates.lastTalkedAt != null ? new Date(updates.lastTalkedAt).toISOString().slice(0, 10) : null)
+      set.push('date_last_talked = @dateLastTalked')
+      set.push('last_talked_at = @lastTalkedAt')
+      params.dateLastTalked = normalizedDate
+      params.lastTalkedAt = updates.lastTalkedAt ?? (normalizedDate ? Date.parse(`${normalizedDate}T00:00:00Z`) : null)
+      hasUpdate = true
+    }
+    if (updates.traits !== undefined) { set.push('traits = @traits'); params.traits = updates.traits ? JSON.stringify(updates.traits) : null; hasUpdate = true }
+    if (updates.notes !== undefined) { set.push('notes = @notes'); params.notes = updates.notes; hasUpdate = true }
+    if (!hasUpdate) { json(res, 200, null); return }
+    set.push('updated_at = @updatedAt')
+    params.updatedAt = Date.now()
     getDb().prepare(`UPDATE contacts SET ${set.join(', ')} WHERE id = @id`).run(params)
     const row = getDb().prepare('SELECT * FROM contacts WHERE id = ?').get(id)
     json(res, 200, row ? mapContact(row as JsonRecord) : null)

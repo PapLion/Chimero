@@ -15,6 +15,18 @@ function parseDateOnly(value?: string | null): { month: number; day: number } | 
   return { month: parts[1] - 1, day: parts[2] }
 }
 
+function normalizeListItems(values: string[]): string[] {
+  const normalized: string[] = []
+  const seen = new Set<string>()
+  values.forEach((value) => {
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) return
+    seen.add(trimmed)
+    normalized.push(trimmed)
+  })
+  return normalized
+}
+
 export function getContactInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return ''
@@ -40,6 +52,42 @@ export function normalizeSocialMoodImpact(value: unknown): SocialMoodImpact | nu
   return validateSocialMoodImpact(value) ? value : null
 }
 
+export function normalizeContactName(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  return normalized ? normalized : null
+}
+
+export function normalizeContactListValue(value: unknown): string[] | null {
+  if (value == null) return null
+  if (Array.isArray(value)) {
+    const items = value.map((item) => String(item))
+    const normalized = normalizeListItems(items)
+    return normalized.length > 0 ? normalized : null
+  }
+  if (typeof value === 'string') {
+    const normalized = normalizeListItems(value.split(','))
+    return normalized.length > 0 ? normalized : null
+  }
+  return null
+}
+
+export function formatContactListValue(value?: string[] | null): string {
+  return value?.join(', ') ?? ''
+}
+
+export function computeContactAge(birthday: string | null | undefined, today = new Date(Date.now())): number | null {
+  const parsed = parseDateOnly(birthday)
+  if (!parsed) return null
+  const birthDate = Date.UTC(today.getUTCFullYear(), parsed.month, parsed.day)
+  const todayUtc = startOfUtcDay(today)
+  const birthYear = Number(birthday?.slice(0, 4))
+  if (!Number.isFinite(birthYear)) return null
+  let age = today.getUTCFullYear() - birthYear
+  if (birthDate > todayUtc) age -= 1
+  return age >= 0 ? age : null
+}
+
 function structuredInteractions<T extends Pick<ContactInteraction, 'entryId'>>(interactions: T[]): T[] {
   return interactions.filter((interaction) => interaction.entryId != null)
 }
@@ -54,16 +102,13 @@ export function computeContactLastTalkedTimestamp(interactions: Pick<ContactInte
   return latest
 }
 
-export function daysSinceLastTalked(contact: Pick<Contact, 'lastTalkedAt' | 'dateLastTalked'>, today = new Date()): number | null {
-  let lastTalkedAt = contact.lastTalkedAt ?? null
-  if (lastTalkedAt == null && contact.dateLastTalked) {
-    lastTalkedAt = Date.parse(`${contact.dateLastTalked}T00:00:00Z`)
-  }
+export function daysSinceLastTalked(contact: Pick<Contact, 'lastTalkedAt'>, today = new Date(Date.now())): number | null {
+  const lastTalkedAt = contact.lastTalkedAt ?? null
   if (lastTalkedAt == null || !Number.isFinite(lastTalkedAt)) return null
   return Math.max(0, Math.floor((startOfUtcDay(today) - startOfUtcDay(new Date(lastTalkedAt))) / DAY_MS))
 }
 
-export function buildBirthdayAwareness(contact: Pick<Contact, 'birthday'>, today = new Date(), soonWindowDays = 14) {
+export function buildBirthdayAwareness(contact: Pick<Contact, 'birthday'>, today = new Date(Date.now()), soonWindowDays = 14) {
   const birthday = parseDateOnly(contact.birthday)
   if (!birthday) {
     return {
@@ -91,9 +136,9 @@ export const computeDaysSinceLastTalked = daysSinceLastTalked
 export const computeBirthdayAwareness = buildBirthdayAwareness
 
 export function buildCheckInAttention(
-  contact: Pick<Contact, 'lastTalkedAt' | 'dateLastTalked'>,
+  contact: Pick<Contact, 'lastTalkedAt'>,
   settings: Pick<ContactReminderSettings, 'checkInReminderEnabled' | 'checkInAfterDays'> | null | undefined,
-  today = new Date(),
+  today = new Date(Date.now()),
 ) {
   const enabled = settings?.checkInReminderEnabled ?? false
   const checkInAfterDays = settings?.checkInAfterDays ?? null

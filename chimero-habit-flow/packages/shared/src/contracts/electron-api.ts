@@ -179,7 +179,7 @@ export interface ElectronApi {
   getWorkoutGraph: (trackerId: number) => Promise<WorkoutGraphReadModel | null>
   getWorkoutCalendar: (trackerId: number, year: number, month: number) => Promise<WorkoutCalendarReadModel>
   getExerciseProgress: (trackerId: number, exerciseId: string) => Promise<ExerciseProgressReadModel | null>
-  getContacts: (options?: { sortBy?: 'name' | 'most-talked-to' | 'least-talked-to' }) => Promise<Contact[]>
+  getContacts: (options?: { sortBy?: 'name' | 'most-talked-to' | 'least-talked-to' | 'most-recently-talked-to' }) => Promise<Contact[]>
   getContact: (id: number) => Promise<Contact | null>
   createContact: (data: ContactInsert) => Promise<Contact | null>
   updateContact: (id: number, updates: ContactUpdate) => Promise<Contact | null>
@@ -191,7 +191,7 @@ export interface ElectronApi {
   getContactProfileBlocks: (contactId: number) => Promise<ContactProfileBlock[]>
   createContactProfileBlock: (data: ContactProfileBlockInput) => Promise<ContactProfileBlock | null>
   updateContactProfileBlock: (id: number, updates: Partial<ContactProfileBlockInput>) => Promise<ContactProfileBlock | null>
-  deleteContactProfileBlock: (id: number) => Promise<boolean>
+  deleteContactProfileBlock: (id: number, contactId?: number) => Promise<boolean>
   reorderContactProfileBlocks: (contactId: number, ids: number[]) => Promise<ContactProfileBlock[]>
   searchExercises: (query: string, limit?: number) => Promise<Exercise[]>
   getAllExercises: (limit?: number) => Promise<Exercise[]>

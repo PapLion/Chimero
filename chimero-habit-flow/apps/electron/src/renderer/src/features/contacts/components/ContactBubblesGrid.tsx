@@ -7,6 +7,7 @@ import { Input } from "@packages/ui/input"
 import { Button } from "@packages/ui/button"
 import { cn } from "@shared/utils"
 import { CyberpunkSelect } from "@features/tracking/components/CyberpunkSelect"
+import type { ContactSortBy } from "@contracts/contracts"
 import type { Contact } from "@packages/db"
 
 export interface ContactMoodSelection {
@@ -19,7 +20,7 @@ interface ContactBubblesGridProps {
 }
 
 export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProps) {
-  const [sortBy, setSortBy] = useState<"name" | "most-talked-to" | "least-talked-to">("name")
+  const [sortBy, setSortBy] = useState<ContactSortBy>("name")
   const { data: contacts = [], isLoading } = useContacts({ sortBy })
   const { data: assetsData = [] } = useAssets({ limit: 200 })
   const { setCurrentPage, setSelectedContactId } = useAppStore()
@@ -173,6 +174,7 @@ export function ContactBubblesGrid({ onSelectionChange }: ContactBubblesGridProp
             { value: "name", label: "Name" },
             { value: "most-talked-to", label: "Most talked to" },
             { value: "least-talked-to", label: "Least talked to" },
+            { value: "most-recently-talked-to", label: "Most recently talked to" },
           ]}
         />
         <Button

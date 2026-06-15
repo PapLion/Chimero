@@ -168,7 +168,7 @@ const webApi: ElectronApi = {
   getContactProfileBlocks: (contactId) => request(`/api/contacts/${contactId}/profile-blocks`),
   createContactProfileBlock: (data) => request(`/api/contacts/${data.contactId}/profile-blocks`, { method: 'POST', body: data }),
   updateContactProfileBlock: (id, updates) => request(`/api/contact-profile-blocks/${id}`, { method: 'PUT', body: updates }),
-  deleteContactProfileBlock: (id) => request(`/api/contact-profile-blocks/${id}`, { method: 'DELETE' }),
+  deleteContactProfileBlock: (id, contactId) => request(`/api/contact-profile-blocks/${id}${contactId ? `?contactId=${contactId}` : ''}`, { method: 'DELETE' }),
   reorderContactProfileBlocks: (contactId, ids) => request(`/api/contacts/${contactId}/profile-blocks/reorder`, { method: 'PUT', body: { ids } }),
   searchExercises: (query, limit) => request(`/api/exercises/search${queryString({ query, limit })}`),
   getAllExercises: (limit) => request(`/api/exercises${queryString({ limit })}`),

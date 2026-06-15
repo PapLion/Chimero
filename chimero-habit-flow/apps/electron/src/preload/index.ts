@@ -116,7 +116,7 @@ const api: ElectronApi = {
   getWorkoutCalendar: (trackerId: number, year: number, month: number) => ipcRenderer.invoke('get-workout-calendar', trackerId, year, month),
   getExerciseProgress: (trackerId: number, exerciseId: string) => ipcRenderer.invoke('get-exercise-progress', trackerId, exerciseId),
   // Contacts (Personal CRM)
-  getContacts: (options?: { sortBy?: 'name' | 'most-talked-to' | 'least-talked-to' }) => ipcRenderer.invoke('get-contacts', options),
+  getContacts: (options?: { sortBy?: 'name' | 'most-talked-to' | 'least-talked-to' | 'most-recently-talked-to' }) => ipcRenderer.invoke('get-contacts', options),
   getContact: (id: number) => ipcRenderer.invoke('get-contact', id),
   createContact: (data: { name: string; avatarAssetId?: number | null; birthday?: string | null; dateMet?: string | null; likes?: string[] | null; dislikes?: string[] | null; traits?: string[] | null; hasKids?: boolean | null; kidsNotes?: string | null; notes?: string | null }) =>
     ipcRenderer.invoke('create-contact', data),
@@ -131,7 +131,7 @@ const api: ElectronApi = {
   getContactProfileBlocks: (contactId: number) => ipcRenderer.invoke('get-contact-profile-blocks', contactId),
   createContactProfileBlock: (data) => ipcRenderer.invoke('create-contact-profile-block', data),
   updateContactProfileBlock: (id, updates) => ipcRenderer.invoke('update-contact-profile-block', id, updates),
-  deleteContactProfileBlock: (id) => ipcRenderer.invoke('delete-contact-profile-block', id),
+  deleteContactProfileBlock: (id, contactId?: number) => ipcRenderer.invoke('delete-contact-profile-block', id, contactId),
   reorderContactProfileBlocks: (contactId, ids) => ipcRenderer.invoke('reorder-contact-profile-blocks', contactId, ids),
   // Exercise DB
   searchExercises: (query: string, limit?: number) => ipcRenderer.invoke('search-exercises', { query, limit }),

@@ -13,8 +13,9 @@ import { CyberpunkSelect } from "@features/tracking/components/CyberpunkSelect"
 import { ConfirmDeleteDialog } from "@shared/components/ConfirmDeleteDialog"
 import { formatToastError, useToast } from "@shared/components/toast"
 import { ArrowLeft, X, Plus, User, ChevronUp, ChevronDown } from "lucide-react"
-import { buildBirthdayAwareness, buildCheckInAttention } from "@contracts/domain"
+import { buildBirthdayAwareness, buildCheckInAttention, formatContactListValue, normalizeContactListValue } from "@contracts/domain"
 import type { Contact, ContactInteraction, ContactProfileBlock } from "@packages/db"
+import type { ContactSortBy } from "@contracts/contracts"
 import {
   DndContext,
   closestCenter,
@@ -34,7 +35,7 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 
 export function ContactsPage() {
-  const [sortBy, setSortBy] = useState<"name" | "most-talked-to" | "least-talked-to">("name")
+  const [sortBy, setSortBy] = useState<ContactSortBy>("name")
   const [searchQuery, setSearchQuery] = useState("")
   const { data: contactsData = [], isLoading } = useContacts({ sortBy })
   const { data: assetsData = [] } = useAssets({ limit: 200 })
@@ -105,6 +106,7 @@ export function ContactsPage() {
             { value: "name", label: "Name" },
             { value: "most-talked-to", label: "Most talked to" },
             { value: "least-talked-to", label: "Least talked to" },
+            { value: "most-recently-talked-to", label: "Most recently talked to" },
           ]}
         />
       </div>
@@ -261,41 +263,30 @@ export function ContactProfilePage() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
-  // Compute age from birthday
-  const age = useMemo(() => {
-    if (!birthday) return null
-    const today = new Date()
-    const birth = new Date(birthday)
-    let calculatedAge = today.getFullYear() - birth.getFullYear()
-    const monthDiff = today.getMonth() - birth.getMonth()
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      calculatedAge--
-    }
-    return calculatedAge >= 0 ? calculatedAge : null
-  }, [birthday])
-
-  const splitList = (value: string): string[] | null => {
-    const items = value.split(",").map((item) => item.trim()).filter(Boolean)
-    return items.length > 0 ? items : null
+  const age = contact?.age ?? null
+  const splitList = (value: string): string[] | null => normalizeContactListValue(value)
+  const joinList = (value?: string[] | null): string => formatContactListValue(value)
+  const parseReminderThreshold = (value: string): number | null => {
+    if (!value.trim()) return null
+    const parsed = Number.parseInt(value, 10)
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
   }
 
-  const joinList = (value?: string[] | null): string => value?.join(", ") ?? ""
-
   const birthdayAwareness = useMemo(
-    () => buildBirthdayAwareness({ birthday }, new Date(), Number.parseInt(birthdayReminderDaysBefore, 10) || 7),
+    () => buildBirthdayAwareness({ birthday }, new Date(Date.now()), Number.parseInt(birthdayReminderDaysBefore, 10) || 7),
     [birthday, birthdayReminderDaysBefore],
   )
 
   const checkInAttention = useMemo(
     () => buildCheckInAttention(
-      { lastTalkedAt: contact?.lastTalkedAt ?? null, dateLastTalked: dateLastTalked || null },
+      { lastTalkedAt: contact?.lastTalkedAt ?? null },
       {
         checkInReminderEnabled,
-        checkInAfterDays: Number.parseInt(checkInAfterDays, 10) || 14,
+        checkInAfterDays: parseReminderThreshold(checkInAfterDays),
       },
-      new Date(),
+      new Date(Date.now()),
     ),
-    [checkInAfterDays, checkInReminderEnabled, contact?.lastTalkedAt, dateLastTalked],
+    [checkInAfterDays, checkInReminderEnabled, contact?.lastTalkedAt],
   )
 
   // Load contact data when in edit mode
@@ -319,9 +310,9 @@ export function ContactProfilePage() {
   useEffect(() => {
     if (reminderSettings && !isCreateMode) {
       setBirthdayReminderEnabled(reminderSettings.birthdayReminderEnabled)
-      setBirthdayReminderDaysBefore(String(reminderSettings.birthdayReminderDaysBefore))
+      setBirthdayReminderDaysBefore(reminderSettings.birthdayReminderDaysBefore == null ? "" : String(reminderSettings.birthdayReminderDaysBefore))
       setCheckInReminderEnabled(reminderSettings.checkInReminderEnabled)
-      setCheckInAfterDays(String(reminderSettings.checkInAfterDays))
+      setCheckInAfterDays(reminderSettings.checkInAfterDays == null ? "" : String(reminderSettings.checkInAfterDays))
     }
   }, [isCreateMode, reminderSettings])
 
@@ -514,6 +505,14 @@ export function ContactProfilePage() {
 
     try {
       if (isCreateMode) {
+        const nextBirthdayDaysBefore = birthdayReminderEnabled ? parseReminderThreshold(birthdayReminderDaysBefore) : null
+        const nextCheckInAfterDays = checkInReminderEnabled ? parseReminderThreshold(checkInAfterDays) : null
+        if (birthdayReminderEnabled && nextBirthdayDaysBefore == null) {
+          throw new Error("Birthday reminder days before must be a positive integer.")
+        }
+        if (checkInReminderEnabled && nextCheckInAfterDays == null) {
+          throw new Error("Check-in after days must be a positive integer.")
+        }
         const createdContact = (await createContactMutation.mutateAsync({
           name: name.trim(),
           avatarAssetId,
@@ -527,14 +526,14 @@ export function ContactProfilePage() {
           notes: notes.trim() || null,
         })) as Contact
 
-        if (createdContact?.id && supportsContactDetailExtras) {
+          if (createdContact?.id && supportsContactDetailExtras) {
           try {
             await upsertReminderSettingsMutation.mutateAsync({
               contactId: createdContact.id,
               birthdayReminderEnabled,
-              birthdayReminderDaysBefore: Number.parseInt(birthdayReminderDaysBefore, 10) || 7,
+              birthdayReminderDaysBefore: nextBirthdayDaysBefore,
               checkInReminderEnabled,
-              checkInAfterDays: Number.parseInt(checkInAfterDays, 10) || 14,
+              checkInAfterDays: nextCheckInAfterDays,
             })
           } catch (settingsError) {
             toast.error(
@@ -551,6 +550,14 @@ export function ContactProfilePage() {
         setCurrentPage("contacts")
         setSelectedContactId(undefined)
       } else if (selectedContactId) {
+        const nextBirthdayDaysBefore = birthdayReminderEnabled ? parseReminderThreshold(birthdayReminderDaysBefore) : null
+        const nextCheckInAfterDays = checkInReminderEnabled ? parseReminderThreshold(checkInAfterDays) : null
+        if (birthdayReminderEnabled && nextBirthdayDaysBefore == null) {
+          throw new Error("Birthday reminder days before must be a positive integer.")
+        }
+        if (checkInReminderEnabled && nextCheckInAfterDays == null) {
+          throw new Error("Check-in after days must be a positive integer.")
+        }
         await updateContactMutation.mutateAsync({
           id: selectedContactId,
           updates: {
@@ -559,6 +566,7 @@ export function ContactProfilePage() {
             birthday: birthday || null,
             dateMet: dateMet || null,
             dateLastTalked: dateLastTalked || null,
+            lastTalkedAt: dateLastTalked ? Date.parse(`${dateLastTalked}T00:00:00Z`) : null,
             likes: splitList(likesText),
             dislikes: splitList(dislikesText),
             traits: traits.length > 0 ? traits : null,
@@ -571,9 +579,9 @@ export function ContactProfilePage() {
           await upsertReminderSettingsMutation.mutateAsync({
             contactId: selectedContactId,
             birthdayReminderEnabled,
-            birthdayReminderDaysBefore: Number.parseInt(birthdayReminderDaysBefore, 10) || 7,
+            birthdayReminderDaysBefore: nextBirthdayDaysBefore,
             checkInReminderEnabled,
-            checkInAfterDays: Number.parseInt(checkInAfterDays, 10) || 14,
+            checkInAfterDays: nextCheckInAfterDays,
           })
         }
 
@@ -874,7 +882,7 @@ export function ContactProfilePage() {
             <label className="text-sm text-[hsl(210_28%_97%)]">Days before birthday</label>
             <Input
               type="number"
-              min={0}
+              min={1}
               value={birthdayReminderDaysBefore}
               onChange={(e) => setBirthdayReminderDaysBefore(e.target.value)}
               className="text-[hsl(210_28%_97%)]"
@@ -1071,6 +1079,9 @@ export function ContactProfilePage() {
                     >
                       {interaction.moodImpact ?? interaction.mood ?? "neutral"}
                     </span>
+                    <span className="ml-2 inline-flex rounded px-2 py-0.5 text-xs font-medium border border-white/10 text-[hsl(220_12%_72%)]">
+                      {interaction.structured ? "Structured" : "Legacy"}
+                    </span>
                     {interaction.method && (
                       <span className="ml-2 inline-flex rounded px-2 py-0.5 text-xs font-medium border border-white/10 text-[hsl(220_12%_72%)]">
                         {interaction.method}
@@ -1094,7 +1105,7 @@ export function ContactProfilePage() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteDialogOpen(false)}
         title={`Delete ${name.trim() || "contact"}?`}
-        body="This will remove the contact and their history."
+        body="This will remove the contact only if they do not have linked interaction history."
         description="This action cannot be undone."
         confirmLabel="Delete contact"
         pendingLabel="Deleting contact..."
