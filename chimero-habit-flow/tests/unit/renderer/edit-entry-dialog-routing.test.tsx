@@ -50,6 +50,10 @@ vi.mock('@features/entry/modals/StructuredWorkoutEditDialog', () => ({
   StructuredWorkoutEditDialog: () => <div data-testid="structured-workout-editor">Structured workout editor</div>,
 }))
 
+vi.mock('@features/entry/modals/StructuredSocialEditDialog', () => ({
+  StructuredSocialEditDialog: () => <div data-testid="structured-social-editor">Structured social editor</div>,
+}))
+
 import { EditEntryDialog } from '../../../apps/electron/src/renderer/src/features/entry/modals/EditEntryDialog'
 import type { Entry, Tracker } from '@contracts/contracts'
 
@@ -61,6 +65,18 @@ const tracker: Tracker = {
   color: '#22c55e',
   order: 1,
   config: { identity: 'exercise' },
+  archived: false,
+  createdAt: null,
+}
+
+const socialTracker: Tracker = {
+  id: 7,
+  name: 'Social',
+  type: 'numeric',
+  icon: 'users',
+  color: '#8b5cf6',
+  order: 2,
+  config: { identity: 'social', unit: 'interactions' },
   archived: false,
   createdAt: null,
 }
@@ -100,10 +116,46 @@ const legacyEntry: Entry = {
   workout: undefined,
 }
 
+const structuredSocialEntry: Entry = {
+  id: 91,
+  trackerId: socialTracker.id,
+  value: null,
+  note: 'Planning the weekend',
+  metadata: {},
+  timestamp: Date.UTC(2026, 5, 11, 18, 0),
+  dateStr: '2026-06-11',
+  assetId: null,
+  tagIds: [],
+  socialInteractions: [
+    {
+      contactId: 1,
+      contactName: 'Jack Robert',
+      contactInitials: 'JR',
+      method: 'call',
+      moodImpact: 'positive',
+      note: 'Planning the weekend',
+    },
+    {
+      contactId: 2,
+      contactName: 'Annabelle',
+      contactInitials: 'A',
+      method: 'call',
+      moodImpact: 'neutral',
+      note: 'Planning the weekend',
+    },
+  ],
+}
+
+const legacySocialEntry: Entry = {
+  ...structuredSocialEntry,
+  id: 92,
+  socialInteractions: undefined,
+}
+
 describe('EditEntryDialog exercise routing', () => {
   beforeEach(() => {
     mocks.useTrackersMock.mockReturnValue({
-      data: [tracker],
+      data: [tracker, socialTracker],
     })
     mocks.useAssetsMock.mockReturnValue({ data: [] })
     mocks.useTagsMock.mockReturnValue({ data: [] })
@@ -134,5 +186,19 @@ describe('EditEntryDialog exercise routing', () => {
 
     expect(screen.getByText('Edit entry')).toBeTruthy()
     expect(screen.queryByTestId('structured-workout-editor')).toBeNull()
+  })
+
+  it('routes structured Social entries to the dedicated Social editor', () => {
+    render(<EditEntryDialog entry={structuredSocialEntry} open onOpenChange={vi.fn()} />)
+
+    expect(screen.getByTestId('structured-social-editor')).toBeTruthy()
+    expect(screen.queryByText('Edit entry')).toBeNull()
+  })
+
+  it('keeps legacy Social entries on the generic edit path', () => {
+    render(<EditEntryDialog entry={legacySocialEntry} open onOpenChange={vi.fn()} />)
+
+    expect(screen.getByText('Edit entry')).toBeTruthy()
+    expect(screen.queryByTestId('structured-social-editor')).toBeNull()
   })
 })

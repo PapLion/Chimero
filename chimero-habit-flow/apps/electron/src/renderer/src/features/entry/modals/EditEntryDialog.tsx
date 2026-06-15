@@ -17,6 +17,7 @@ import type { IntakeItemType, MealType, MeasurementUnit, Tracker, WeightUnit } f
 import { clampMoodScore } from "@contracts/domain"
 import { getTrackerIdentity } from "@contracts/features/tracking"
 import { getEntryConfig } from "../entry-config"
+import { StructuredSocialEditDialog } from "@features/entry/modals/StructuredSocialEditDialog"
 import { StructuredWorkoutEditDialog } from "./StructuredWorkoutEditDialog"
 
 interface EditEntryDialogProps {
@@ -150,6 +151,8 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     }, [open, entry])
 
     const tracker = entry ? trackers.find((t) => t.id === entry.trackerId) : null
+    const isSocialTracker = tracker ? getTrackerIdentity(tracker) === "social" : false
+    const isStructuredSocialEntry = isSocialTracker && (entry?.socialInteractions?.length ?? 0) > 0
     const isExerciseTracker =
         !!tracker &&
         (
@@ -381,6 +384,16 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
     }
 
     if (!tracker) return null
+    if (isStructuredSocialEntry && entry) {
+        return (
+            <StructuredSocialEditDialog
+                entry={entry}
+                tracker={tracker}
+                open={open}
+                onOpenChange={onOpenChange}
+            />
+        )
+    }
     if (isExerciseTracker && entry?.workout?.structured) {
         return (
             <Dialog open={open} onOpenChange={onOpenChange}>
@@ -444,6 +457,11 @@ export function EditEntryDialog({ entry, open, onOpenChange }: EditEntryDialogPr
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-5 p-6">
+                        {isSocialTracker && !isStructuredSocialEntry && (
+                            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+                                Legacy Social entry. This editor updates the base tracker entry only and does not edit linked contacts.
+                            </div>
+                        )}
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div className="space-y-1">
                                 <label className="mb-1.5 block text-xs text-[hsl(var(--muted-foreground))]">Date</label>
