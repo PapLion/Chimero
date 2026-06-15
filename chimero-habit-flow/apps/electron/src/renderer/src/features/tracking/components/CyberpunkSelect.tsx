@@ -139,8 +139,8 @@ export function CyberpunkSelect({
             <div
               ref={menuRef}
               role="listbox"
-              style={menuStyle}
-              className="surface-panel z-[80] overflow-hidden rounded-2xl border border-[hsl(var(--border)/0.72)] shadow-[0_18px_38px_rgba(2,6,23,0.2)]"
+              style={{ ...menuStyle, zIndex: 200 }}
+              className="surface-panel z-[200] pointer-events-auto overflow-hidden rounded-2xl border border-[hsl(var(--border)/0.72)] shadow-[0_18px_38px_rgba(2,6,23,0.2)]"
             >
               <div className="max-h-60 overflow-y-auto py-1">
                 {placeholder && (
