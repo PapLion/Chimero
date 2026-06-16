@@ -1411,6 +1411,55 @@ export interface SocialEntryReadModel {
   structured: true
 }
 
+export type SocialLegacyReason = 'generic_entry' | 'null_entry_interaction'
+
+export interface SocialSummaryContact {
+  contactId: number
+  name: string
+  initials: string
+  avatarAssetId: number | null
+  moodImpact: SocialMoodImpact
+}
+
+export interface StructuredSocialSummary {
+  entryId: number
+  trackerId: number
+  timestamp: number
+  dateStr: string
+  method: SocialMethod
+  note: string | null
+  tagIds: number[]
+  assetId: number | null
+  contacts: SocialSummaryContact[]
+  structured: true
+}
+
+export interface LegacySocialSummary {
+  entryId: number
+  trackerId: number
+  timestamp: number
+  dateStr: string
+  note: string | null
+  structured: false
+  legacyReason: SocialLegacyReason
+}
+
+export type SocialEntrySummary = StructuredSocialSummary | LegacySocialSummary
+
+export interface SocialHomeReadModel {
+  todayEntryCount: number
+  todayDistinctContactCount: number
+  latestStructuredInteraction: StructuredSocialSummary | null
+  recentContacts: Array<{
+    contactId: number
+    name: string
+    initials: string
+    avatarAssetId: number | null
+    lastInteractionAt: number
+  }>
+  legacyEntryCount: number
+}
+
 export interface LegacySocialEntryReadModel {
   entryId: number
   trackerId: number

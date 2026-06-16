@@ -1,4 +1,4 @@
-import type { IntakeItemType, MealType, TaskDayState, TaskPostponement } from '../../contracts/app-types'
+import type { IntakeItemType, MealType, SocialEntrySummary, TaskDayState, TaskPostponement } from '../../contracts/app-types'
 
 export interface CalendarDayEntry {
   id: number
@@ -12,6 +12,7 @@ export interface CalendarDayEntry {
   dateStr: string
   assetId?: number | null
   tagIds?: number[]
+  social?: SocialEntrySummary
   gaming?: {
     structured: boolean
     gameTitle?: string

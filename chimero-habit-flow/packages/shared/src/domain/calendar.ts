@@ -1,5 +1,5 @@
 import type { CalendarDayEntry } from '../features/calendar'
-import type { MealType, TaskDayState, TaskPostponement } from '../contracts/app-types'
+import type { MealType, SocialEntrySummary, TaskDayState, TaskPostponement } from '../contracts/app-types'
 
 type CalendarDayEntryInput = {
   id: number
@@ -10,6 +10,7 @@ type CalendarDayEntryInput = {
   dateStr: string
   assetId?: number | null
   tagIds?: number[]
+  social?: SocialEntrySummary
   gaming?: {
     structured: boolean
     gameTitle?: string
@@ -69,6 +70,7 @@ export function buildCalendarDayEntry(input: CalendarDayEntryInput): CalendarDay
     dateStr: input.dateStr,
     assetId: input.assetId ?? null,
     tagIds: input.tagIds ?? [],
+    social: input.social,
     gaming: input.gaming,
     food: input.food,
     health: input.health,

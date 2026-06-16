@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { books, bookActivities, contactInteractions, contacts, entries, entriesToTags, entryFood, entryGaming, entryHealth, entryIntake, entryWeight, intakeItems, symptoms, trackers } from '@packages/db'
 import { getDb as db } from '@packages/db/database'
 import { mapEntry, mapTracker } from '../../shared/mappers'
@@ -177,6 +177,7 @@ async function withSocialInteractions(mappedEntries: Entry[]): Promise<Entry[]> 
     .from(contactInteractions)
     .leftJoin(contacts, eq(contacts.id, contactInteractions.contactId))
     .where(inArray(contactInteractions.entryId, entryIds))
+    .orderBy(asc(contactInteractions.entryId), asc(contactInteractions.id))
 
   const byEntry = new Map<number, SocialInteractionReadModel[]>()
   for (const row of interactionRows) {

@@ -20,6 +20,21 @@ const months = [
   "July", "August", "September", "October", "November", "December",
 ]
 
+function formatSocialMethodLabel(method: string): string {
+  if (method === "in-person") return "In person"
+  if (method === "call") return "Call"
+  if (method === "text") return "Text"
+  if (method === "video") return "Video"
+  if (method === "group") return "Group"
+  return "Other"
+}
+
+function formatSocialMoodLabel(moodImpact: string): string {
+  if (moodImpact === "positive") return "Positive"
+  if (moodImpact === "negative") return "Negative"
+  return "Neutral"
+}
+
 export function CalendarPage() {
   const [activeTab, setActiveTab] = useState<"calendar" | "timeline">("calendar")
   const { data: reminders = [] } = useReminders()
@@ -584,6 +599,8 @@ export function CalendarPage() {
                                 const legacyHealth = isHealthTracker && !health
                                 const legacyIntake = isIntakeTracker && !intake
                                 const book = isBooksTracker && detailedEntry ? getBookLifecycleRecord(detailedEntry as Entry) : null
+                                const social = (entry as CalendarDayEntry).social ?? null
+                                const structuredSocial = social?.structured ? social : null
                                 const moodScore = isMoodEntry ? clampMoodScore(entry.value) : null
                                 const entryTime = new Date(entry.timestamp).toLocaleTimeString(undefined, {
                                   hour: "2-digit",
@@ -720,10 +737,54 @@ export function CalendarPage() {
                                     {legacyIntake && entry.note && (
                                       <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">{entry.note}</p>
                                     )}
+                                    {structuredSocial && (
+                                      <div className="mt-2 space-y-2">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <span className="rounded-full border border-[hsl(var(--border)/0.5)] bg-white/[0.03] px-2 py-0.5 text-[11px] uppercase tracking-normal text-[hsl(var(--muted-foreground))]">
+                                            {formatSocialMethodLabel(structuredSocial.method)}
+                                          </span>
+                                          <span className="rounded-full border border-[hsl(var(--border)/0.5)] bg-white/[0.03] px-2 py-0.5 text-[11px] uppercase tracking-normal text-[hsl(var(--muted-foreground))]">
+                                            {structuredSocial.contacts.length} contact{structuredSocial.contacts.length === 1 ? "" : "s"}
+                                          </span>
+                                          {structuredSocial.assetId != null && (
+                                            <span className="rounded-full border border-[hsl(var(--border)/0.5)] bg-white/[0.03] px-2 py-0.5 text-[11px] uppercase tracking-normal text-[hsl(var(--muted-foreground))]">
+                                              Attachment
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                          {structuredSocial.contacts.map((contact) => (
+                                            <div
+                                              key={`${entry.id}-${contact.contactId}`}
+                                              className="rounded-2xl border border-[hsl(var(--border)/0.5)] bg-white/[0.03] px-3 py-2"
+                                            >
+                                              <div className="flex items-center gap-2">
+                                                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[hsl(var(--primary)/0.14)] text-[11px] font-semibold text-[hsl(var(--primary))]">
+                                                  {contact.initials}
+                                                </span>
+                                                <span className="text-sm font-medium text-[hsl(var(--foreground))]">
+                                                  {contact.name}
+                                                </span>
+                                              </div>
+                                              <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-[hsl(var(--muted-foreground))]">
+                                                <span className="rounded-full border border-[hsl(var(--border)/0.45)] bg-white/[0.02] px-2 py-0.5">
+                                                  {formatSocialMoodLabel(contact.moodImpact)}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
                                     {(entry as CalendarDayEntry).waist != null && (
                                       <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
                                         Waist {(entry as CalendarDayEntry).waist}
                                         {(entry as CalendarDayEntry).waistUnit ? ` ${(entry as CalendarDayEntry).waistUnit}` : ""}
+                                      </p>
+                                    )}
+                                    {social && !social.structured && (
+                                      <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                        Unstructured legacy social entry
                                       </p>
                                     )}
                                     {entry.note && !gaming && !legacyGaming && !isBooksTracker && !food && !legacyFood && !health && !legacyHealth && !intake && !legacyIntake && (

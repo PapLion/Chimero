@@ -4,7 +4,7 @@ import { useMemo } from "react"
 import { cn } from "@shared/utils"
 import { type Widget, type Tracker, type Entry } from "@shared/store"
 import { useBooks, useMoodDailyAggregates, useUpdateEntryMutation, useWeightDetail, useWorkoutHome } from "@shared/queries"
-import { buildFoodHomeWidgetReadModel, buildGamingHomeWidgetReadModel, buildHealthHomeWidgetReadModel, buildIntakeHomeWidgetReadModel, buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, formatIntakeDosageDisplay, formatSeverityDisplay, moodScoreToColor, postponeTaskToNextDay, unpostponeTask } from "@contracts/domain"
+import { buildFoodHomeWidgetReadModel, buildGamingHomeWidgetReadModel, buildHealthHomeWidgetReadModel, buildIntakeHomeWidgetReadModel, buildSocialHomeReadModel, buildTaskDayReadModel, buildWeightHomeWidgetReadModel, clampMoodScore, formatIntakeDosageDisplay, formatSeverityDisplay, moodScoreToColor, postponeTaskToNextDay, unpostponeTask } from "@contracts/domain"
 import { buildBooksTrackerReadModel, formatBookRatingDisplay, getBookActionLabel } from "@contracts/features/books"
 import { getTrackerIdentity, isBooksTracker, usesMediaStyleRendering } from "@contracts/features/tracking"
 import { useSortable } from "@dnd-kit/sortable"
@@ -1414,31 +1414,24 @@ function ProgressWidget({
 
 // SocialWidget: For Social/Connection trackers
 function SocialWidget({ entries, tracker, selectedDate }: { entries: Entry[]; tracker: Tracker; selectedDate: Date }) {
-  const dateValue = getDateValue(entries, tracker, selectedDate)
-  const targetDateStr = dateToDateStr(selectedDate)
-  
-  // Get today's entries
-  const dateEntries = entries.filter((e) => {
-    if (e.dateStr) return e.dateStr === targetDateStr
-    return isSameDay(e.timestamp, selectedDate.getTime())
-  })
-  
-  // Extract names from notes (e.g., "@Mom", "with John")
-  const extractNames = (note: string | null): string[] => {
-    if (!note) return []
-    // Match @mentions or "with Name" patterns
-    const mentions = note.match(/@(\w+)/g)?.map(m => m.slice(1)) || []
-    const withPattern = note.match(/with\s+(\w+)/gi)?.map(m => m.replace(/with\s+/i, '')) || []
-    return [...mentions, ...withPattern]
-  }
-  
-  const allNames = dateEntries
-    .flatMap((e) => extractNames(e.note))
-    .filter((name, idx, arr) => arr.indexOf(name) === idx) // Unique names
-    .slice(0, 5)
+  const socialHome = buildSocialHomeReadModel(entries, selectedDate)
+  const hasStructured = socialHome.todayEntryCount > 0
+  const hasLegacy = socialHome.legacyEntryCount > 0
 
-  // Satisfaction meter (1-10) or time spent
-  const satisfaction = dateValue ?? 0
+  const formatSocialMethodLabel = (method: string): string => {
+    if (method === "in-person") return "In person"
+    if (method === "call") return "Call"
+    if (method === "text") return "Text"
+    if (method === "video") return "Video"
+    if (method === "group") return "Group"
+    return "Other"
+  }
+
+  const formatSocialMoodLabel = (moodImpact: string): string => {
+    if (moodImpact === "positive") return "Positive"
+    if (moodImpact === "negative") return "Negative"
+    return "Neutral"
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -1450,48 +1443,82 @@ function SocialWidget({ entries, tracker, selectedDate }: { entries: Entry[]; tr
       </div>
 
       <div className="flex-1 flex flex-col">
-        {satisfaction > 0 && (
-          <div className="mb-4">
-            <div className="text-2xl font-medium text-[hsl(var(--foreground))] tracking-tight mb-2">
-              {satisfaction}/10
+        {!hasStructured && !hasLegacy ? (
+          <p className="text-sm text-[hsl(var(--muted-foreground))]">No structured Social interactions yet</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-3">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Entries</div>
+                <div className="mt-1 text-2xl font-semibold text-[hsl(var(--foreground))]">{socialHome.todayEntryCount}</div>
+              </div>
+              <div className="rounded-2xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-3">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">People</div>
+                <div className="mt-1 text-2xl font-semibold text-[hsl(var(--foreground))]">{socialHome.todayDistinctContactCount}</div>
+              </div>
             </div>
-            <div className="flex gap-1">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "h-2 flex-1 rounded-full transition-colors",
-                    i <= satisfaction ? "bg-[hsl(var(--primary))]" : "bg-[hsl(var(--border)/0.45)]"
-                  )}
-                />
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* Names/Tags with Initials Bubbles */}
-        {allNames.length > 0 && (
-          <div className="space-y-2">
-            <div className="text-xs text-[hsl(var(--muted-foreground))] mb-2">People</div>
-            <div className="flex flex-wrap gap-2">
-              {allNames.map((name, idx) => (
-                <div
-                  key={idx}
-                  className="surface-chip rounded-2xl px-3 py-1.5 text-xs text-[hsl(var(--muted-foreground))]"
-                >
-                  {/* Initials Bubble */}
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[hsl(var(--primary)/0.12)] text-xs font-semibold text-[hsl(var(--primary))]">
-                    {name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2) || name.slice(0, 2).toUpperCase()}
+            {socialHome.latestStructuredInteraction && (
+              <div className="rounded-3xl border border-[hsl(var(--border)/0.62)] bg-white/[0.03] p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Latest interaction</div>
+                  <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                    {new Date(socialHome.latestStructuredInteraction.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
                   </div>
-                  <span>{name}</span>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-[hsl(var(--border)/0.5)] bg-white/[0.03] px-2 py-0.5 text-[11px] uppercase tracking-normal text-[hsl(var(--muted-foreground))]">
+                    {formatSocialMethodLabel(socialHome.latestStructuredInteraction.method)}
+                  </span>
+                  {socialHome.latestStructuredInteraction.assetId != null && (
+                    <span className="rounded-full border border-[hsl(var(--border)/0.5)] bg-white/[0.03] px-2 py-0.5 text-[11px] uppercase tracking-normal text-[hsl(var(--muted-foreground))]">
+                      Attachment
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {socialHome.latestStructuredInteraction.contacts.map((contact) => (
+                    <div key={`${socialHome.latestStructuredInteraction?.entryId}-${contact.contactId}`} className="flex items-center gap-2 rounded-2xl border border-[hsl(var(--border)/0.5)] bg-white/[0.03] px-3 py-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[hsl(var(--primary)/0.14)] text-[11px] font-semibold text-[hsl(var(--primary))]">
+                        {contact.initials}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-[hsl(var(--foreground))]">{contact.name}</div>
+                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{formatSocialMoodLabel(contact.moodImpact)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {socialHome.latestStructuredInteraction.note && (
+                  <div className="mt-3 line-clamp-2 text-sm text-[hsl(var(--muted-foreground))]">
+                    {socialHome.latestStructuredInteraction.note}
+                  </div>
+                )}
+              </div>
+            )}
 
-        {dateEntries.length === 0 && (
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">No entries for this date</p>
+            {socialHome.recentContacts.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs text-[hsl(var(--muted-foreground))] uppercase tracking-[0.16em]">Recent contacts</div>
+                <div className="flex flex-wrap gap-2">
+                  {socialHome.recentContacts.slice(0, 5).map((contact) => (
+                    <div key={contact.contactId} className="surface-chip flex items-center gap-2 rounded-2xl px-3 py-1.5 text-xs text-[hsl(var(--muted-foreground))]">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[hsl(var(--primary)/0.12)] text-[10px] font-semibold text-[hsl(var(--primary))]">
+                        {contact.initials}
+                      </div>
+                      <span>{contact.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {hasLegacy && (
+              <div className="rounded-2xl border border-[hsl(var(--border)/0.5)] bg-white/[0.03] p-3 text-sm text-[hsl(var(--muted-foreground))]">
+                Legacy Social entries exist, but they are not counted as structured activity.
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

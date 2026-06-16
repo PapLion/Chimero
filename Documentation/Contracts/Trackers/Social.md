@@ -6,7 +6,7 @@ Social is both a tracker for logged interactions and a small personal CRM surfac
 
 ## 2. Current Implementation Status
 
-- Status: LINKED_SOCIAL_CRM_FOUNDATION_PARTIAL.
+- Status: LINKED_SOCIAL_CRM_FOUNDATION_WITH_STRUCTURED_READ_MODELS.
 - Canonical structured Social writes require `entryId`, `method`, and `moodImpact`; legacy `mood` remains read-only compatibility data.
 - New Quick Entry Social submissions write the base `entries` row and linked `contact_interactions` rows transactionally through `add-entry`.
 - New structured interactions are created with `entryId` set to the new Social entry ID. New Quick Entry Social writes must not create `entryId: null` interactions.
@@ -32,15 +32,15 @@ Social is both a tracker for logged interactions and a small personal CRM surfac
 
 ### 3.2 BentoGrid / Home Widget Read Model
 
-- The existing Social widget remains generic/compact.
-- It can summarize selected-day generic Social values/counts.
+- The Social widget now uses the canonical structured Social home read model.
+- It shows today entry count, distinct contact count, the latest structured interaction, recent contacts, and legacy structured-vs-unstructured separation.
 - It must not imply Mood correlations, reminders delivered by the OS, or full relationship intelligence.
-- Legacy generic Social entries may still appear as unstructured activity.
+- Legacy Social entries may still appear as unstructured activity, but they do not inflate structured contact metrics.
 
 ### 3.3 Tracker Detail / Entries Tab Read Model
 
-- Generic Social entries remain readable with value, note/context, timestamp, tags, asset indicator, edit, and delete.
-- Structured linked interaction data is persisted in `contact_interactions` and available through contact history endpoints.
+- Tracker Detail and Entries use the canonical structured Social summary when linked interactions exist.
+- Structured entries expose contacts, method, per-contact mood impact, note/context, timestamp, tags, and asset data through the shared summary projection.
 - Legacy rows are explicitly unstructured when no linked interaction data exists.
 
 ### 3.4 Tracker Detail / Statistics Tab Read Model
@@ -63,9 +63,9 @@ Social is both a tracker for logged interactions and a small personal CRM surfac
 
 ### 3.6 Calendar Selected-Day Summary Read Model
 
-- Calendar continues to show selected-day generic Social entries through the existing entry/calendar path.
-- New linked interactions share the Social entry timestamp, so future selected-day enrichment can join by `entryId` without note parsing.
-- Legacy/null-entry interaction rows are not inferred from notes.
+- Calendar aggregates structured Social interactions underneath one base entry and preserves method, per-contact mood impact, note/context, timestamp, tags, and asset data.
+- Legacy/null-entry interaction rows remain readable but explicitly unstructured.
+- No note parsing is used to infer Social contacts or method.
 
 ### 3.7 Contact Page / CRM
 

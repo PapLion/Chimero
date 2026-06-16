@@ -1,9 +1,10 @@
 import { getDb } from '@packages/db/database'
-import { entries, entryFood, entryGaming, entryHealth, entryIntake, entryWeight, intakeItems, symptoms, trackers } from '@packages/db'
-import { eq } from 'drizzle-orm'
+import { contactInteractions, contacts, entries, entryFood, entryGaming, entryHealth, entryIntake, entryWeight, intakeItems, symptoms, trackers } from '@packages/db'
+import { asc, eq, inArray } from 'drizzle-orm'
 import {
   buildCalendarDayEntry,
   buildLegacyWorkoutSessionReadModel,
+  buildStructuredSocialSummary,
   getTaskActiveDate,
   getTaskStateForDate,
   isTaskTrackerLike,
@@ -11,6 +12,7 @@ import {
 } from '@contracts/domain'
 import type { CalendarDayEntry, CalendarMonthData } from '@contracts/features/calendar'
 import type { Entry, MealType, Tracker } from '@contracts/contracts'
+import { getTrackerIdentity } from '@contracts/features/tracking'
 import { getEntryTagIds } from '../tags/service'
 
 function parseJsonObject(value: unknown): Record<string, unknown> {
@@ -85,6 +87,45 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
   const entriesByDate: Record<string, CalendarDayEntry[]> = {}
   const activeDaysSet = new Set<number>()
   const tagIdsByEntry = await getEntryTagIds(rows.map((row) => Number(row.id)))
+  const entryIds = rows.map((row) => Number(row.id)).filter((id) => Number.isInteger(id) && id > 0)
+
+  const structuredSocialRows = entryIds.length > 0
+    ? await db
+      .select({
+        id: contactInteractions.id,
+        entryId: contactInteractions.entryId,
+        contactId: contactInteractions.contactId,
+        contactName: contacts.name,
+        contactAvatarAssetId: contacts.avatarAssetId,
+        method: contactInteractions.method,
+        moodImpact: contactInteractions.moodImpact,
+        timestamp: contactInteractions.timestamp,
+        notes: contactInteractions.notes,
+      })
+      .from(contactInteractions)
+      .leftJoin(contacts, eq(contacts.id, contactInteractions.contactId))
+      .where(inArray(contactInteractions.entryId, entryIds))
+      .orderBy(asc(contactInteractions.entryId), asc(contactInteractions.id))
+    : []
+
+  const socialInteractionsByEntry = new Map<number, Entry['socialInteractions']>()
+  const contactAvatarById = new Map<number, number | null>()
+  for (const row of structuredSocialRows) {
+    if (row.entryId == null) continue
+    const contactName = row.contactName ?? null
+    const interaction = {
+      contactId: row.contactId,
+      contactName,
+      contactInitials: contactName ? undefined : null,
+      method: row.method,
+      moodImpact: row.moodImpact,
+      note: row.notes ?? null,
+    } as NonNullable<Entry['socialInteractions']>[number]
+    const list = socialInteractionsByEntry.get(row.entryId) ?? []
+    list.push(interaction)
+    socialInteractionsByEntry.set(row.entryId, list)
+    contactAvatarById.set(row.contactId, row.contactAvatarAssetId == null ? null : Number(row.contactAvatarAssetId))
+  }
 
   for (const r of rows) {
     const entry: Entry = {
@@ -151,6 +192,24 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
       type: r.trackerType === 'binary' ? 'binary' : r.trackerType === 'text' || r.trackerType === 'composite' ? 'list' : r.trackerType ?? 'numeric',
       icon: r.trackerIcon,
     }
+    const trackerIdentity = getTrackerIdentity({
+      name: tracker.name,
+      icon: tracker.icon,
+      config: {},
+    })
+    const socialInteractions = socialInteractionsByEntry.get(r.id) ?? []
+    const social = trackerIdentity === 'social'
+      ? buildStructuredSocialSummary({
+          id: entry.id,
+          trackerId: entry.trackerId,
+          timestamp: entry.timestamp,
+          dateStr: entry.dateStr,
+          note: entry.note,
+          assetId: entry.assetId ?? null,
+          tagIds: entry.tagIds ?? [],
+          socialInteractions,
+        }, contactAvatarById)
+      : undefined
     const displayDates = new Set<string>()
     if (r.dateStr >= monthStart && r.dateStr <= monthEnd) displayDates.add(r.dateStr)
     if (isTaskTrackerLike(tracker)) {
@@ -169,7 +228,7 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
     if (!entriesByDate[dateStr]) entriesByDate[dateStr] = []
       const taskState = isTaskTrackerLike(tracker) ? getTaskStateForDate(entry, dateStr) : 'hidden'
       const taskMetadata = parseTaskStateMetadata(entry.metadata)
-    entriesByDate[dateStr].push(buildCalendarDayEntry({
+      entriesByDate[dateStr].push(buildCalendarDayEntry({
       id: r.id,
       trackerId: r.trackerId,
       value: r.value,
@@ -178,6 +237,7 @@ export async function getCalendarMonth(year: number, month: number): Promise<Cal
       dateStr,
       assetId: r.assetId,
       tagIds: tagIdsByEntry.get(r.id) ?? [],
+      social,
       food: entry.food,
       intake: entry.intake,
       task: taskState === 'hidden' || !taskMetadata

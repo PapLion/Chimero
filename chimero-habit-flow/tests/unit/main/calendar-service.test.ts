@@ -20,7 +20,10 @@ type QueryRows = Array<Record<string, unknown>>
 function createQuery(rows: QueryRows) {
   const query: Record<string, unknown> = {}
   query.leftJoin = vi.fn(() => query)
+  query.where = vi.fn(() => query)
   query.orderBy = vi.fn(() => rows)
+  query.limit = vi.fn(() => query)
+  query.all = vi.fn(() => rows)
   return query
 }
 
