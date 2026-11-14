@@ -8,8 +8,8 @@
  */
 import { app } from 'electron';
 import { join, resolve, isAbsolute } from 'path';
-import { existsSync, readdirSync, unlinkSync } from 'fs';
-import { initDb, getDb, getRawDb, closeDb } from '@packages/db/database';
+import { existsSync, readdirSync } from 'fs';
+import { initDb, getDb, getRawDb } from '@packages/db/database';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { trackers, entries } from '@packages/db/schema';
 import { eq, sql } from 'drizzle-orm';
@@ -129,58 +129,25 @@ function ensureRemindersColumns(): void {
   }
 }
 
-/**
- * If schema drift is detected (missing is_favorite or dashboard_layout), hard-reset the DB:
- * close connection, delete file, re-init, re-run migrations.
- */
-function ensureSchemaAndMaybeReset(
-  dbPath: string,
-  migrationsFolder: string,
-  maxRetries: number = 1
-): void {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const diag = runSchemaDiagnostic();
-
-    console.log('[DB DIAGNOSTIC] Columns in trackers table:', diag.trackersColumns);
-    if (!diag.trackersTableExists) {
-      console.log('[DB DIAGNOSTIC] Table "trackers" does not exist!');
-    }
-    if (diag.settingsTableExists) {
-      console.log('[DB DIAGNOSTIC] Columns in settings table:', diag.settingsColumns);
-    } else {
-      console.log('[DB DIAGNOSTIC] Table "settings" does not exist (yet).');
-    }
-
-    const drift = !diag.hasIsFavorite || !diag.hasDashboardLayout;
-    if (!drift) {
-      console.log('[DB DIAGNOSTIC] Schema OK (is_favorite and dashboard_layout present).');
-      return;
-    }
-
-    if (attempt >= maxRetries) {
-      console.error('[DB FIX] Schema drift still present after reset. Columns:', diag.trackersColumns);
-      throw new Error(
-        `Database schema drift: missing ${!diag.hasIsFavorite ? 'is_favorite ' : ''}${!diag.hasDashboardLayout ? 'dashboard_layout' : ''}. Check migrations.`
-      );
-    }
-
-    console.log('[DB FIX] Schema drift detected. Hard resetting database...');
-    closeDb();
-    try {
-      if (existsSync(dbPath)) {
-        unlinkSync(dbPath);
-        console.log('[DB FIX] Deleted', dbPath);
-      }
-    } catch (e) {
-      console.error('[DB FIX] Failed to delete DB file:', e);
-      throw new Error(`Database reset failed: could not delete ${dbPath}`);
-    }
-
-    initDb(dbPath);
-    const db = getDb();
-    migrate(db, { migrationsFolder });
-    console.log('[DB FIX] Re-ran migrations after reset.');
+/** Repair only known additive drift; never delete or recreate a user's database. */
+export function ensureSchemaIntegrity(): void {
+  const raw = getRawDb();
+  const diag = runSchemaDiagnostic();
+  if (!raw || !diag.trackersTableExists || !diag.settingsTableExists) {
+    throw new Error('Database schema is incomplete. Existing data has been preserved; restore a backup or repair migrations before retrying.');
   }
+  raw.transaction(() => {
+    if (!diag.hasIsFavorite) {
+      raw.prepare('ALTER TABLE trackers ADD COLUMN is_favorite integer DEFAULT false').run();
+    }
+    if (!diag.hasDashboardLayout) {
+      raw.prepare('ALTER TABLE settings ADD COLUMN dashboard_layout text').run();
+    }
+    const repaired = runSchemaDiagnostic();
+    if (!repaired.hasIsFavorite || !repaired.hasDashboardLayout) {
+      throw new Error('Database schema repair failed. Existing data has been preserved.');
+    }
+  })();
 }
 
 /**
@@ -259,7 +226,7 @@ export function prepareConsolidatedMigrationTransition(_migrationsFolder: string
 /**
  * Initializes the database and runs pending migrations.
  * Call from app.whenReady() BEFORE creating BrowserWindow.
- * Verifies schema after migrate; on drift, hard-resets DB and re-migrates (dev auto-recovery).
+ * Verifies schema after migrate; known drift is repaired additively, otherwise startup fails safely.
  * @throws Error if migration fails - app should quit on failure
  */
 export function setupDatabase(): void {
@@ -308,7 +275,7 @@ export function setupDatabase(): void {
     throw new Error(`Database migration failed: ${message}`);
   }
 
-  ensureSchemaAndMaybeReset(dbPath, migrationsFolder);
+  ensureSchemaIntegrity();
 
   // Seed default trackers (Books, Gaming, Media, Diet) if they don't exist
   seedDefaultTrackers();

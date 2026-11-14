@@ -130,3 +130,35 @@ describe('database migration transition', () => {
     expect(migration).not.toMatch(/DELETE FROM `?entries`?/i)
   })
 })
+
+describe('non-destructive schema repair', () => {
+  it('adds missing columns while retaining existing records and is idempotent', async () => {
+    const columns: Record<string, string[]> = { trackers: ['id', 'name'], settings: ['id'] }
+    const statements: string[] = []
+    const raw = {
+      transaction: (operation: () => void) => operation,
+      prepare: (statement: string) => {
+        statements.push(statement)
+        const table = statement.includes('trackers') ? 'trackers' : 'settings'
+        return {
+          all: () => columns[table].map(name => ({ name })),
+          run: () => columns[table].push(table === 'trackers' ? 'is_favorite' : 'dashboard_layout'),
+        }
+      },
+    }
+    mocks.getRawDbMock.mockReturnValue(raw)
+    const { ensureSchemaIntegrity } = await import('../../../apps/electron/src/main/database')
+    ensureSchemaIntegrity()
+    ensureSchemaIntegrity()
+    expect(statements.filter(sql => sql.startsWith('ALTER'))).toHaveLength(2)
+    expect(statements.some(sql => /DELETE|DROP|UPDATE/i.test(sql))).toBe(false)
+  })
+
+  it('fails closed for an unknown incomplete schema without writing', async () => {
+    const run = vi.fn()
+    mocks.getRawDbMock.mockReturnValue({ prepare: () => ({ all: () => [], run }) })
+    const { ensureSchemaIntegrity } = await import('../../../apps/electron/src/main/database')
+    expect(() => ensureSchemaIntegrity()).toThrow('Existing data has been preserved')
+    expect(run).not.toHaveBeenCalled()
+  })
+})

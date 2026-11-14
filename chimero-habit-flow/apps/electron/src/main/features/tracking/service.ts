@@ -50,8 +50,9 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const totalActivities = Number((actRows as unknown as { count: number }[])[0]?.count ?? 0)
 
   const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10)
+  const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const monthStart = `${monthPrefix}-01`
+  const monthEnd = `${monthPrefix}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`
   const monthRows = await db
     .select({ count: sql<number>`count(*)` })
     .from(entries)
@@ -74,9 +75,9 @@ function getStatsBucket(dateStr: string, groupBy: StatsQueryRequest['groupBy']):
   if (groupBy === 'month') return dateStr.slice(0, 7)
   if (groupBy === 'week') {
     const date = new Date(dateStr)
-    const day = date.getDay()
-    const diffToMonday = date.getDate() - day + (day === 0 ? -6 : 1)
-    date.setDate(diffToMonday)
+    const day = date.getUTCDay()
+    const diffToMonday = date.getUTCDate() - day + (day === 0 ? -6 : 1)
+    date.setUTCDate(diffToMonday)
     return date.toISOString().slice(0, 10)
   }
   return dateStr
@@ -186,6 +187,13 @@ export async function calculateImpact(
   const minSampleSize = options.minSampleSize ?? MIN_SAMPLE_SIZE_DEFAULT
   const confidenceThreshold = options.confidenceThreshold ?? CONFIDENCE_THRESHOLD_DEFAULT
 
+  if (!Number.isInteger(minSampleSize) || minSampleSize < 1) {
+    throw new Error('Minimum sample size must be a positive integer')
+  }
+  if (!Number.isFinite(confidenceThreshold) || confidenceThreshold < 0 || confidenceThreshold > 100) {
+    throw new Error('Confidence threshold must be between 0 and 100')
+  }
+
   const db = getDb()
 
   const cutoffDate = new Date()
@@ -214,39 +222,30 @@ export async function calculateImpact(
   const sourceEntries = await sourceQuery
   const targetEntries = await targetQuery
 
-  const sourceMap = new Map<string, { value: number | null; hasEntry: boolean }>()
+  // A day is the sampling unit. Preserve every check-in rather than letting
+  // database row order choose the day's outcome. Missing source days are unknown,
+  // not evidence that an activity did not occur.
+  const sourceMap = new Map<string, boolean>()
   sourceEntries.forEach((entry) => {
-    sourceMap.set(entry.dateStr, { value: entry.value, hasEntry: entry.hasEntry })
+    sourceMap.set(entry.dateStr, Boolean(sourceMap.get(entry.dateStr) || entry.hasEntry))
   })
-
-  const targetMap = new Map<string, number | null>()
+  const targetMap = new Map<string, { total: number; count: number }>()
   targetEntries.forEach((entry) => {
-    targetMap.set(entry.dateStr, entry.value)
+    if (entry.value === null || !Number.isFinite(entry.value)) return
+    const day = targetMap.get(entry.dateStr) ?? { total: 0, count: 0 }
+    day.total += entry.value
+    day.count += 1
+    targetMap.set(entry.dateStr, day)
   })
 
   const cohortA: number[] = []
   const cohortB: number[] = []
-
-  const formatDateLocal = (date: Date): string => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
-
-  for (const [sourceDate, sourceData] of sourceMap) {
-    const targetDate = new Date(sourceDate)
-    targetDate.setDate(targetDate.getDate() + offsetDays)
-    const targetDateStr = formatDateLocal(targetDate)
-
-    const targetValue = targetMap.get(targetDateStr)
-
-    if (targetValue !== undefined && targetValue !== null) {
-      if (sourceData.hasEntry) {
-        cohortA.push(targetValue)
-      } else {
-        cohortB.push(targetValue)
-      }
+  for (const [sourceDate, occurred] of sourceMap) {
+    const targetDate = new Date(`${sourceDate}T00:00:00.000Z`)
+    targetDate.setUTCDate(targetDate.getUTCDate() + offsetDays)
+    const target = targetMap.get(targetDate.toISOString().slice(0, 10))
+    if (target) {
+      (occurred ? cohortA : cohortB).push(target.total / target.count)
     }
   }
 
@@ -260,10 +259,8 @@ export async function calculateImpact(
 
   let impact = 0
 
-  if (baselineAvg <= 0) {
-    impact = impactedAvg > 0 ? MAX_IMPACT_PERCENTAGE : 0
-  } else {
-    const rawImpact = ((impactedAvg - baselineAvg) / baselineAvg) * 100
+  if (cohortA.length > 0 && cohortB.length > 0 && baselineAvg !== 0) {
+    const rawImpact = ((impactedAvg - baselineAvg) / Math.abs(baselineAvg)) * 100
     if (!Number.isFinite(rawImpact)) {
       impact = 0
     } else {
@@ -278,7 +275,9 @@ export async function calculateImpact(
     : 0
 
   const balanceBonus = cohortBalance * BALANCE_BONUS_FACTOR
-  const confidence = Math.min(100, baseConfidence + balanceBonus)
+  const confidence = cohortA.length >= minSampleSize && cohortB.length >= minSampleSize
+    ? Math.min(100, baseConfidence + balanceBonus)
+    : 0
 
   const insightType: EnhancedCorrelationResult['insightType'] =
     Math.abs(impact) > IMPACT_THRESHOLD_POSITIVE && confidence > confidenceThreshold
@@ -286,7 +285,7 @@ export async function calculateImpact(
       : 'neutral_correlation'
 
   const dataQuality: CorrelationMetadata['dataQuality'] = assessDataQuality(totalSamples, cohortBalance)
-  const hasSufficientData = totalSamples >= minSampleSize && dataQuality !== 'low'
+  const hasSufficientData = cohortA.length >= minSampleSize && cohortB.length >= minSampleSize && dataQuality !== 'low'
   const userFriendlyConfidence = generateConfidenceDescription(confidence, totalSamples)
   const recommendedActions = generateRecommendations(insightType, dataQuality, hasSufficientData)
 
@@ -346,19 +345,19 @@ function generateRecommendations(
 
   switch (insightType) {
     case 'positive_synergy':
-      recommendations.push('Consider doing these habits together')
+      recommendations.push('Higher target values were observed on activity days; this does not establish a benefit or cause')
       if (dataQuality === 'medium') {
         recommendations.push('Track more consistently to strengthen this insight')
       }
       break
     case 'destructive_interference':
-      recommendations.push('Consider separating these habits')
+      recommendations.push('Lower target values were observed on activity days; this does not establish harm or cause')
       if (dataQuality === 'medium') {
         recommendations.push('Monitor this relationship closely')
       }
       break
     case 'neutral_correlation':
-      recommendations.push('These habits appear independent')
+      recommendations.push('No clear difference was detected in the recorded days')
       if (dataQuality === 'high') {
         recommendations.push('Focus on other habit combinations')
       }
