@@ -258,7 +258,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
     () => (isBooksTrackerType ? buildBooksTrackerReadModel(trackerEntries, selectedDate) : null),
     [isBooksTrackerType, trackerEntries, selectedDate],
   )
-  const workoutSessions = workoutHistory?.structuredSessions ?? []
+  const workoutSessions = useMemo(() => workoutHistory?.structuredSessions ?? [], [workoutHistory?.structuredSessions])
   const workoutSessionByEntryId = useMemo(
     () => new Map(workoutSessions.map((session) => [session.entryId, session])),
     [workoutSessions],
@@ -626,7 +626,7 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
         fullDate: dateStr,
       }
     })
-  }, [trackerEntries, tracker, chartTimeFilter, selectedDate, isWeightTracker, isGamingTracker, isFoodTrackerType, isIntakeTracker, gamingStatisticsReadModel.chartData, weightDetail?.chartData, foodDetailReadModel?.chartData, intakeDetailReadModel?.chartData])
+  }, [trackerEntries, tracker, chartTimeFilter, selectedDate, isWeightTracker, isGamingTracker, isFoodTrackerType, isIntakeTracker, gamingStatisticsReadModel.chartData, weightDetail?.chartData, foodDetailReadModel?.chartData, intakeDetailReadModel?.chartData, isHealthTracker, healthDetailReadModel?.chartData])
 
   // Heatmap data: "Year in Pixels"
   const heatmapData = useMemo(() => {

@@ -419,7 +419,7 @@ export function StructuredWorkoutEditDialog({ entry, tracker, open, onOpenChange
         </div>
       ) : isError || !workoutSession ? (
         <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-100">
-          We couldn't load this structured workout.
+          We could not load this structured workout.
           {isError && error ? ` ${(error as Error).message}` : ""}
         </div>
       ) : draft ? (
