@@ -1,5 +1,4 @@
 import { getWebDbSync } from '../db'
-import { entries, entriesToTags, trackers, workoutRoutineExercises, workoutRoutines, workoutSessionExercises, workoutSessions, workoutSets } from '../../../../packages/db/src/schema'
 import {
   buildExerciseProgressReadModel,
   buildWorkoutCalendarReadModel,
@@ -254,8 +253,8 @@ function getWorkoutHistoryEntries(trackerId: number, limit = 365): { structuredS
     if (session) {
       structuredSessions.push(session)
     } else {
-      const metadata = parseJsonObject(row.metadata) as Record<string, any>
-      const loadUnit = normalizeWorkoutWeightUnit(metadata.workoutSession?.loadUnit ?? metadata.workout?.loadUnit ?? metadata.unit) ?? null
+      const metadata = parseJsonObject(row.metadata)
+      const loadUnit = normalizeWorkoutWeightUnit(parseJsonObject(metadata.workoutSession).loadUnit ?? parseJsonObject(metadata.workout).loadUnit ?? metadata.unit) ?? null
       legacySessions.push(buildWorkoutLegacyEntryReadModel({
         id: Number(row.id),
         trackerId: Number(row.tracker_id),
@@ -352,7 +351,7 @@ export function createWorkoutSession(data: CreateWorkoutSessionRequest): Workout
 export function updateWorkoutSession(entryId: number, updates: UpdateWorkoutSessionRequest): WorkoutSessionDetailResponse | null {
   const existing = loadSessionByEntryId(entryId)
   if (!existing) throw new Error('Workout session not found')
-  const exercises = updates.exercises ? validateSessionExercises(updates.exercises) : existing.exercises.map((exercise, index) => ({
+  const exercises = updates.exercises ? validateSessionExercises(updates.exercises) : existing.exercises.map((exercise) => ({
     exerciseId: exercise.exerciseId,
     sourceExerciseId: exercise.sourceExerciseId ?? null,
     name: exercise.exerciseName,

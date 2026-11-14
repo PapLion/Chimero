@@ -48,7 +48,9 @@ class PreparedStatement {
   constructor(
     private readonly owner: WebDb,
     private readonly sql: string,
-  ) {}
+  ) {
+    // TypeScript parameter properties initialize this instance.
+  }
 
   all(...params: unknown[]): Record<string, unknown>[] {
     const stmt = this.owner.raw.prepare(this.sql)
@@ -83,7 +85,9 @@ export class WebDb {
   constructor(
     readonly raw: SqlJsDatabase,
     private readonly dbPath: string,
-  ) {}
+  ) {
+    // TypeScript parameter properties initialize this instance.
+  }
 
   exec(sql: string): void {
     this.raw.exec(sql)

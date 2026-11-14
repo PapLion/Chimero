@@ -2,7 +2,6 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createReadStream, existsSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import { getWebDb, getAssetsRoot, getWebDbPath, type WebDb } from '../db'
-import { books, bookActivities, entryHealth, entryIntake, intakeItems, symptoms, workoutRoutines, workoutRoutineExercises, workoutSessions, workoutSessionExercises, workoutSets } from '../../../../packages/db/src/schema'
 import { buildTagTree, resolveInheritedTagIds } from '../../../../packages/shared/src/domain/tags'
 import {
   buildCalendarDayEntry,
@@ -15,13 +14,6 @@ import {
   buildHealthHomeWidgetReadModel,
   buildIntakeDetailReadModel,
   buildIntakeHomeWidgetReadModel,
-  buildWorkoutCalendarReadModel,
-  buildWorkoutGraphReadModel,
-  buildWorkoutHomeReadModel,
-  buildWorkoutLegacyEntryReadModel,
-  buildWorkoutRoutineReadModel,
-  buildWorkoutSessionReadModel,
-  buildWorkoutStatisticsReadModel,
   entryToFoodHistoryItem,
   entryToBookHistoryItem,
   entryToGamingReadModel,
@@ -50,7 +42,6 @@ import {
   validateUnitOptional,
   isTaskTrackerLike,
   parseTaskStateMetadata,
-  normalizeWorkoutWeightUnit,
   computeContactLastTalkedTimestamp,
   normalizeSocialMethod,
   normalizeSocialMoodImpact,
@@ -3097,7 +3088,7 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
 
   const workoutSessionMatch = path.match(/^\/api\/workouts\/sessions\/(\d+)$/)
   if (path === '/api/workouts/sessions' && method === 'POST') {
-    json(res, 200, createWorkoutSession(await readBody(req) as any))
+    json(res, 200, createWorkoutSession(await readBody(req) as Parameters<typeof createWorkoutSession>[0]))
     return
   }
 
@@ -3107,7 +3098,7 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
   }
 
   if (workoutSessionMatch && method === 'PUT') {
-    json(res, 200, updateWorkoutSession(Number(workoutSessionMatch[1]), await readBody(req) as any))
+    json(res, 200, updateWorkoutSession(Number(workoutSessionMatch[1]), await readBody(req) as Parameters<typeof updateWorkoutSession>[1]))
     return
   }
 
@@ -3118,7 +3109,7 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
 
   const workoutRoutineMatch = path.match(/^\/api\/workouts\/routines\/(\d+)$/)
   if (path === '/api/workouts/routines' && method === 'POST') {
-    json(res, 200, createWorkoutRoutine(await readBody(req) as any))
+    json(res, 200, createWorkoutRoutine(await readBody(req) as Parameters<typeof createWorkoutRoutine>[0]))
     return
   }
 
@@ -3128,7 +3119,7 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
   }
 
   if (workoutRoutineMatch && method === 'PUT') {
-    json(res, 200, updateWorkoutRoutine(Number(workoutRoutineMatch[1]), await readBody(req) as any))
+    json(res, 200, updateWorkoutRoutine(Number(workoutRoutineMatch[1]), await readBody(req) as Parameters<typeof updateWorkoutRoutine>[1]))
     return
   }
 
@@ -3180,7 +3171,7 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promi
   }
 
   if (path === '/api/workouts/routines/instantiate' && method === 'POST') {
-    json(res, 200, instantiateWorkoutFromRoutine(await readBody(req) as any))
+    json(res, 200, instantiateWorkoutFromRoutine(await readBody(req) as Parameters<typeof instantiateWorkoutFromRoutine>[0]))
     return
   }
 

@@ -13,8 +13,8 @@
     "dev:web": "pnpm --filter chimero-web dev",
     "db:migrate": "turbo run db:migrate",
     "lint": "eslint \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\" --max-warnings 0",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "node scripts/test-unit.cjs",
+    "test:watch": "node scripts/test-unit.cjs --watch",
     "test:e2e": "playwright test",
     "build": "pnpm --filter chimero-electron build",
     "build:web": "pnpm --filter chimero-web build",
@@ -23,7 +23,7 @@
   },
   "keywords": [],
   "license": "ISC",
-  "packageManager": "pnpm@10.28.2", 
+  "packageManager": "pnpm@10.28.2",
   "type": "commonjs",
   "build": {
     "appId": "com.paplion.chimero",
@@ -46,7 +46,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "apps/electron/resources/icon.ico" 
+      "icon": "apps/electron/resources/icon.ico"
     },
     "nsis": {
       "oneClick": false,
@@ -76,5 +76,8 @@
     "@vitest/ui": "^2.1.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"
+  },
+  "engines": {
+    "node": ">=22 <25"
   }
 }
