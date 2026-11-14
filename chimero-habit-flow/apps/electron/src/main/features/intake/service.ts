@@ -1,3 +1,4 @@
+import type { DrizzleTransaction } from '@packages/db/database'
 import { and, desc, eq } from 'drizzle-orm'
 import { entries, entriesToTags, entryIntake, intakeItems, trackers } from '@packages/db'
 import { getDb } from '@packages/db/database'
@@ -41,7 +42,7 @@ async function isIntakeTracker(trackerId: number): Promise<boolean> {
 }
 
 async function findOrCreateItem(
-  tx: any,
+  tx: DrizzleTransaction,
   trackerId: number,
   itemName: string,
   itemType: ReturnType<typeof validateIntakeItemType>,

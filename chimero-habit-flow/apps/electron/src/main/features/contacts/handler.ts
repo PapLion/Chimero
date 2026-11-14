@@ -1,3 +1,4 @@
+import type { DrizzleTransaction } from '@packages/db/database'
 import { ipcMain } from 'electron'
 import { asc, eq, desc, sql } from 'drizzle-orm'
 import { contacts, contactInteractions, contactProfileBlocks, contactReminderSettings, entries, trackers } from '@packages/db'
@@ -74,7 +75,7 @@ function normalizeReminderSettingsInput(
   }
 }
 
-function refreshContactLastTalked(tx: any, contactId: number): void {
+function refreshContactLastTalked(tx: DrizzleTransaction, contactId: number): void {
   const rows = tx
     .select({ timestamp: contactInteractions.timestamp })
     .from(contactInteractions)

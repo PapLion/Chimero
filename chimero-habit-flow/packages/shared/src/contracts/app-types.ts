@@ -851,7 +851,7 @@ export interface CreateBookRequest {
   finishedDate?: string | null
 }
 
-export interface UpdateBookRequest extends Partial<CreateBookRequest> {}
+export type UpdateBookRequest = Partial<CreateBookRequest>
 
 export interface CreateBookActivityRequest {
   trackerId: number

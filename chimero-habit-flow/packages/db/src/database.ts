@@ -8,6 +8,8 @@ import * as schema from './schema';
 
 export type DrizzleDB = ReturnType<typeof drizzle<typeof schema>>;
 
+export type DrizzleTransaction = Parameters<Parameters<DrizzleDB['transaction']>[0]>[0];
+
 let _db: DrizzleDB | null = null;
 let _rawDb: Database.Database | null = null;
 
@@ -43,7 +45,7 @@ export function getRawDb(): Database.Database | null {
 
 /**
  * Close the database connection and clear the singleton.
- * Used before deleting the DB file for a hard reset (dev recovery).
+ * Used during shutdown and when switching disposable test databases.
  */
 export function closeDb(): void {
   if (_rawDb) {

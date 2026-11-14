@@ -1,3 +1,4 @@
+import type { DrizzleTransaction } from '@packages/db/database'
 import { and, desc, eq } from 'drizzle-orm'
 import { entries, entriesToTags, entryHealth, symptoms, trackers } from '@packages/db'
 import { getDb } from '@packages/db/database'
@@ -73,7 +74,7 @@ async function tagsForEntry(entryId: number) {
   return allTags.filter((tag) => tagIds.has(tag.id))
 }
 
-async function findOrCreateSymptom(tx: any, trackerId: number, symptomName: string, category: ReturnType<typeof validateSymptomCategory>): Promise<number> {
+async function findOrCreateSymptom(tx: DrizzleTransaction, trackerId: number, symptomName: string, category: ReturnType<typeof validateSymptomCategory>): Promise<number> {
   const symptomKey = normalizeSymptomKey(symptomName)
   const [existing] = await tx
     .select()

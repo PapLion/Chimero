@@ -1,3 +1,4 @@
+import type { DrizzleTransaction } from '@packages/db/database'
 import { desc, eq, inArray } from 'drizzle-orm'
 import {
   entries,
@@ -335,7 +336,7 @@ function buildSessionMetadata(session: WorkoutSessionReadModel): JsonRecord {
   }
 }
 
-async function persistSessionTags(tx: any, entryId: number, tagIds?: number[]): Promise<void> {
+async function persistSessionTags(tx: DrizzleTransaction, entryId: number, tagIds?: number[]): Promise<void> {
   await replaceEntryTags(entryId, tagIds, tx)
 }
 

@@ -1,3 +1,4 @@
+import type { DrizzleTransaction } from '@packages/db/database'
 import { ipcMain } from 'electron'
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { books, bookActivities, contactInteractions, contacts, entries, entriesToTags, entryFood, entryGaming, entryHealth, entryIntake, entryWeight, intakeItems, symptoms, trackers } from '@packages/db'
@@ -88,7 +89,7 @@ function normalizeSocialInteractions(data: BaseEntryRequest | EntryUpdateRequest
   })
 }
 
-function refreshContactsLastTalked(tx: any, contactIds: number[]): void {
+function refreshContactsLastTalked(tx: DrizzleTransaction, contactIds: number[]): void {
   const uniqueIds = Array.from(new Set(contactIds)).filter((id) => Number.isInteger(id) && id > 0)
   for (const contactId of uniqueIds) {
     const latestRows = readQueryMany<{ timestamp: number }>(tx
@@ -126,7 +127,7 @@ async function prepareValidatedTagIds(tagIds?: number[]): Promise<number[] | und
   return normalized === null ? undefined : normalized
 }
 
-function commitEntryTags(entryId: number, tagIds: number[] | undefined, tx: any): void {
+function commitEntryTags(entryId: number, tagIds: number[] | undefined, tx: DrizzleTransaction): void {
   if (isMockedReplaceEntryTags()) {
     void tagsService.replaceEntryTags(entryId, tagIds, tx)
     return
