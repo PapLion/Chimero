@@ -79,6 +79,8 @@ export function Header() {
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Previous day"
+          title="Previous day"
           onClick={handlePreviousDay}
           className="shell-interactive h-10 w-10 rounded-full border border-[hsl(var(--border)/0.7)] bg-white/5 text-[hsl(var(--foreground))] hover:border-[hsl(var(--border)/0.82)] hover:bg-white/8"
         >
@@ -122,6 +124,8 @@ export function Header() {
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Next day"
+          title="Next day"
           onClick={handleNextDay}
           className="shell-interactive h-10 w-10 rounded-full border border-[hsl(var(--border)/0.7)] bg-white/5 text-[hsl(var(--foreground))] hover:border-[hsl(var(--border)/0.82)] hover:bg-white/8"
         >

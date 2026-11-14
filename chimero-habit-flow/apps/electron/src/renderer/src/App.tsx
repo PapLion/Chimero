@@ -1,5 +1,6 @@
 "use client"
 
+import type { CSSProperties } from "react"
 import { Sidebar } from "@features/dashboard/components/Sidebar"
 import { Header } from "@features/dashboard/components/Header"
 import { BentoGrid } from "@features/dashboard/components/BentoGrid"
@@ -17,7 +18,7 @@ import { ToastHost } from "@shared/components/ToastHost"
 import { ToastProvider } from "@shared/components/toast"
 
 export default function ChimeroApp() {
-  const { currentPage } = useAppStore()
+  const { currentPage, sidebarCollapsed } = useAppStore()
 
   const renderPage = () => {
     switch (currentPage) {
@@ -42,19 +43,20 @@ export default function ChimeroApp() {
 
   return (
     <ToastProvider>
-      <div className="app-shell relative h-[100dvh] overflow-hidden">
+      <div className="app-shell relative h-[100dvh] overflow-hidden" style={sidebarCollapsed ? { "--dashboard-sidebar-width": "5rem" } as CSSProperties : undefined}>
+        <a href="#main-content" className="skip-navigation">Skip to content</a>
         {/* Main App Layout */}
         <div className="relative z-10 flex h-full min-w-0 overflow-hidden">
           {/* Sidebar */}
           <Sidebar />
 
           {/* Main Content */}
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <main id="main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {/* Header */}
             <Header />
 
             {/* Dashboard Content */}
-            <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-6 lg:px-8 lg:py-7">
+            <div className="flex-1 overflow-y-auto px-5 pt-6 pb-24 sm:px-6 lg:px-8 lg:pt-7">
               {renderPage()}
             </div>
           </main>

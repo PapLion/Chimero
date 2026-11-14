@@ -15,7 +15,7 @@
   --secondary: 223 18% 16%;
   --secondary-foreground: 210 28% 97%;
   --muted: 223 14% 18%;
-  --muted-foreground: 220 11% 60%;
+  --muted-foreground: 220 12% 69%;
   --border: 223 14% 24%;
   --input: 223 14% 24%;
   --ring: 266 68% 60%;
@@ -127,7 +127,7 @@
     transition-property: transform, background-color, border-color, color, box-shadow, opacity;
     transition-duration: 150ms;
     transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-    will-change: transform;
+
   }
 
   .shell-interactive:hover {
@@ -139,7 +139,8 @@
   }
 
   .shell-interactive:focus-visible {
-    outline: none;
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 3px;
   }
 
   .page-title {
@@ -183,6 +184,7 @@
 .widget-glow::before {
   content: "";
   position: absolute;
+  pointer-events: none;
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
@@ -233,4 +235,39 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Keep navigation identifiable when the desktop rail is collapsed. */
+@media (min-width: 1024px) {
+  aside[data-collapsed="true"] .lg\:inline,
+  aside[data-collapsed="true"] .lg\:inline-flex,
+  aside[data-collapsed="true"] .lg\:block:not(.sidebar-toggle),
+  aside[data-collapsed="true"] .lg\:list-item { display: none; }
+  aside[data-collapsed="true"] .lg\:justify-start,
+  aside[data-collapsed="true"] .lg\:justify-between { justify-content: center; }
+  aside[data-collapsed="true"] .lg\:px-4 { padding-left: .75rem; padding-right: .75rem; }
+  aside[data-collapsed="true"] .lg\:pl-3 { padding-left: 0; border-left: 0; }
+}
+
+button:focus-visible, a:focus-visible, input:focus-visible,
+select:focus-visible, textarea:focus-visible, [role="button"]:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 3px;
+}
+
+.skip-navigation {
+  position: fixed;
+  top: .75rem;
+  left: .75rem;
+  z-index: 100;
+  transform: translateY(-200%);
+  padding: .75rem 1rem;
+  border-radius: .5rem;
+  background: hsl(var(--primary));
+  color: white;
+}
+.skip-navigation:focus { transform: translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-interactive:hover, .shell-interactive:active { transform: none; }
 }

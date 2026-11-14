@@ -4,7 +4,7 @@ import { useState } from "react"
 import { cn } from "@shared/utils"
 import { useAppStore, type PageType } from "@shared/store"
 import { useTrackers, useStats } from "@shared/queries"
-import { Home, Calendar, ImageIcon, Flame, ChevronDown, ChevronRight, Settings, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, CheckSquare, Tv, Salad, Smartphone, FlaskConical, type LucideIcon } from "lucide-react"
+import { Home, Calendar, ImageIcon, Flame, ChevronDown, ChevronRight, Settings, PanelLeftClose, PanelLeftOpen, Book, Dumbbell, Gamepad2, Smile, Scale, Heart, Coffee, Moon, Sun, Zap, Target, Music, Camera, Wallet, Users, CheckSquare, Tv, Salad, Smartphone, FlaskConical, type LucideIcon } from "lucide-react"
 
 const mainNavigation: { name: string; id: PageType; icon: typeof Home }[] = [
   { name: "Home", id: "home", icon: Home },
@@ -43,7 +43,7 @@ const trackerIconMap: Record<string, LucideIcon> = {
 
 
 export function Sidebar() {
-  const { activeTracker, setActiveTracker, currentPage, setCurrentPage } = useAppStore()
+  const { activeTracker, setActiveTracker, currentPage, setCurrentPage, sidebarCollapsed, toggleSidebar } = useAppStore()
   const { data: trackers = [] } = useTrackers()
   const { data: stats } = useStats()
   const [trackingExpanded, setTrackingExpanded] = useState(true)
@@ -56,6 +56,9 @@ export function Sidebar() {
     return (
       <li key={item.name}>
         <button
+          aria-label={item.name}
+          title={item.name}
+          aria-current={isActive ? "page" : undefined}
           onClick={() => {
             setCurrentPage(item.id)
             setActiveTracker(null)
@@ -81,26 +84,32 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="surface-panel-strong flex h-full min-h-0 w-[var(--dashboard-sidebar-width)] shrink-0 flex-col rounded-r-none border-r border-[hsl(var(--border)/0.68)] shadow-[inset_-1px_0_0_rgba(255,255,255,0.03)]">
+    <aside data-collapsed={sidebarCollapsed} aria-label="Chimero workspace" className="surface-panel-strong flex h-full min-h-0 w-[var(--dashboard-sidebar-width)] shrink-0 flex-col rounded-r-none border-r border-[hsl(var(--border)/0.68)] shadow-[inset_-1px_0_0_rgba(255,255,255,0.03)]">
       <div className="drag-region shrink-0 px-3 pt-4 lg:px-4">
         <div className="surface-panel-strong no-drag flex items-center justify-center gap-3 rounded-3xl px-2 py-3 lg:justify-start lg:px-4">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))] shadow-lg shadow-primary/10">
             <Flame className="h-5 w-5" />
           </div>
           <div className="hidden min-w-0 lg:block">
-            <h1 className="font-display text-lg font-semibold tracking-tight text-[hsl(var(--foreground))]">HabitFlow</h1>
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">Track the rhythm of your day</p>
+            <h1 className="font-display text-lg font-semibold tracking-tight text-[hsl(var(--foreground))]">Chimero</h1>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">Your life, in perspective</p>
           </div>
         </div>
       </div>
 
-      <nav className="no-drag min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 lg:px-4">
+      <button onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!sidebarCollapsed} className="sidebar-toggle mx-auto mt-3 hidden rounded-lg p-2 text-muted-foreground hover:bg-white/5 lg:block">
+        {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+      </button>
+      <nav aria-label="Main navigation" className="no-drag min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 lg:px-4">
         <ul className="space-y-2">
           <li className="hidden px-3 pb-1 pt-2 section-kicker lg:list-item">Navigate</li>
           {mainNavigation.map(renderNavItem)}
 
           <li className="pt-4">
             <button
+              aria-label="Tracking"
+              title="Tracking"
+              aria-expanded={trackingExpanded}
               onClick={() => setTrackingExpanded(!trackingExpanded)}
               className={cn(
                 "shell-interactive group flex w-full items-center justify-center gap-3 rounded-2xl border border-[hsl(var(--border)/0.55)] px-3 py-3 text-left lg:justify-between lg:px-4",
@@ -136,6 +145,9 @@ export function Sidebar() {
                   return (
                     <li key={tracker.id}>
                       <button
+                        aria-label={tracker.name}
+                        title={tracker.name}
+                        aria-current={isActive ? "page" : undefined}
                         onClick={() => {
                           setCurrentPage("home")
                           setActiveTracker(tracker.id)

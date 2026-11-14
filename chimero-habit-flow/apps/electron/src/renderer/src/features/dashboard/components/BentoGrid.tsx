@@ -66,9 +66,9 @@ function mergeLayoutWithTrackers(
 }
 
 export function BentoGrid() {
-  const { activeTracker, selectedDate } = useAppStore()
-  const { data: trackers = [], isLoading: trackersLoading } = useTrackers()
-  const { data: entries = [] } = useEntries({ limit: 500 })
+  const { activeTracker, selectedDate, setCurrentPage } = useAppStore()
+  const { data: trackers = [], isLoading: trackersLoading, isError: trackersError, refetch: retryTrackers } = useTrackers()
+  const { data: entries = [], isLoading: entriesLoading, isError: entriesError, refetch: retryEntries } = useEntries({ limit: 500 })
   const { data: savedLayout } = useDashboardLayout()
   const { data: assetsData = [] } = useAssets({ limit: 200 })
   const saveLayoutMutation = useSaveDashboardLayoutMutation()
@@ -117,9 +117,19 @@ export function BentoGrid() {
 
   const sortedWidgets = [...filteredWidgets].sort((a, b) => a.position - b.position)
 
-  if (trackersLoading) {
+  if (trackersError || entriesError) {
     return (
-      <div className="surface-panel flex min-h-[240px] items-center justify-center rounded-3xl px-6 text-[hsl(var(--muted-foreground))]">
+      <section role="alert" className="surface-panel mx-auto max-w-xl p-8 text-center">
+        <h2 className="page-title">Your data couldn't be loaded</h2>
+        <p className="page-subtitle mt-3">Your saved records have not been changed. Try loading the dashboard again.</p>
+        <button className="mt-5 rounded-xl bg-primary px-5 py-2.5 text-primary-foreground" onClick={() => { void retryTrackers(); void retryEntries() }}>Try again</button>
+      </section>
+    )
+  }
+
+  if (trackersLoading || entriesLoading) {
+    return (
+      <div role="status" className="surface-panel flex min-h-[240px] items-center justify-center rounded-3xl px-6 text-[hsl(var(--muted-foreground))]">
         Loading dashboard...
       </div>
     )
@@ -133,6 +143,17 @@ export function BentoGrid() {
         selectedDate={selectedDate}
         assets={assetsById}
       />
+    )
+  }
+
+  if (trackers.length === 0) {
+    return (
+      <section className="surface-panel mx-auto max-w-xl p-8 text-center">
+        <p className="section-kicker">Make space for what matters</p>
+        <h2 className="page-title mt-3">Your first tracker</h2>
+        <p className="page-subtitle mt-3">Create a tracker for something you'd like to notice over time. Your entries and history stay on this device.</p>
+        <button className="mt-5 rounded-xl bg-primary px-5 py-2.5 text-primary-foreground" onClick={() => setCurrentPage("custom-trackers")}>Create a tracker</button>
+      </section>
     )
   }
 
