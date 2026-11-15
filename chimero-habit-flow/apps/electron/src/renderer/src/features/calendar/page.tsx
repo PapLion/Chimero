@@ -410,7 +410,7 @@ export function CalendarPage() {
                 className="grid grid-cols-7 gap-2"
               >
                 {emptyDays.map((_, index) => (
-                  <div key={`empty-${index}`} className="aspect-square" />
+                  <div key={`empty-${index}`} className="h-16 sm:h-20" />
                 ))}
 
                 {days.map((day) => {
@@ -426,7 +426,7 @@ export function CalendarPage() {
                       key={day}
                       onClick={() => setSelectedDay(day)}
                       className={cn(
-                        "surface-card aspect-square rounded-[1.15rem] border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring)/0.28)] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--background))]",
+                        "surface-card h-16 sm:h-20 rounded-[1.15rem] border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring)/0.28)] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--background))]",
                         "flex flex-col items-center justify-center gap-1",
                         "hover:-translate-y-0.5 hover:border-[hsl(var(--border)/0.82)] hover:bg-[hsl(var(--card)/0.94)] hover:shadow-[0_10px_22px_rgba(2,6,23,0.12)]",
                         isSelected

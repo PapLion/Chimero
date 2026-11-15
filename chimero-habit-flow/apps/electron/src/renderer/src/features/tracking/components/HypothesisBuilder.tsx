@@ -33,7 +33,7 @@ export function HypothesisBuilder({
 }: HypothesisBuilderProps) {
   return (
     <div className="surface-panel rounded-3xl p-6">
-      <div className="mb-6 flex items-start gap-3">
+      <div className="mb-4 flex items-start gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(266_73%_63%/0.22)] to-[hsl(187_84%_44%/0.14)]">
           <Activity className="h-5 w-5 text-[hsl(266_73%_63%)]" />
         </div>
@@ -45,8 +45,8 @@ export function HypothesisBuilder({
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-        <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <div className="section-kicker">Source habit</div>
             <CyberpunkSelect
@@ -58,7 +58,7 @@ export function HypothesisBuilder({
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 sm:col-span-2 sm:order-last">
             <div className="section-kicker">Lag</div>
             <div className="flex flex-wrap gap-2">
               <button

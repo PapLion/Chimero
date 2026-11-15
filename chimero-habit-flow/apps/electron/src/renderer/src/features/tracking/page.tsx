@@ -47,7 +47,7 @@ function StatsPageComponent() {
         fill: "#64748b"
       },
       {
-        name: "Impacted", 
+        name: "Activity days", 
         value: impactedAvg,
         fill: impact > 10 ? "#10b981" : impact < -10 ? "#f43f5e" : "#3b82f6"
       }
@@ -55,16 +55,16 @@ function StatsPageComponent() {
   }, [result])
 
   return (
-    <div className="space-y-8">
-      <div className="surface-panel rounded-3xl p-6">
+    <div className="space-y-5">
+      <div className="surface-panel rounded-3xl p-5">
         <div className="flex items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(266_73%_63%/0.24)] to-[hsl(187_84%_44%/0.18)]">
             <Brain className="h-6 w-6 text-[hsl(266_73%_63%)]" />
           </div>
           <div className="min-w-0">
             <div className="section-kicker">Insight Lab</div>
-            <h1 className="page-title mt-1 text-[2.35rem]">The Butterfly Effect Engine</h1>
-            <p className="page-subtitle mt-2 max-w-2xl">Compare two habits and read the signal.</p>
+            <h1 className="page-title mt-1 text-3xl">Patterns in your days</h1>
+            <p className="page-subtitle mt-2 max-w-2xl">Compare recorded days across two trackers. Associations are not causes.</p>
           </div>
         </div>
       </div>
@@ -89,7 +89,7 @@ function StatsPageComponent() {
         {result ? (
           <motion.div
             key={resultKey}
-            className="space-y-8"
+            className="space-y-5"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
@@ -99,7 +99,7 @@ function StatsPageComponent() {
             <CorrelationResultCard result={result} trackers={trackers} />
 
             {/* Chart */}
-            <div className="surface-panel rounded-3xl p-6">
+            <div className="surface-panel rounded-3xl p-5">
               <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-semibold tracking-tight text-[hsl(210_28%_97%)]">Comparison</h3>

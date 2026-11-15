@@ -908,12 +908,6 @@ export function TrackerDetailView({ trackerId, selectedDate: propSelectedDate, a
           >
             Entries
           </button>
-          <button
-            className="hidden cursor-not-allowed rounded-full border border-white/5 bg-white/[0.03] px-4 py-2 text-sm font-medium text-white/20 sm:block"
-            disabled
-          >
-            Insights (Soon)
-          </button>
           {isSocialType && (
             <button
               type="button"

@@ -41,15 +41,16 @@ export function CorrelationResultCard({ result, trackers }: CorrelationResultCar
     return trackers.find(t => t.id === id)?.name || "Unknown"
   }
 
-  const impactStyle = getImpactStyle(result.impact)
+  const comparable = result.triggeredDays > 0 && result.baselineDays > 0 && result.baselineAvg !== 0
+  const impactStyle = getImpactStyle(comparable ? result.impact : 0)
   const IconComponent = impactStyle.icon
 
   const getInsightDescription = (type: EnhancedCorrelationResult['insightType']) => {
     switch (type) {
       case 'positive_synergy':
-        return "Positive signal"
+        return "Higher recorded values"
       case 'destructive_interference':
-        return "Negative signal"
+        return "Lower recorded values"
       case 'neutral_correlation':
         return "No clear signal"
     }
@@ -69,10 +70,10 @@ export function CorrelationResultCard({ result, trackers }: CorrelationResultCar
   }
 
   return (
-    <div className="space-y-6">
-      <div className="surface-panel relative overflow-hidden rounded-3xl p-8">
+    <div className="space-y-4">
+      <div className="surface-panel relative overflow-hidden rounded-3xl p-5">
         <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] via-transparent to-white/[0.02] opacity-80" />
-        <div className="relative z-10 space-y-6">
+        <div className="relative z-10 space-y-4">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="section-kicker">Result</div>
@@ -96,15 +97,15 @@ export function CorrelationResultCard({ result, trackers }: CorrelationResultCar
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-            <div className={cn("rounded-3xl border border-white/8 bg-white/[0.04] p-6", impactStyle.border)}>
+            <div className={cn("rounded-3xl border border-white/8 bg-white/[0.04] p-4", impactStyle.border)}>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="section-kicker">Impact</div>
+                  <div className="section-kicker">Observed difference</div>
                   <div className="mt-3 flex items-end gap-3">
-                    <span className={cn("text-6xl font-display font-bold tracking-tight", impactStyle.color)}>
-                      {result.impact > 0 ? "+" : ""}{result.impact}%
+                    <span className={cn("text-4xl font-display font-bold tracking-tight", impactStyle.color)}>
+                      {comparable ? `${result.impact > 0 ? "+" : ""}${result.impact}%` : "—"}
                     </span>
-                    <span className="pb-2 text-sm text-[hsl(220_12%_58%)]">change</span>
+                    <span className="pb-2 text-sm text-[hsl(220_12%_58%)]">{comparable ? "change" : "No comparison"}</span>
                   </div>
                 </div>
 
@@ -115,9 +116,9 @@ export function CorrelationResultCard({ result, trackers }: CorrelationResultCar
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-white/8 bg-black/10 p-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Confidence</div>
-                  <div className="mt-2 text-2xl font-bold tracking-tight text-[hsl(210_28%_97%)]">{result.confidence}%</div>
-                  <p className="mt-1 text-xs leading-5 text-[hsl(220_12%_58%)]">{result.userFriendlyConfidence}</p>
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[hsl(220_12%_58%)]">Data coverage score</div>
+                  <div className="mt-2 text-2xl font-bold tracking-tight text-[hsl(210_28%_97%)]">{result.confidence} / 100</div>
+                  <p className="mt-1 text-xs leading-5 text-[hsl(220_12%_58%)]">Heuristic based on sample size and balance; not statistical confidence.</p>
                 </div>
 
                 <div className="rounded-2xl border border-white/8 bg-black/10 p-4">
@@ -132,11 +133,11 @@ export function CorrelationResultCard({ result, trackers }: CorrelationResultCar
               </div>
             </div>
 
-            <div className="surface-panel rounded-3xl p-6">
+            <div className="surface-panel rounded-3xl p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="section-kicker">Signal quality</div>
-                  <p className="mt-2 text-sm text-[hsl(220_12%_58%)]">How steady this read feels.</p>
+                  <div className="section-kicker">Recorded data</div>
+                  <p className="mt-2 text-sm text-[hsl(220_12%_58%)]">Coverage of the recorded comparison days.</p>
                 </div>
                 <span className={cn(
                   "rounded-full border border-white/8 bg-white/[0.04] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]",
@@ -151,7 +152,7 @@ export function CorrelationResultCard({ result, trackers }: CorrelationResultCar
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-400" />
                     <div className="text-sm leading-6 text-[hsl(210_25%_97%)]">
-                      Results are still light. Keep tracking a little longer for a steadier read.
+                      Insufficient comparison data. Record both activity and zero-activity days; missing records are unknown.
                     </div>
                   </div>
                 </div>
@@ -159,7 +160,7 @@ export function CorrelationResultCard({ result, trackers }: CorrelationResultCar
 
               {result.metadata.recommendedActions.length > 0 && (
                 <div className="mt-5 space-y-3">
-                  <div className="section-kicker">Recommendations</div>
+                  <div className="section-kicker">Interpretation</div>
                   <ul className="space-y-2">
                     {result.metadata.recommendedActions.map((action, index) => (
                       <li key={index} className="flex items-start gap-2 text-sm leading-6 text-[hsl(210_25%_97%)]">
