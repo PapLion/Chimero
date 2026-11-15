@@ -1,2 +1,5 @@
 export * from './app-types'
 export * from './electron-api'
+export * from './analytics'
+export * from './settings'
+export * from './dashboard'

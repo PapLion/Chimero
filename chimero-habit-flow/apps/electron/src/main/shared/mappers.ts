@@ -61,22 +61,29 @@ function mapSocialInteractions(value: unknown): SocialInteractionReadModel[] | u
   return interactions.length > 0 ? interactions : undefined
 }
 
-export function schemaTypeToUI(type: string, config: Record<string, unknown>): string {
-  if (type === 'numeric') return 'counter'
-  if (type === 'range' && (config?.max === 5 || config?.max === 10)) return 'rating'
-  if (type === 'text' || type === 'composite') return 'list'
-  return type
+/** Trackers expose their storage type; legacy UI aliases are folded back in. */
+export function normalizeSchemaType(type: string): string {
+  return ({ counter: 'numeric', rating: 'range', list: 'text' } as Record<string, string>)[type] ?? type
 }
 
 export function mapTracker(row: Record<string, unknown>): Tracker {
-  const config = (row.config as Record<string, unknown>) || {}
+  let config: Record<string, unknown> = parseJsonObject(row.config)
+  // Older builds double-encoded the JSON column.
+  if (typeof row.config === 'string' && Object.keys(config).length === 0) {
+    try {
+      const inner = JSON.parse(JSON.parse(row.config))
+      if (inner && typeof inner === 'object') config = inner
+    } catch {
+      config = {}
+    }
+  }
   const schemaType = (row.type as string) || 'numeric'
   const isCustomCol = row.isCustom ?? row.is_custom
   const isFavoriteCol = row.isFavorite ?? row.is_favorite
   return {
     id: row.id as number,
     name: row.name as string,
-    type: schemaTypeToUI(schemaType, config) as Tracker['type'],
+    type: normalizeSchemaType(schemaType) as Tracker['type'],
     icon: (row.icon as string) ?? null,
     color: (row.color as string) ?? null,
     order: (row.order as number) ?? 0,

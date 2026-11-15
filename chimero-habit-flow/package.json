@@ -1,27 +1,25 @@
 {
   "name": "chimero-habit-flow",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/PapLion/Chimero.git"
   },
   "author": "Dani.pp",
-  "description": "A habit tracker for enchanted flows",
+  "description": "Local-first desktop app for tracking your life and exploring how the pieces relate",
   "main": "index.js",
   "scripts": {
-    "dev": "turbo run dev",
-    "dev:web": "pnpm --filter chimero-web dev",
-    "db:migrate": "turbo run db:migrate",
+    "dev": "pnpm --filter chimero-electron dev",
     "lint": "eslint \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\" --max-warnings 0",
     "test": "node scripts/test-unit.cjs",
     "test:watch": "node scripts/test-unit.cjs --watch",
     "test:e2e": "playwright test",
     "build": "pnpm --filter chimero-electron build",
-    "build:web": "pnpm --filter chimero-web build",
-    "package": "turbo run build && electron-builder",
-    "check-types": "pnpm --filter chimero-electron exec tsc --noEmit && pnpm --filter chimero-web check-types",
-    "demo": "node scripts/demo.cjs --open",
-    "demo:capture": "node scripts/demo.cjs --capture"
+    "package": "pnpm build && electron-builder --linux AppImage",
+    "check-types": "pnpm --filter chimero-electron exec tsc --noEmit",
+    "package:win": "pnpm build && electron-builder --win nsis",
+    "showcase": "node scripts/showcase.cjs --open",
+    "showcase:capture": "node scripts/showcase.cjs --capture"
   },
   "keywords": [],
   "license": "ISC",

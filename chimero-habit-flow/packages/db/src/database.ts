@@ -20,6 +20,8 @@ let _rawDb: Database.Database | null = null;
 export function initDb(dbPath: string): DrizzleDB {
   if (_db) return _db;
   const sqlite = new Database(dbPath);
+  sqlite.pragma('journal_mode = WAL');
+  sqlite.pragma('foreign_keys = ON');
   _rawDb = sqlite;
   _db = drizzle(sqlite, { schema });
   return _db;

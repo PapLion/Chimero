@@ -1,6 +1,6 @@
 import type { DrizzleTransaction } from '@packages/db/database'
 import { ipcMain } from 'electron'
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm'
 import { books, bookActivities, contactInteractions, contacts, entries, entriesToTags, entryFood, entryGaming, entryHealth, entryIntake, entryWeight, intakeItems, symptoms, trackers } from '@packages/db'
 import { getDb as db } from '@packages/db/database'
 import { mapEntry, mapTracker } from '../../shared/mappers'
@@ -300,10 +300,14 @@ const entryProjection = {
 }
 
 export function registerEntryHandlers(): void {
-  ipcMain.handle('get-entries', async (_, options?: { limit?: number; trackerId?: number }) => {
+  ipcMain.handle('get-entries', async (_, options?: { limit?: number; trackerId?: number; from?: string; to?: string }) => {
     try {
-      const limit = options?.limit ?? 100
-      const base = db()
+      const limit = Math.max(1, Math.min(options?.limit ?? 100, 20000))
+      const conditions: SQL[] = []
+      if (options?.trackerId) conditions.push(eq(entries.trackerId, options.trackerId))
+      if (options?.from) conditions.push(sql`${entries.dateStr} >= ${options.from}`)
+      if (options?.to) conditions.push(sql`${entries.dateStr} <= ${options.to}`)
+      const rows = await db()
         .select(entryProjection)
         .from(entries)
         .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
@@ -314,24 +318,9 @@ export function registerEntryHandlers(): void {
         .leftJoin(symptoms, eq(symptoms.id, entryHealth.symptomId))
         .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
         .leftJoin(books, eq(bookActivities.bookId, books.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(entries.timestamp))
         .limit(limit)
-      const rows = options?.trackerId
-        ? await db()
-          .select(entryProjection)
-          .from(entries)
-          .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
-          .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
-          .leftJoin(entryHealth, eq(entryHealth.entryId, entries.id))
-          .leftJoin(entryIntake, eq(entryIntake.entryId, entries.id))
-          .leftJoin(intakeItems, eq(intakeItems.id, entryIntake.itemId))
-          .leftJoin(symptoms, eq(symptoms.id, entryHealth.symptomId))
-          .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
-          .leftJoin(books, eq(bookActivities.bookId, books.id))
-          .where(eq(entries.trackerId, options.trackerId))
-          .orderBy(desc(entries.timestamp))
-          .limit(limit)
-        : await base
       const mapped = rows.map((r) => mapEntry(r as Record<string, unknown>))
       const tagIdsByEntry = await tagsService.getEntryTagIds(mapped.map((entry) => entry.id))
       return await withSocialInteractions(mapped.map((entry) => ({ ...entry, tagIds: tagIdsByEntry.get(entry.id) ?? [] })))

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_TRACKERS,
   planDefaultTrackerSeedActions,
-} from '../../../apps/electron/src/main/features/tracking/handler'
+} from '@contracts/features/tracking'
 
 describe('default trackers', () => {
   it('does not seed unsupported Savings or Finance trackers', () => {
@@ -52,7 +52,7 @@ describe('default trackers', () => {
       'Media',
       'Health',
       'Vitamins & Medications',
-      'Diet / Calories',
+      'Food',
     ])
   })
 

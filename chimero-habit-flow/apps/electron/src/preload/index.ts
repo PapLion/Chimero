@@ -1,12 +1,42 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { BaseEntryRequest, ContactInteractionInsert, ElectronApi, EntryUpdateRequest, TrackerConfig, CreateWorkoutRoutineRequest, CreateWorkoutSessionRequest, InstantiateWorkoutFromRoutineRequest, SaveWorkoutAsRoutineRequest, UpdateWorkoutRoutineRequest, UpdateWorkoutSessionRequest } from '@contracts/contracts'
 
+function subscribe<T>(channel: string, listener: (payload: T) => void): () => void {
+  const handler = (_event: unknown, payload: T) => listener(payload)
+  ipcRenderer.on(channel, handler)
+  return () => ipcRenderer.removeListener(channel, handler)
+}
+
 const api: ElectronApi = {
+  platform: process.platform,
+  minimizeWindow: () => ipcRenderer.invoke('window-minimize'),
+  toggleMaximizeWindow: () => ipcRenderer.invoke('window-toggle-maximize'),
+  closeWindow: () => ipcRenderer.invoke('window-close'),
+  isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+  onWindowState: (listener) => subscribe('window-state', listener),
+  onReminder: (listener) => subscribe('on-reminder', listener),
+  getPreferences: () => ipcRenderer.invoke('get-preferences'),
+  updatePreferences: (patch) => ipcRenderer.invoke('update-preferences', patch),
+  getAppInfo: () => ipcRenderer.invoke('get-app-info'),
+  getDashboardLayout: () => ipcRenderer.invoke('get-dashboard-layout'),
+  saveDashboardLayout: (layout) => ipcRenderer.invoke('save-dashboard-layout', layout),
+  getDefaultDashboardLayout: () => ipcRenderer.invoke('get-default-dashboard-layout'),
+  exportJson: (targetPath) => ipcRenderer.invoke('export-json', targetPath),
+  exportCsv: (targetPath) => ipcRenderer.invoke('export-csv', targetPath),
+  backupDatabase: (targetPath) => ipcRenderer.invoke('backup-database', targetPath),
+  restoreDatabase: (sourcePath) => ipcRenderer.invoke('restore-database', sourcePath),
+  openDataFolder: () => ipcRenderer.invoke('open-data-folder'),
+  getMetrics: () => ipcRenderer.invoke('analytics-metrics'),
+  getSeries: (request) => ipcRenderer.invoke('analytics-series', request),
+  analyzePair: (request) => ipcRenderer.invoke('analytics-pair', request),
+  scanRelationships: (request) => ipcRenderer.invoke('analytics-scan', request),
+  getOverview: (range) => ipcRenderer.invoke('analytics-overview', range),
+  getArchivedTrackers: () => ipcRenderer.invoke('get-archived-trackers'),
   getTrackers: () => ipcRenderer.invoke('get-trackers'),
   createTracker: (data: { name: string; type: string; icon?: string; color?: string; config?: TrackerConfig }) =>
     ipcRenderer.invoke('create-tracker', data),
   deleteTracker: (id: number) => ipcRenderer.invoke('delete-tracker', id),
-  getEntries: (options?: { limit?: number; trackerId?: number }) =>
+  getEntries: (options) =>
     ipcRenderer.invoke('get-entries', options),
   addEntry: (data: BaseEntryRequest) =>
     ipcRenderer.invoke('add-entry', data),
@@ -17,10 +47,7 @@ const api: ElectronApi = {
   getRecentTrackers: (limit?: number) => ipcRenderer.invoke('get-recent-trackers', limit ?? 10),
   getFavoriteTrackers: () => ipcRenderer.invoke('get-favorite-trackers'),
   toggleTrackerFavorite: (trackerId: number) => ipcRenderer.invoke('toggle-tracker-favorite', trackerId),
-  getDashboardStats: () => ipcRenderer.invoke('get-dashboard-stats'),
   getCalendarMonth: (year: number, month: number) => ipcRenderer.invoke('get-calendar-month', year, month),
-  getMoodDailyAggregates: (options?: { trackerId?: number; days?: number }) =>
-    ipcRenderer.invoke('get-mood-daily-aggregates', options),
   getTaskEntries: (trackerId: number, options?: { limit?: number }) =>
     ipcRenderer.invoke('get-task-entries', trackerId, options),
   getAssets: (options?: { limit?: number; offset?: number }) =>
@@ -32,12 +59,9 @@ const api: ElectronApi = {
     ipcRenderer.invoke('update-asset', id, updates),
   deleteAsset: (id: number) => ipcRenderer.invoke('delete-asset', id),
   downloadAsset: (id: number, suggestedName: string) => ipcRenderer.invoke('download-asset', id, suggestedName),
-  getDashboardLayout: () => ipcRenderer.invoke('get-dashboard-layout'),
-  saveDashboardLayout: (layout: Array<{ id: string; trackerId: number; position: number; size: string }>) =>
-    ipcRenderer.invoke('save-dashboard-layout', layout),
   updateTracker: (
     id: number,
-    updates: { order?: number; isFavorite?: boolean; name?: string; icon?: string | null; color?: string | null; type?: string; config?: TrackerConfig }
+    updates: { order?: number; isFavorite?: boolean; archived?: boolean; name?: string; icon?: string | null; color?: string | null; type?: string; config?: TrackerConfig }
   ) => ipcRenderer.invoke('update-tracker', id, updates),
   reorderTrackers: (ids: number[]) => ipcRenderer.invoke('reorder-trackers', ids),
   getReminders: () => ipcRenderer.invoke('get-reminders'),
@@ -47,10 +71,6 @@ const api: ElectronApi = {
   toggleReminder: (id: number, enabled: boolean) => ipcRenderer.invoke('toggle-reminder', id, enabled),
   completeReminder: (id: number) => ipcRenderer.invoke('complete-reminder', id),
   uncompleteReminder: (id: number) => ipcRenderer.invoke('uncomplete-reminder', id),
-  calculateImpact: (sourceTrackerId: number, targetTrackerId: number, offsetDays: number) =>
-    ipcRenderer.invoke('calculate-impact', sourceTrackerId, targetTrackerId, offsetDays),
-  getStats: (request) => ipcRenderer.invoke('get-stats', request),
-  getCorrelationResult: (request) => ipcRenderer.invoke('get-correlation-result', request),
   // Tags
   getTags: () => ipcRenderer.invoke('get-tags'),
   createTag: (data) => ipcRenderer.invoke('create-tag', data),
@@ -139,25 +159,8 @@ const api: ElectronApi = {
   getExerciseDbStatus: () => ipcRenderer.invoke('get-exercise-db-status'),
 }
 
-// Exponer la API al mundo principal (Window object)
 if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', {
-      ipcRenderer: {
-        // Exponemos invoke de forma segura
-        invoke: (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args),
-        on: (channel: string, listener: (event: unknown, ...args: unknown[]) => void) => {
-          ipcRenderer.on(channel, listener)
-          return () => ipcRenderer.removeListener(channel, listener)
-        }
-      }
-    })
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
-  }
+  contextBridge.exposeInMainWorld('api', api)
 } else {
-  // @ts-expect-error fallback when contextIsolation is disabled
-  window.electron = { ipcRenderer: { invoke: ipcRenderer.invoke.bind(ipcRenderer), on: ipcRenderer.on.bind(ipcRenderer) } }
-    ; (window as Window & { api: ElectronApi }).api = api
+  ;(window as unknown as { api: ElectronApi }).api = api
 }

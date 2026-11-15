@@ -1,70 +1,105 @@
 /**
- * Reminder service: cron loop every 60s, checks DB for due reminders.
- * Dispatches IPC to Renderer or shows native Notification.
+ * Reminder scheduler. Every 30 s it looks for enabled reminders whose time has
+ * arrived today and that have not fired today, shows a desktop notification and
+ * tells the renderer.
  */
-import { getDb } from '@packages/db/database'
-import { reminders } from '@packages/db'
-import { eq } from 'drizzle-orm'
-import type { BrowserWindow } from 'electron'
+import { Notification, type BrowserWindow } from 'electron'
+import { getRawDb } from '@packages/db/database'
+import { getPreferences } from '../settings/service'
 
 let checkInterval: ReturnType<typeof setInterval> | null = null
 let mainWindowRef: BrowserWindow | null = null
+
+/** A reminder fires at most this long after its time (covers sleep/late launch without replaying the whole day). */
+const GRACE_MINUTES = 15
 
 export function setMainWindowRef(win: BrowserWindow | null): void {
   mainWindowRef = win
 }
 
-function nowHHMM(): string {
-  const d = new Date()
-  const h = d.getHours()
-  const m = d.getMinutes()
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+export interface ReminderRow {
+  id: number
+  title: string
+  description: string | null
+  time: string
+  date: string | null
+  days: string | null
+  last_triggered: number | null
 }
 
-function todayDayIndex(): number {
-  return new Date().getDay()
+function localDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function parseDays(value: string | null): number[] {
+  if (!value) return []
+  try {
+    let parsed = JSON.parse(value)
+    if (typeof parsed === 'string') parsed = JSON.parse(parsed)
+    return Array.isArray(parsed) ? parsed.filter((d) => Number.isInteger(d)) : []
+  } catch {
+    return []
+  }
+}
+
+/** Pure scheduling rule, exported for tests. `last_triggered` is stored in seconds. */
+export function isReminderDue(row: ReminderRow, now: Date): boolean {
+  const match = /^(\d{1,2}):(\d{2})/.exec(row.time ?? '')
+  if (!match) return false
+  const today = localDate(now)
+  if (row.date) {
+    if (row.date !== today) return false
+  } else {
+    const days = parseDays(row.days)
+    if (days.length > 0 && !days.includes(now.getDay())) return false
+  }
+  const minutesNow = now.getHours() * 60 + now.getMinutes()
+  const minutesDue = Number(match[1]) * 60 + Number(match[2])
+  if (minutesNow < minutesDue || minutesNow - minutesDue > GRACE_MINUTES) return false
+  if (row.last_triggered != null) {
+    const last = row.last_triggered > 1e11 ? row.last_triggered : row.last_triggered * 1000
+    if (localDate(new Date(last)) === today) return false
+  }
+  return true
+}
+
+export function checkReminders(now = new Date()): number {
+  const raw = getRawDb()
+  if (!raw) return 0
+  const rows = raw.prepare('SELECT id, title, description, time, date, days, last_triggered FROM reminders WHERE enabled = 1 AND completed_at IS NULL').all() as ReminderRow[]
+  const due = rows.filter((row) => isReminderDue(row, now))
+  if (due.length === 0) return 0
+  const notify = getPreferences(raw).notifications && Notification.isSupported()
+  const mark = raw.prepare('UPDATE reminders SET last_triggered = ? WHERE id = ?')
+  for (const row of due) {
+    mark.run(Math.floor(now.getTime() / 1000), row.id)
+    if (notify) {
+      const notification = new Notification({ title: row.title, body: row.description ?? 'Chimero reminder' })
+      notification.on('click', () => {
+        if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+          mainWindowRef.show()
+          mainWindowRef.focus()
+        }
+      })
+      notification.show()
+    }
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) mainWindowRef.webContents.send('on-reminder', { id: row.id, title: row.title })
+  }
+  return due.length
 }
 
 export function startReminderLoop(): void {
   if (checkInterval) return
-  checkInterval = setInterval(async () => {
+  checkInterval = setInterval(() => {
     try {
-      const db = getDb()
-      const now = nowHHMM()
-      const day = todayDayIndex()
-      const rows = await db.select().from(reminders).where(eq(reminders.enabled, true))
-      const d = new Date()
-      const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      for (const r of rows as unknown as Array<{ id: number; title: string; time: string; date: string | null; days: string | number[] | null; last_triggered: number | null }>) {
-        const reminderTime = (r.time ?? '').slice(0, 5)
-        if (reminderTime !== now) continue
-        const reminderDate = r.date ?? null
-        if (reminderDate != null && reminderDate !== '') {
-          if (reminderDate !== todayStr) continue
-        } else {
-          const days = Array.isArray(r.days) ? r.days : (typeof r.days === 'string' ? JSON.parse(r.days || '[]') : []) as number[]
-          if (days.length > 0 && !days.includes(day)) continue
-        }
-        const id = r.id
-        await db.update(reminders).set({ lastTriggered: new Date() }).where(eq(reminders.id, id))
-        if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-          mainWindowRef.webContents.send('on-reminder', { id, title: r.title })
-        } else {
-          const { Notification } = await import('electron')
-          if (Notification.isSupported()) {
-            new Notification({ title: 'Chimero', body: r.title }).show()
-          }
-        }
-      }
+      checkReminders()
     } catch (e) {
-      console.error('[ReminderService] check error:', e)
+      console.error('[Reminders] check failed:', e)
     }
-  }, 60_000)
+  }, 30_000)
 }
 
 export function stopReminderLoop(): void {
-  if (checkInterval) {
-    clearInterval(checkInterval)
-    checkInterval = null
-  }
+  if (checkInterval) clearInterval(checkInterval)
+  checkInterval = null
 }

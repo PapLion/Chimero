@@ -3,21 +3,6 @@ import { copyFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'fs'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
-function copySplashPlugin() {
-  return {
-    name: 'copy-splash',
-    closeBundle() {
-      const src = resolve(__dirname, 'src/main/splash.html')
-      const outDir = resolve(__dirname, 'out/main')
-      const dest = resolve(outDir, 'splash.html')
-      if (existsSync(src)) {
-        if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true })
-        copyFileSync(src, dest)
-      }
-    }
-  }
-}
-
 function copyMigrationsPlugin() {
   return {
     name: 'copy-migrations',
@@ -75,8 +60,7 @@ function copyMigrationsPlugin() {
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin(), copySplashPlugin(), copyMigrationsPlugin()],
-    // 👇 AGREGA ESTO PARA ARREGLAR LA DB
+    plugins: [externalizeDepsPlugin(), copyMigrationsPlugin()],
     build: {
       rollupOptions: {
         external: ['better-sqlite3']
@@ -91,6 +75,11 @@ export default defineConfig({
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
+    resolve: {
+      alias: {
+        '@contracts': resolve(__dirname, '../../packages/shared/src')
+      }
+    },
     build: {
       lib: {
         entry: 'src/preload/index.ts'
@@ -108,29 +97,9 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        '@renderer': resolve(__dirname, 'src/renderer/src'),
-        '@features': resolve(__dirname, 'src/renderer/src/features'),
-        '@shared': resolve(__dirname, 'src/renderer/src/shared'),
-        '@shared/utils': resolve(__dirname, 'src/renderer/src/shared/utils.ts'),
-        '@shared/store': resolve(__dirname, 'src/renderer/src/shared/store.ts'),
-        '@shared/queries': resolve(__dirname, 'src/renderer/src/shared/queries.ts'),
-        '@shared/api': resolve(__dirname, 'src/renderer/src/shared/api.ts'),
-        '@contracts': resolve(__dirname, '../../packages/shared/src'),
-        '@components': resolve(__dirname, 'src/renderer/src/shared/components'),
-        '@packages/ui': resolve(__dirname, '../../packages/ui'),
-        '@packages/db': resolve(__dirname, '../../packages/db/src')
+        '@': resolve(__dirname, 'src/renderer/src'),
+        '@contracts': resolve(__dirname, '../../packages/shared/src')
       }
-    },
-    optimizeDeps: {
-      include: [
-        '@radix-ui/react-dialog',
-        '@radix-ui/react-slot',
-        '@radix-ui/react-tooltip',
-        'class-variance-authority',
-        'clsx',
-        'tailwind-merge',
-        'lucide-react'
-      ]
     },
     plugins: [react()]
   }

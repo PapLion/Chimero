@@ -16,6 +16,8 @@ export type TrackerIdentity =
   | 'diet'
   | 'generic'
 
+const KNOWN_IDENTITIES = ['weight', 'mood', 'exercise', 'social', 'tasks', 'books', 'gaming', 'tv', 'media', 'legacy-media-tv', 'health', 'intake', 'diet', 'generic'] as const
+
 export type DefaultTrackerDefinition = {
   name: string
   type: 'numeric' | 'range' | 'binary' | 'text' | 'composite'
@@ -26,18 +28,18 @@ export type DefaultTrackerDefinition = {
 }
 
 export const DEFAULT_TRACKERS: readonly DefaultTrackerDefinition[] = [
-  { name: 'Weight', type: 'numeric', icon: 'scale', color: '#a855f7', order: 0, config: { unit: 'kg', goal: 70, identity: 'weight' } },
+  { name: 'Weight', type: 'numeric', icon: 'scale', color: '#a855f7', order: 0, config: { identity: 'weight' } },
   { name: 'Mood', type: 'range', icon: 'smile', color: '#f59e0b', order: 1, config: { max: 10, identity: 'mood' } },
   { name: 'Exercise', type: 'numeric', icon: 'dumbbell', color: '#22c55e', order: 2, config: { unit: 'min', goal: 30, identity: 'exercise' } },
   { name: 'Social', type: 'numeric', icon: 'users', color: '#3b82f6', order: 3, config: { unit: 'interactions', identity: 'social' } },
   { name: 'Tasks', type: 'text', icon: 'check-square', color: '#ef4444', order: 4, config: { identity: 'tasks' } },
   { name: 'Books', type: 'text', icon: 'book', color: '#8b5cf6', order: 5, config: { identity: 'books' } },
-  { name: 'Gaming', type: 'text', icon: 'gamepad-2', color: '#10b981', order: 6, config: { identity: 'gaming' } },
+  { name: 'Gaming', type: 'text', icon: 'gamepad-2', color: '#14b8a6', order: 6, config: { identity: 'gaming' } },
   { name: 'TV', type: 'text', icon: 'tv', color: '#0ea5e9', order: 7, config: { identity: 'tv' } },
-  { name: 'Media', type: 'text', icon: 'music', color: '#38bdf8', order: 8, config: { identity: 'media' } },
+  { name: 'Media', type: 'text', icon: 'music', color: '#e879f9', order: 8, config: { identity: 'media' } },
   { name: 'Health', type: 'text', icon: 'heart', color: '#f43f5e', order: 9, config: { identity: 'health' } },
   { name: 'Vitamins & Medications', type: 'text', icon: 'pill', color: '#0f766e', order: 10, config: { identity: 'intake' } },
-  { name: 'Diet / Calories', type: 'numeric', icon: 'salad', color: '#22c55e', order: 11, config: { unit: 'kcal', goal: 2200, identity: 'diet' } },
+  { name: 'Food', type: 'numeric', icon: 'salad', color: '#84cc16', order: 11, config: { unit: 'kcal', identity: 'diet' } },
 ] as const
 
 type ExistingTrackerSeedRow = Pick<Tracker, 'name'> & {
@@ -59,6 +61,16 @@ function normalizeTrackerName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
+function safeParse(value: string): Record<string, unknown> {
+  try {
+    let parsed = JSON.parse(value)
+    if (typeof parsed === 'string') parsed = JSON.parse(parsed)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
 function isUnsupportedRemovedDefaultTracker(name: string): boolean {
   const normalizedName = normalizeTrackerName(name)
   return normalizedName === 'savings' || normalizedName === 'finance'
@@ -67,25 +79,17 @@ function isUnsupportedRemovedDefaultTracker(name: string): boolean {
 function readConfigIdentity(config: ExistingTrackerSeedRow['config'] | Tracker['config']): string | null {
   if (!config) return null
   if (typeof config === 'string') {
-    try {
-      const parsed = JSON.parse(config) as Record<string, unknown>
-      return typeof parsed.identity === 'string' ? parsed.identity : null
-    } catch {
-      return null
-    }
+    const parsed = safeParse(config)
+    return typeof parsed.identity === 'string' ? parsed.identity : null
   }
   return typeof config.identity === 'string' ? config.identity : null
 }
 
-export function getTrackerIdentity(tracker: Pick<Tracker, 'name' | 'icon' | 'config'>): TrackerIdentity {
+export function getTrackerIdentity(tracker: Pick<Tracker, 'name' | 'icon' | 'config'> & { isCustom?: boolean }): TrackerIdentity {
   const configuredIdentity = readConfigIdentity(tracker.config)
-  if (configuredIdentity === 'tv') return 'tv'
-  if (configuredIdentity === 'media') return 'media'
-  if (configuredIdentity === 'legacy-media-tv') return 'legacy-media-tv'
-  if (configuredIdentity === 'books') return 'books'
-  if (configuredIdentity === 'gaming') return 'gaming'
-  if (configuredIdentity === 'health') return 'health'
-  if (configuredIdentity === 'intake') return 'intake'
+  if (configuredIdentity && (KNOWN_IDENTITIES as readonly string[]).includes(configuredIdentity)) return configuredIdentity as TrackerIdentity
+  // User-made trackers never take over a built-in tracker's specialised behaviour by name.
+  if ((tracker as { isCustom?: boolean }).isCustom) return 'generic'
 
   const name = normalizeTrackerName(tracker.name)
   const icon = tracker.icon?.toLowerCase() ?? ''
@@ -162,7 +166,19 @@ export function planDefaultTrackerSeedActions(input: {
     )
     .map((tracker) => tracker.id)
 
-  const toInsert = DEFAULT_TRACKERS.filter((tracker) => !effectiveNames.has(normalizeTrackerName(tracker.name)))
+  // A default is present when a built-in tracker already plays its role, whatever it was renamed to.
+  const presentIdentities = new Set(
+    input.trackers
+      .filter((tracker) => !tracker.isCustom)
+      .map((tracker) => getTrackerIdentity({ name: tracker.name, icon: null, config: (typeof tracker.config === 'string' ? safeParse(tracker.config) : tracker.config ?? {}) as Tracker['config'] }))
+  )
+  if (legacyAction === 'preserve-populated') {
+    presentIdentities.add('tv')
+    presentIdentities.add('media')
+  }
+  const toInsert = DEFAULT_TRACKERS.filter(
+    (tracker) => !effectiveNames.has(normalizeTrackerName(tracker.name)) && !presentIdentities.has(String(tracker.config.identity) as TrackerIdentity)
+  )
 
   return {
     toInsert,

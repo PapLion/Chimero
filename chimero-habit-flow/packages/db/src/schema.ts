@@ -10,7 +10,8 @@ export const settings = sqliteTable("settings", {
   language: text("language").default("es"),
   weightUnit: text("weight_unit", { enum: ["kg", "lb"] }).default("kg"),
   measureUnit: text("measure_unit", { enum: ["cm", "in"] }).default("cm"),
-  dashboardLayout: text("dashboard_layout", { mode: "json" }), // JSON: [{ id, trackerId, position, size }]
+  dashboardLayout: text("dashboard_layout", { mode: "json" }), // JSON: DashboardLayoutV2 (legacy arrays are upgraded on read)
+  preferences: text("preferences", { mode: "json" }), // JSON: AppPreferences
   createdAt: integer("created_at").default(sql`(strftime('%s', 'now') * 1000)`),
 });
 

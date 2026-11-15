@@ -8,21 +8,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@packages/db': resolve(root, 'packages/db/src'),
-      '@packages/ui': resolve(root, 'packages/ui'),
-      '@packages/ui/button': resolve(root, 'packages/ui/button.tsx'),
-      '@packages/ui/dialog': resolve(root, 'packages/ui/dialog.tsx'),
-      '@packages/ui/input': resolve(root, 'packages/ui/input.tsx'),
-      '@packages/ui/tooltip': resolve(root, 'packages/ui/tooltip.tsx'),
-      '@packages/ui/utils': resolve(root, 'packages/ui/utils.ts'),
-      '@renderer': resolve(root, 'apps/electron/src/renderer/src'),
-      '@features': resolve(root, 'apps/electron/src/renderer/src/features'),
-      '@shared': resolve(root, 'apps/electron/src/renderer/src/shared'),
-      '@shared/utils': resolve(root, 'apps/electron/src/renderer/src/shared/utils.ts'),
-      '@shared/store': resolve(root, 'apps/electron/src/renderer/src/shared/store.ts'),
-      '@shared/queries': resolve(root, 'apps/electron/src/renderer/src/shared/queries.ts'),
-      '@shared/api': resolve(root, 'apps/electron/src/renderer/src/shared/api.ts'),
       '@contracts': resolve(root, 'packages/shared/src'),
-      '@components': resolve(root, 'apps/electron/src/renderer/src/shared/components'),
+      '@': resolve(root, 'apps/electron/src/renderer/src'),
+      'better-sqlite3': resolve(root, 'apps/electron/node_modules/better-sqlite3'),
     },
   },
   test: {

@@ -16,6 +16,27 @@ export interface TrackerConfig {
   options?: string[]
   identity?: string
   isCustom?: boolean
+  /** How several records on one day combine for charts and statistics. */
+  aggregate?: 'sum' | 'mean' | 'last'
+  /** Whether a day without a record means zero (activity) or unknown (measure). */
+  valueKind?: 'measure' | 'activity'
+  /** One-tap values offered in Quick Entry. */
+  quickValues?: number[]
+  /** For goals: reach at least / stay at most the goal each day. */
+  goalDirection?: 'atLeast' | 'atMost'
+  /** Extra fields recorded with every entry (stored in entry.metadata.fields). */
+  fields?: CustomField[]
+  description?: string
+}
+
+export type CustomFieldType = 'number' | 'text' | 'select' | 'boolean'
+
+export interface CustomField {
+  key: string
+  label: string
+  type: CustomFieldType
+  unit?: string
+  options?: string[]
 }
 
 export interface Tracker {

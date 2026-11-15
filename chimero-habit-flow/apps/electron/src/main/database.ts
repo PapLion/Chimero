@@ -13,7 +13,8 @@ import { initDb, getDb, getRawDb } from '@packages/db/database';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { trackers, entries } from '@packages/db/schema';
 import { eq, sql } from 'drizzle-orm';
-import { planDefaultTrackerSeedActions } from '@contracts/features/tracking';
+import { getTrackerIdentity, planDefaultTrackerSeedActions } from '@contracts/features/tracking';
+import { mapTracker } from './shared/mappers';
 
 /**
  * Resolves the path to the Drizzle migrations folder.
@@ -193,6 +194,17 @@ function seedDefaultTrackers(): void {
   for (const trackerId of [...plan.legacyTrackerIdsToRemove, ...plan.unsupportedTrackerIdsToRemove]) {
     db.delete(trackers).where(eq(trackers.id, trackerId)).run();
     console.log(`[DB] Removed empty legacy/default tracker (${trackerId})`);
+  }
+
+  // Stamp each built-in tracker with its role so later renames never detach it
+  // from its structured data or cause a duplicate to be seeded.
+  for (const tracker of existing) {
+    if (tracker.isCustom) continue;
+    const mapped = mapTracker(tracker as Record<string, unknown>);
+    if (typeof mapped.config.identity === 'string' && mapped.config.identity) continue;
+    const identity = getTrackerIdentity(mapped);
+    if (identity === 'generic') continue;
+    db.update(trackers).set({ config: JSON.stringify({ ...mapped.config, identity }) }).where(eq(trackers.id, Number(tracker.id))).run();
   }
 
   for (const tracker of plan.toInsert) {
