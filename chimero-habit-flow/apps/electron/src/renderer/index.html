@@ -1,19 +1,14 @@
 <!doctype html>
-<html>
+<html lang="en" data-theme="dark" data-accent="iris">
   <head>
     <meta charset="UTF-8" />
     <meta
-  http-equiv="Content-Security-Policy"
-  content="
-    default-src 'self';
-    img-src 'self' data: blob: chimero-asset:;
-    style-src 'self' 'unsafe-inline';
-    script-src 'self' 'unsafe-eval';
-  "
-/>
-    <title>Chimero Habit Flow</title>
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data: blob: chimero-asset:; media-src 'self' chimero-asset:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'"
+    />
+    <title>Chimero</title>
   </head>
-  <body class="bg-slate-950 text-slate-100">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

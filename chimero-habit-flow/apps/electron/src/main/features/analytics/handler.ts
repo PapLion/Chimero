@@ -22,7 +22,7 @@ export function registerAnalyticsHandlers(): void {
   ipcMain.handle('analytics-metrics', () => listMetrics(raw(), getPreferences(raw())))
   ipcMain.handle('analytics-series', (_, request: SeriesRequest) => {
     assertRange(request)
-    return getSeries(raw(), getPreferences(raw()), request, Array.isArray(request.metricIds) ? request.metricIds.slice(0, 24) : [])
+    return getSeries(raw(), getPreferences(raw()), request, Array.isArray(request.metricIds) ? request.metricIds.slice(0, 80) : [])
   })
   ipcMain.handle('analytics-pair', (_, request: PairRequest) => {
     assertRange(request)

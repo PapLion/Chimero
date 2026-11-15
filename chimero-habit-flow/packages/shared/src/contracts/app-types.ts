@@ -103,6 +103,10 @@ export interface Entry {
     activityType: BookActivityType
   }
   socialInteractions?: SocialInteractionReadModel[]
+  /** Structured weigh-in, when this entry belongs to the Weight tracker. */
+  weight?: { weight: number; unit: WeightUnit; waist: number | null; waistUnit: MeasurementUnit | null }
+  /** Summary of a structured workout session. */
+  session?: { name: string | null; minutes: number | null; loadUnit: WorkoutWeightUnit; exercises: string[]; sets: number; volume: number | null }
 }
 
 export type EntryUpdateRequest = {

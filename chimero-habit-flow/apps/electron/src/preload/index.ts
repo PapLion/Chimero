@@ -162,5 +162,5 @@ const api: ElectronApi = {
 if (process.contextIsolated) {
   contextBridge.exposeInMainWorld('api', api)
 } else {
-  ;(window as unknown as { api: ElectronApi }).api = api
+  (window as unknown as { api: ElectronApi }).api = api
 }

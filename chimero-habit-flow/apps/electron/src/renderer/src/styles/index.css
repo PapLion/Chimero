@@ -1,0 +1,183 @@
+@import '@fontsource-variable/bricolage-grotesque/index.css';
+@import '@fontsource-variable/instrument-sans/index.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Nocturne: aubergine ink, iris accent. Every colour is a channel triplet so
+   Tailwind can apply alpha. */
+:root,
+[data-theme='dark'] {
+  --bg: 21 19 28;
+  --surface: 30 27 40;
+  --raised: 40 36 54;
+  --line: 56 51 74;
+  --text: 236 232 244;
+  --muted: 165 160 182;
+  --faint: 116 111 136;
+  --good: 95 211 162;
+  --bad: 255 112 134;
+  --warn: 255 180 96;
+  --shadow: 5 4 10;
+  --accent: 160 128 255;
+  --accent-ink: 20 16 34;
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --bg: 244 242 248;
+  --surface: 255 255 255;
+  --raised: 237 234 244;
+  --line: 219 214 231;
+  --text: 29 26 38;
+  --muted: 92 87 110;
+  --faint: 136 131 153;
+  --good: 18 132 90;
+  --bad: 204 48 78;
+  --warn: 176 96 8;
+  --shadow: 60 50 90;
+  --accent: 104 68 222;
+  --accent-ink: 255 255 255;
+  color-scheme: light;
+}
+
+[data-accent='ember'] { --accent: 255 154 84; --accent-ink: 36 18 4; }
+[data-accent='moss'] { --accent: 126 211 140; --accent-ink: 8 30 14; }
+[data-accent='tide'] { --accent: 98 200 255; --accent-ink: 4 24 38; }
+[data-accent='rose'] { --accent: 255 130 184; --accent-ink: 40 6 22; }
+[data-theme='light'][data-accent='ember'] { --accent: 190 86 12; --accent-ink: 255 255 255; }
+[data-theme='light'][data-accent='moss'] { --accent: 38 128 62; --accent-ink: 255 255 255; }
+[data-theme='light'][data-accent='tide'] { --accent: 10 112 176; --accent-ink: 255 255 255; }
+[data-theme='light'][data-accent='rose'] { --accent: 190 44 116; --accent-ink: 255 255 255; }
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-bg font-sans text-base text-text antialiased;
+    font-feature-settings: 'tnum' 1;
+    overflow: hidden;
+    user-select: none;
+  }
+  input,
+  textarea,
+  [contenteditable],
+  .selectable {
+    user-select: text;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display;
+    font-variation-settings: 'opsz' 32, 'wdth' 92;
+    letter-spacing: -0.012em;
+  }
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  ::selection {
+    background: rgb(var(--accent) / 0.35);
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--line));
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--faint));
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  input[type='number']::-webkit-inner-spin-button {
+    display: none;
+  }
+}
+
+@layer components {
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+  .num {
+    @apply font-display;
+    font-variation-settings: 'opsz' 48, 'wdth' 88;
+    font-feature-settings: 'tnum' 1;
+    letter-spacing: -0.02em;
+  }
+  .card {
+    @apply rounded-widget border border-line/70 bg-surface;
+  }
+  .field {
+    @apply h-9 w-full rounded-control border border-line bg-bg/60 px-3 text-base text-text placeholder:text-faint transition-colors;
+  }
+  .field:hover {
+    @apply border-faint/70;
+  }
+  .field:focus {
+    @apply border-accent outline-none;
+    box-shadow: 0 0 0 3px rgb(var(--accent) / 0.18);
+  }
+  textarea.field {
+    @apply h-auto py-2 leading-relaxed;
+  }
+  select.field {
+    appearance: none;
+    padding-right: 2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23908aa8' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center;
+  }
+  .scroll-fade {
+    mask-image: linear-gradient(to bottom, black calc(100% - 20px), transparent);
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+.animate-pop {
+  animation: pop-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.animate-fade {
+  animation: fade-in 140ms ease-out;
+}
+.animate-toast {
+  animation: toast-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

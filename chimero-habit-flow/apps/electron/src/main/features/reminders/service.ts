@@ -25,6 +25,7 @@ export interface ReminderRow {
   date: string | null
   days: string | null
   last_triggered: number | null
+  completed_at?: number | null
 }
 
 function localDate(d: Date): string {
@@ -53,6 +54,11 @@ export function isReminderDue(row: ReminderRow, now: Date): boolean {
     const days = parseDays(row.days)
     if (days.length > 0 && !days.includes(now.getDay())) return false
   }
+  // Ticking a one-off reminder retires it; ticking a repeating one only covers that day.
+  if (row.completed_at != null) {
+    const completed = row.completed_at > 1e11 ? row.completed_at : row.completed_at * 1000
+    if (row.date || localDate(new Date(completed)) === today) return false
+  }
   const minutesNow = now.getHours() * 60 + now.getMinutes()
   const minutesDue = Number(match[1]) * 60 + Number(match[2])
   if (minutesNow < minutesDue || minutesNow - minutesDue > GRACE_MINUTES) return false
@@ -66,7 +72,7 @@ export function isReminderDue(row: ReminderRow, now: Date): boolean {
 export function checkReminders(now = new Date()): number {
   const raw = getRawDb()
   if (!raw) return 0
-  const rows = raw.prepare('SELECT id, title, description, time, date, days, last_triggered FROM reminders WHERE enabled = 1 AND completed_at IS NULL').all() as ReminderRow[]
+  const rows = raw.prepare('SELECT id, title, description, time, date, days, last_triggered, completed_at FROM reminders WHERE enabled = 1').all() as ReminderRow[]
   const due = rows.filter((row) => isReminderDue(row, now))
   if (due.length === 0) return 0
   const notify = getPreferences(raw).notifications && Notification.isSupported()

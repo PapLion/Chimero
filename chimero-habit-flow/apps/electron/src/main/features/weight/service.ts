@@ -202,6 +202,12 @@ export async function setWeightGoal(data: SetTrackerGoalRequest): Promise<Tracke
   const now = Date.now()
   const database = getDb()
 
+  // `active: false` clears the goal: the old one is retired and nothing replaces it.
+  if (data.active === false) {
+    await database.update(trackerGoals).set({ active: false, updatedAt: now }).where(eq(trackerGoals.trackerId, data.trackerId))
+    return null
+  }
+
   await database.transaction(async (tx) => {
     if (data.active ?? true) {
       await tx

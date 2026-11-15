@@ -116,7 +116,7 @@ export interface ElectronApi {
   getTrackers: () => Promise<Tracker[]>
   createTracker: (data: { name: string; type: string; icon?: string; color?: string; config?: TrackerConfig }) => Promise<Tracker | null>
   deleteTracker: (id: number) => Promise<boolean>
-  getEntries: (options?: { limit?: number; trackerId?: number; from?: string; to?: string }) => Promise<Entry[]>
+  getEntries: (options?: { limit?: number; trackerId?: number; from?: string; to?: string; id?: number }) => Promise<Entry[]>
   addEntry: (data: BaseEntryRequest) => Promise<Entry | null>
   updateEntry: (id: number, updates: EntryUpdateRequest) => Promise<Entry | null>
   deleteEntry: (id: number) => Promise<boolean>

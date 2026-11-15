@@ -298,9 +298,9 @@ export function mapReminder(row: Record<string, unknown>): Reminder {
 export function mapAsset(row: Record<string, unknown>): AssetWithUrls {
   const path = (row.path as string) ?? ''
   const thumbnailPath = (row.thumbnailPath ?? row.thumbnail_path) as string | null
-  const assetUrl = `chimero-asset:///${path.replace(/^\/+/, '')}`
+  const assetUrl = `chimero-asset://local/${path.replace(/^\/+/, '')}`
   const thumbnailUrl = thumbnailPath
-    ? `chimero-asset:///${thumbnailPath.replace(/^\/+/, '')}`
+    ? `chimero-asset://local/${thumbnailPath.replace(/^\/+/, '')}`
     : assetUrl
   return {
     id: row.id as number,

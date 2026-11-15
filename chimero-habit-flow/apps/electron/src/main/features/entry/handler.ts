@@ -2,7 +2,7 @@ import type { DrizzleTransaction } from '@packages/db/database'
 import { ipcMain } from 'electron'
 import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm'
 import { books, bookActivities, contactInteractions, contacts, entries, entriesToTags, entryFood, entryGaming, entryHealth, entryIntake, entryWeight, intakeItems, symptoms, trackers } from '@packages/db'
-import { getDb as db } from '@packages/db/database'
+import { getDb as db, getRawDb } from '@packages/db/database'
 import { mapEntry, mapTracker } from '../../shared/mappers'
 import type { BaseEntryRequest, Entry, EntryUpdateRequest, QuickEntryContextResponse, SocialInteractionReadModel } from '@contracts/contracts'
 import { computeContactLastTalkedTimestamp, getContactInitials, normalizeSocialMethod, normalizeSocialMoodImpact } from '@contracts/domain'
@@ -260,6 +260,38 @@ async function isIntakeTracker(trackerId: number): Promise<boolean> {
   return getTrackerIdentity(mapTracker(row as Record<string, unknown>)) === 'intake'
 }
 
+/** Attach weigh-in and workout summaries so every surface reads one entry shape. */
+function withStructuredSummaries(mapped: Entry[]): Entry[] {
+  const raw = getRawDb()
+  if (!raw || typeof raw.prepare !== 'function' || mapped.length === 0) return mapped
+  const weights = new Map<number, NonNullable<Entry['weight']>>()
+  const sessions = new Map<number, NonNullable<Entry['session']>>()
+  const ids = mapped.map((entry) => entry.id)
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500)
+    const marks = chunk.map(() => '?').join(',')
+    const weightRows = raw.prepare(`SELECT entry_id AS id, weight_value AS weight, weight_unit AS unit, waist_value AS waist, waist_unit AS waistUnit FROM entry_weight WHERE entry_id IN (${marks})`).all(...chunk) as Array<{ id: number; weight: number; unit: 'kg' | 'lb'; waist: number | null; waistUnit: 'cm' | 'in' | null }>
+    for (const row of weightRows) weights.set(row.id, { weight: row.weight, unit: row.unit, waist: row.waist, waistUnit: row.waistUnit })
+    const sessionRows = raw.prepare(`SELECT entry_id AS id, session_name AS name, duration_minutes AS minutes, load_unit AS loadUnit FROM workout_sessions WHERE entry_id IN (${marks})`).all(...chunk) as Array<{ id: number; name: string | null; minutes: number | null; loadUnit: 'kg' | 'lb' }>
+    for (const row of sessionRows) sessions.set(row.id, { name: row.name, minutes: row.minutes, loadUnit: row.loadUnit, exercises: [], sets: 0, volume: null })
+    const setRows = raw
+      .prepare(`SELECT e.session_entry_id AS id, e.exercise_name AS exercise, COUNT(s.id) AS sets, SUM(s.reps * s.load) AS volume FROM workout_session_exercises e LEFT JOIN workout_sets s ON s.session_exercise_id = e.id WHERE e.session_entry_id IN (${marks}) GROUP BY e.id ORDER BY e.order_index, e.id`)
+      .all(...chunk) as Array<{ id: number; exercise: string; sets: number; volume: number | null }>
+    for (const row of setRows) {
+      const session = sessions.get(row.id)
+      if (!session) continue
+      session.exercises.push(row.exercise)
+      session.sets += row.sets
+      if (row.volume != null) session.volume = (session.volume ?? 0) + row.volume
+    }
+  }
+  return mapped.map((entry) => {
+    const weight = weights.get(entry.id)
+    const session = sessions.get(entry.id)
+    return weight || session ? { ...entry, ...(weight ? { weight } : {}), ...(session ? { session } : {}) } : entry
+  })
+}
+
 const entryProjection = {
   id: entries.id,
   trackerId: entries.trackerId,
@@ -300,10 +332,11 @@ const entryProjection = {
 }
 
 export function registerEntryHandlers(): void {
-  ipcMain.handle('get-entries', async (_, options?: { limit?: number; trackerId?: number; from?: string; to?: string }) => {
+  ipcMain.handle('get-entries', async (_, options?: { limit?: number; trackerId?: number; from?: string; to?: string; id?: number }) => {
     try {
       const limit = Math.max(1, Math.min(options?.limit ?? 100, 20000))
       const conditions: SQL[] = []
+      if (options?.id) conditions.push(eq(entries.id, options.id))
       if (options?.trackerId) conditions.push(eq(entries.trackerId, options.trackerId))
       if (options?.from) conditions.push(sql`${entries.dateStr} >= ${options.from}`)
       if (options?.to) conditions.push(sql`${entries.dateStr} <= ${options.to}`)
@@ -323,7 +356,7 @@ export function registerEntryHandlers(): void {
         .limit(limit)
       const mapped = rows.map((r) => mapEntry(r as Record<string, unknown>))
       const tagIdsByEntry = await tagsService.getEntryTagIds(mapped.map((entry) => entry.id))
-      return await withSocialInteractions(mapped.map((entry) => ({ ...entry, tagIds: tagIdsByEntry.get(entry.id) ?? [] })))
+      return withStructuredSummaries(await withSocialInteractions(mapped.map((entry) => ({ ...entry, tagIds: tagIdsByEntry.get(entry.id) ?? [] }))))
     } catch (e) {
       console.error('get-entries error:', e)
       return []
@@ -570,6 +603,8 @@ export function registerEntryHandlers(): void {
           healthStructured: entryHealth.entryId,
           intakeStructured: entryIntake.entryId,
           bookStructured: bookActivities.entryId,
+          bookId: bookActivities.bookId,
+          bookActivityType: bookActivities.activityType,
         })
         .from(entries)
         .leftJoin(entryGaming, eq(entryGaming.entryId, entries.id))
@@ -579,22 +614,7 @@ export function registerEntryHandlers(): void {
         .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
         .where(eq(entries.id, id))
         .limit(1)
-
-      if (existing?.gamingStructured && await isGamingTracker(existing.trackerId)) {
-        throw new Error('Use delete-gaming-entry logic for structured Gaming entries')
-      }
-      if (existing?.foodStructured && await isFoodTracker(existing.trackerId)) {
-        throw new Error('Use the Food flow for structured Diet entries')
-      }
-      if (existing?.healthStructured && await isHealthTracker(existing.trackerId)) {
-        throw new Error('Use the Health flow for structured Health entries')
-      }
-      if (existing?.intakeStructured && await isIntakeTracker(existing.trackerId)) {
-        throw new Error('Use the Vitamins & Medications flow for structured intake entries')
-      }
-      if (existing?.bookStructured && await isBooksTracker(existing.trackerId)) {
-        throw new Error('Use the Books flow for structured Books entries')
-      }
+      if (!existing) return false
 
       const database = db()
       await Promise.resolve(database.transaction((tx) => {
@@ -607,8 +627,16 @@ export function registerEntryHandlers(): void {
         runQuery(tx.delete(contactInteractions).where(eq(contactInteractions.entryId, id)))
         runQuery(tx.delete(entriesToTags).where(eq(entriesToTags.entryId, id)))
         runQuery(tx.delete(entryGaming).where(eq(entryGaming.entryId, id)))
+        runQuery(tx.delete(entryFood).where(eq(entryFood.entryId, id)))
+        runQuery(tx.delete(entryHealth).where(eq(entryHealth.entryId, id)))
         runQuery(tx.delete(entryIntake).where(eq(entryIntake.entryId, id)))
         runQuery(tx.delete(bookActivities).where(eq(bookActivities.entryId, id)))
+        // Removing the record that started or finished a book puts the book back where it was.
+        if (existing.bookId && existing.bookActivityType === 'finished') {
+          runQuery(tx.update(books).set({ finishedDate: null, shelf: 'reading', status: 'active', updatedAt: Date.now() }).where(eq(books.id, existing.bookId)))
+        } else if (existing.bookId && existing.bookActivityType === 'started') {
+          runQuery(tx.update(books).set({ startedDate: null, shelf: 'tbr', status: 'planned', updatedAt: Date.now() }).where(and(eq(books.id, existing.bookId), sql`${books.finishedDate} IS NULL`)))
+        }
         runQuery(tx.delete(entryWeight).where(eq(entryWeight.entryId, id)))
         runQuery(tx.delete(entries).where(eq(entries.id, id)))
         refreshContactsLastTalked(tx, linkedContactIds)
