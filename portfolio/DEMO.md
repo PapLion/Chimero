@@ -8,9 +8,18 @@ pnpm build
 node scripts/demo.cjs --open
 ```
 
-The script starts the actual Electron application with an isolated `.demo-profile/` directory, writes synthetic records through the preload IPC API, and leaves the window open. It never selects the normal personal profile. Existing nonempty demo profiles are retained rather than overwritten. To create another profile, set `CHIMERO_USER_DATA_DIR` to a new directory. Do not point this script at a personal profile.
+The script starts the actual Electron application with an isolated `.demo-profile/` directory, writes synthetic records through the preload IPC API, and leaves the window open. It never selects the normal personal profile. A completion marker is written only after seeding succeeds. Completed demo profiles are retained. Nonempty profiles without that marker are refused without changing their records; this prevents a partial seed or personal profile from being mistaken for a valid demo. To retry an interrupted seed, choose a new directory. To create another profile, set `CHIMERO_USER_DATA_DIR` to a new directory. Do not point this script at a personal profile.
 
-Explore Home, press Alt+Q, open Weight, browse Calendar, compare Outdoor time with Mood in Insight Lab, and visit Contacts and Custom Trackers. The synthetic relationship is illustrative, not a real finding.
+## Five-minute walkthrough
+
+1. Home: inspect today's weight, mood, outdoor time, workout, social interaction and tasks.
+2. Press **Alt+Q**, select Weight and inspect the specialized form. Save a fictional measurement if desired, then open Weight and its Graphs tab.
+3. Open Calendar and select an earlier day to see persisted history.
+4. Open Insight Lab, select Outdoor time → Mood, choose Same day and run analysis. Recorded zero days provide the comparison cohort; absent records remain unknown.
+5. Open Contacts → Alex Rivera for a fictional profile, then Custom Trackers → Add New Tracker to inspect configuration.
+6. Close the app and run the launch command again. The completed profile and any edits remain local.
+
+ The synthetic relationship is illustrative, not a real finding.
 
 To recreate the eight portfolio captures:
 
@@ -18,7 +27,7 @@ To recreate the eight portfolio captures:
 node scripts/demo.cjs --capture
 ```
 
-Captures are written to `portfolio/screenshots/`. The script uses a 1440 × 1000 renderer viewport and disables animations during screenshot capture for stable output. This is an actual Electron renderer, not a mockup or alternate website.
+Captures are written to `portfolio/screenshots/`. The script uses a 1440 × 1000 renderer viewport (1920 × 1080 for the distinct hero) and disables animations during screenshot capture for stable output. This is an actual Electron renderer, not a mockup or alternate website.
 
 Run persistence verification:
 
@@ -35,4 +44,4 @@ Build an unpacked Linux desktop directory:
 pnpm exec electron-builder --linux dir --publish never
 ```
 
-This command does not publish a release. See the verification report for whether packaging and packaged startup succeeded on the test host. No Windows installation claim is implied.
+This command does not publish a release. The unpacked Linux executable was launched and passed the CRUD/restart test on the test host. See [verification evidence](../Documentation/Release/VERIFICATION.md) for scope and limitations. No Windows installation claim is implied.

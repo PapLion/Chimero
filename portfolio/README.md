@@ -34,7 +34,7 @@ The engineering challenge is consistency: quick entry, tracker history, the cale
 
 ## Demonstration and evidence
 
-See [DEMO.md](DEMO.md) for setup, isolated profiles and reproduction. These are authentic captures of the running Electron renderer, using fictional records written through the same IPC API as the application. No generated UI or personal client data is used. The dataset contains 42 days of synthetic weight, mood and outdoor-time records, plus fictional contacts and a sample workout. The apparent association is intentionally synthetic and has no scientific meaning.
+See [DEMO.md](DEMO.md) for setup, isolated profiles and reproduction. These are authentic captures of the running Electron renderer, using fictional records written through the same IPC API as the application. No generated UI or personal client data is used. The dataset contains 42 days of synthetic weight, mood and outdoor-time records, plus fictional contacts, a sample workout, tasks, a meal and a book activity. The apparent association is intentionally synthetic and has no scientific meaning.
 
 The Electron end-to-end test exercises a fresh database, custom tracker and entry creation, editing, layout persistence, a complete process restart, restored reads, calendar navigation and deletion. It passed on the Linux host during this work. This does not establish Windows installer compatibility or exhaustive tracker coverage. Refer to the repository release verification report for the complete check results.
 
@@ -43,3 +43,29 @@ The Electron end-to-end test exercises a fresh database, custom tracker and entr
 Custom trackers remain lightweight configurable trackers, not a full relational schema builder. Correlation results are descriptive observations and cannot establish causality. Not every historical feature request is implemented. Windows installation, platform-specific notifications and long-term performance require additional platform testing. There are no claimed startup or memory benchmarks.
 
 The portfolio material is synthetic and suitable for review independently of historical client-context documents. Review ownership and publication rights before publishing any original client documentation or assets.
+
+## Portfolio integration
+
+Copy this directory into your portfolio assets and use [project.json](project.json) for the project card, technology tags, gallery paths and accessible image descriptions. Use `screenshots/08-desktop-hero.png` as the wide cover. Images are unmodified captures of actual application states; do not describe the synthetic comparison as a personal or scientific finding.
+
+### Architecture at a glance
+
+```mermaid
+flowchart LR
+  UI[React desktop renderer] --> Q[TanStack Query + typed API]
+  Q --> P[Context-isolated preload]
+  P --> IPC[Named Electron IPC handlers]
+  IPC --> S[Domain services and shared read models]
+  S --> DB[(Local SQLite + Drizzle migrations)]
+  S --> A[Local asset files]
+```
+
+### Engineering highlights
+
+- Preserved user records by replacing destructive schema recovery with additive repair and fail-closed behavior.
+- Kept structured tracker edits consistent across entry forms, history and calendar views.
+- Averaged repeated daily observations and required actual comparison cohorts instead of inventing statistical evidence.
+- Verified persistence through a full desktop-process restart and tested upgrades from eleven historical migration stages.
+- Made the demonstration reproducible through real IPC writes and a separate, explicitly completed synthetic profile.
+
+The detailed [verification report](../Documentation/Release/VERIFICATION.md) separates runtime evidence from remaining platform and product limitations.

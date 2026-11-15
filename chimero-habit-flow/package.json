@@ -19,7 +19,9 @@
     "build": "pnpm --filter chimero-electron build",
     "build:web": "pnpm --filter chimero-web build",
     "package": "turbo run build && electron-builder",
-    "check-types": "pnpm --filter chimero-electron exec tsc --noEmit && pnpm --filter chimero-web check-types"
+    "check-types": "pnpm --filter chimero-electron exec tsc --noEmit && pnpm --filter chimero-web check-types",
+    "demo": "node scripts/demo.cjs --open",
+    "demo:capture": "node scripts/demo.cjs --capture"
   },
   "keywords": [],
   "license": "ISC",

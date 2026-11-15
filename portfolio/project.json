@@ -1,0 +1,64 @@
+{
+  "title": "Chimero",
+  "tagline": "Your life, in perspective",
+  "summary": "A local-first desktop workspace for daily logging, structured activity history and exploratory personal statistics.",
+  "category": "Desktop application",
+  "stack": [
+    "Electron",
+    "React",
+    "TypeScript",
+    "Vite",
+    "SQLite",
+    "Drizzle ORM",
+    "TanStack Query",
+    "Tailwind CSS",
+    "Playwright",
+    "Vitest"
+  ],
+  "highlights": [
+    "Structured tracker data and shared read models",
+    "Safe incremental SQLite upgrades",
+    "Fast keyboard-accessible entry",
+    "Local exploratory comparisons with explicit missing-data handling",
+    "Reproducible synthetic desktop demonstration"
+  ],
+  "repository": "https://github.com/PapLion/Chimero",
+  "caseStudy": "README.md",
+  "demoInstructions": "DEMO.md",
+  "hero": "screenshots/08-desktop-hero.png",
+  "screenshots": [
+    {
+      "src": "screenshots/01-dashboard.png",
+      "alt": "Daily dashboard with real synthetic records"
+    },
+    {
+      "src": "screenshots/02-quick-entry.png",
+      "alt": "Weight entry form"
+    },
+    {
+      "src": "screenshots/03-weight-history.png",
+      "alt": "Weight trend chart"
+    },
+    {
+      "src": "screenshots/04-calendar.png",
+      "alt": "Historical records in a monthly calendar"
+    },
+    {
+      "src": "screenshots/05-insight-lab.png",
+      "alt": "Exploratory comparison of synthetic outdoor time and mood"
+    },
+    {
+      "src": "screenshots/06-custom-trackers.png",
+      "alt": "Custom tracker configuration"
+    },
+    {
+      "src": "screenshots/07-contacts.png",
+      "alt": "Fictional contact profile and interaction context"
+    },
+    {
+      "src": "screenshots/08-desktop-hero.png",
+      "alt": "Wide desktop dashboard with collapsed navigation"
+    }
+  ],
+  "publicationNote": "Only synthetic portfolio assets are included. Original client documents and personal profiles are not part of this showcase."
+}

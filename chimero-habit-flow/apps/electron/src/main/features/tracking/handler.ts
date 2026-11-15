@@ -12,6 +12,17 @@ import {
 
 export { DEFAULT_TRACKERS, planDefaultTrackerSeedActions }
 
+function normalizeTrackerType(value: string): 'numeric' | 'range' | 'binary' | 'text' | 'composite' {
+  const mapped = ({ counter: 'numeric', rating: 'range', list: 'text' } as Record<string, string>)[value] ?? value
+  if (!['numeric', 'range', 'binary', 'text', 'composite'].includes(mapped)) throw new Error('Invalid tracker type')
+  return mapped as 'numeric' | 'range' | 'binary' | 'text' | 'composite'
+}
+
+function normalizeTrackerName(value: string): string {
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > 120) throw new Error('Tracker name must contain 1–120 characters')
+  return value.trim()
+}
+
 async function legacyMediaTvHasEntries(legacyTrackerIds: number[]): Promise<boolean> {
   if (legacyTrackerIds.length === 0) return false
 
@@ -109,11 +120,11 @@ export function registerTrackingHandlers(): void {
       }
 
       const uiType = (data.type as string) || 'numeric'
-      const schemaType = uiType === 'counter' ? 'numeric' : uiType === 'rating' ? 'range' : uiType === 'list' ? 'text' : uiType
+      const schemaType = normalizeTrackerType(uiType)
       const [inserted] = await db()
         .insert(trackers)
         .values({
-          name: data.name,
+          name: normalizeTrackerName(data.name),
           type: schemaType as 'numeric' | 'range' | 'binary' | 'text' | 'composite',
           icon: data.icon ?? null,
           color: data.color ?? null,
@@ -241,9 +252,9 @@ export function registerTrackingHandlers(): void {
   ipcMain.handle('reorder-trackers', async (_, ids: number[]) => {
     try {
       const database = db()
-      await database.transaction(async (tx) => {
+      database.transaction((tx) => {
         for (let i = 0; i < ids.length; i++) {
-          await tx.update(trackers).set({ order: i }).where(eq(trackers.id, ids[i]))
+          tx.update(trackers).set({ order: i }).where(eq(trackers.id, ids[i])).run()
         }
       })
       return true
@@ -270,13 +281,13 @@ export function registerTrackingHandlers(): void {
       const set: Record<string, unknown> = {}
       if (updates.order !== undefined) set.order = updates.order
       if (updates.isFavorite !== undefined) set.isFavorite = updates.isFavorite
-      if (updates.name !== undefined) set.name = updates.name
+      if (updates.name !== undefined) set.name = normalizeTrackerName(updates.name)
       if (updates.icon !== undefined) set.icon = updates.icon
       if (updates.color !== undefined) set.color = updates.color
       if (updates.config !== undefined) set.config = JSON.stringify(updates.config)
       if (updates.type !== undefined) {
         const uiType = updates.type
-        const schemaType = uiType === 'counter' ? 'numeric' : uiType === 'rating' ? 'range' : uiType === 'list' ? 'text' : uiType
+        const schemaType = normalizeTrackerType(uiType)
         set.type = schemaType
       }
       if (Object.keys(set).length === 0) return null

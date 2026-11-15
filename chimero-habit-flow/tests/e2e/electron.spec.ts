@@ -20,6 +20,17 @@ test('real SQLite tracker CRUD, layout persistence and restart', async () => {
       const api = window.api
       const tracker = await api.createTracker({ name:'Persistence check',type:'numeric',config:{unit:'min'} })
       if(!tracker) throw new Error('Tracker not created')
+      if (await api.createTracker({name:'Invalid',type:'unsupported' as 'numeric'})) throw new Error('Invalid type accepted')
+      if (await api.updateTracker(tracker.id,{name:'   '})) throw new Error('Blank tracker name accepted')
+      const renamed = await api.updateTracker(tracker.id,{name:'  Persistence renamed  '})
+      if(renamed?.name !== 'Persistence renamed') throw new Error('Tracker rename failed')
+      const weight = (await api.getTrackers()).find(t=>t.name==='Weight')!
+      const weighIn = await api.addWeightEntry({trackerId:weight.id,weight:75,weightUnit:'kg',timestamp:Date.now()})
+      if (!weighIn) throw new Error('Weight create failed')
+      if (!await api.updateWeightEntry(weighIn.entry.entryId,{weight:74,weightUnit:'kg'})) throw new Error('Weight update failed')
+      if ((await api.getWeightDetail(weight.id)).history.length !== 1) throw new Error('Weight history missing')
+      if (!await api.deleteWeightEntry(weighIn.entry.entryId)) throw new Error('Weight delete failed')
+      if ((await api.getWeightDetail(weight.id)).history.length) throw new Error('Weight history not deleted')
       const entry = await api.addEntry({trackerId:tracker.id,value:15,timestamp:Date.now(),note:'Disposable test'})
       if(!entry) throw new Error('Entry not created')
       await api.updateEntry(entry.id,{value:25,note:'Edited test'})
