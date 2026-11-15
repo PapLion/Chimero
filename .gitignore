@@ -78,3 +78,6 @@ yarn.lock
 # *.js
 # *.js.map
 # *.d.ts
+
+# Isolated synthetic demonstration profile
+chimero-habit-flow/.demo-profile/
