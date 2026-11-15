@@ -81,3 +81,5 @@ yarn.lock
 
 # Isolated synthetic demonstration profile
 chimero-habit-flow/.demo-profile/
+
+chimero-habit-flow/.demo-profile*/

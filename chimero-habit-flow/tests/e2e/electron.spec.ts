@@ -7,7 +7,7 @@ test('real SQLite tracker CRUD, layout persistence and restart', async () => {
   test.setTimeout(90_000)
   const profile = mkdtempSync(join(tmpdir(), 'chimero-e2e-'))
   const launch = async () => {
-    const app = await electron.launch({ args: [resolve('apps/electron'), '--disable-gpu'], env: { ...process.env, CHIMERO_USER_DATA_DIR: profile } })
+    const app = await electron.launch({ executablePath: process.env.CHIMERO_TEST_EXECUTABLE, args: process.env.CHIMERO_TEST_EXECUTABLE ? ['--disable-gpu'] : [resolve('apps/electron'), '--disable-gpu'], env: { ...process.env, CHIMERO_USER_DATA_DIR: profile } })
     await expect.poll(() => app.windows().some(w => w.url().includes('renderer/index.html'))).toBe(true)
     const page = app.windows().find(w => w.url().includes('renderer/index.html'))!
     await page.waitForFunction(() => Boolean(window.api))
@@ -18,7 +18,7 @@ test('real SQLite tracker CRUD, layout persistence and restart', async () => {
     running = await launch()
     const ids = await running.page.evaluate(async () => {
       const api = window.api
-      const tracker = await api.createTracker({ name:'Persistence check',type:'number',config:{unit:'min'} })
+      const tracker = await api.createTracker({ name:'Persistence check',type:'numeric',config:{unit:'min'} })
       if(!tracker) throw new Error('Tracker not created')
       const entry = await api.addEntry({trackerId:tracker.id,value:15,timestamp:Date.now(),note:'Disposable test'})
       if(!entry) throw new Error('Entry not created')
@@ -36,6 +36,15 @@ test('real SQLite tracker CRUD, layout persistence and restart', async () => {
     expect(restored.layout?.some(w=>w.trackerId===ids.trackerId)).toBe(true)
     await running.page.getByRole('button',{name:'Calendar',exact:true}).click()
     await expect(running.page.getByRole('button',{name:'Home',exact:true})).toBeVisible()
+    for (const size of [{width:1280,height:720},{width:1440,height:900},{width:1920,height:1080}]) {
+      await running.page.setViewportSize(size)
+      await running.page.getByRole('button',{name:'Home',exact:true}).click()
+      await expect(running.page.getByRole('button',{name:'Calendar',exact:true})).toBeVisible()
+      expect(await running.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+      await running.page.keyboard.press('Alt+q')
+      await expect(running.page.getByRole('dialog')).toBeVisible()
+      await running.page.keyboard.press('Escape')
+    }
     const removed = await running.page.evaluate(async ids => {
       await window.api.deleteEntry(ids.entryId)
       const entries=await window.api.getEntries({trackerId:ids.trackerId})

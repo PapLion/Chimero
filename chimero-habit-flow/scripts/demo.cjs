@@ -1,7 +1,7 @@
 /** Real Electron demo: all records go through the application's preload IPC API. */
 const { _electron: electron } = require('playwright')
 const { resolve } = require('node:path')
-const { mkdirSync, existsSync } = require('node:fs')
+const { mkdirSync } = require('node:fs')
 const profile = resolve(process.env.CHIMERO_USER_DATA_DIR || '.demo-profile')
 const screenshots = resolve(__dirname, '../../portfolio/screenshots')
 async function launch() {
@@ -25,14 +25,14 @@ async function seed(page) {
     const trackers = await api.getTrackers()
     const weight = trackers.find(t => t.name.toLowerCase() === 'weight')
     const mood = trackers.find(t => t.name.toLowerCase() === 'mood')
-    const walk = await api.createTracker({ name:'Outdoor time', type:'number', icon:'sun', color:'#34d399', config:{unit:'min', goal:30} })
+    const walk = await api.createTracker({ name:'Outdoor time', type:'numeric', icon:'sun', color:'#34d399', config:{unit:'min', goal:30} })
     if (!weight || !mood || !walk) throw new Error('Required demo trackers missing')
     for (let day=41; day>=0; day--) {
       const d = new Date(); d.setDate(d.getDate()-day); d.setHours(12,0,0,0)
       const timestamp=d.getTime()
       await api.addWeightEntry({trackerId:weight.id, weight:Math.round((74.5 + day*0.035 + Math.sin(day)*0.25)*10)/10, weightUnit:'kg',timestamp,note:'Synthetic demo weigh-in'})
       await api.addEntry({trackerId:mood.id,value:day%3===1?6:8,timestamp,note:'Synthetic demo check-in'})
-      if(day%3!==1) await api.addEntry({trackerId:walk.id,value:25+(day%4)*10,timestamp,note:'Riverside walk · synthetic demo'})
+      await api.addEntry({trackerId:walk.id,value:day%3===1?0:25+(day%4)*10,timestamp,note:day%3===1?null:'Riverside walk · synthetic demo'})
     }
     for(const [name,notes] of [['Alex Rivera','Weekend hiking friend'],['Jamie Chen','Book club and coffee'],['Morgan Ellis','Creative projects']]) await api.createContact({name,notes:`${notes}. Fictional demo contact.`,likes:['Walking','Books']})
     const social=trackers.find(t=>t.name==='Social')

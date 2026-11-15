@@ -28,3 +28,17 @@ Tests use a separate disposable profile. SQL migration verification checks the S
 No Windows installer startup, platform notification delivery, comprehensive accessibility audit, long-term performance benchmark or exhaustive manual tracker matrix was verified. Unit tests still emit some existing Radix dialog-description and jsdom chart-size warnings. These do not fail tests but warrant follow-up. Statistical confidence is a heuristic, not a validated scientific significance measure.
 
 See the portfolio demo documentation for reproducible launch and package commands. Do not infer production certification from these checks.
+
+## Packaged Linux follow-up
+
+Rebuilt `dist/linux-unpacked` and launched its actual `chimero-electron` executable through Playwright. The same CRUD/layout/restart test passed (8.5 seconds total). This verifies unpacked Linux startup on this host, not an installer or all Linux distributions. Added viewport checks at 1280×720, 1440×900 and 1920×1080: navigation visible, no document-level horizontal overflow, Quick Entry opens and closes. This is a focused responsive smoke check, not exhaustive visual certification.
+
+Reproduce from `chimero-habit-flow/`:
+
+```sh
+pnpm build
+pnpm exec electron-builder --linux dir --publish never
+CHIMERO_TEST_EXECUTABLE="$PWD/dist/linux-unpacked/chimero-electron" pnpm test:e2e
+```
+
+Demo source now records explicit zero-activity days to form a legitimate synthetic baseline; missing observations are still treated as unknown by the application.
