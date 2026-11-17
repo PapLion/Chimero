@@ -25,35 +25,55 @@ relate over time. No cloud, no accounts, no generative AI.
 | D8 | Linux/macOS userData = Electron default; Windows keeps `%LOCALAPPDATA%/Chimero`. | Old fallback resolved to the *current working directory* off Windows. |
 | D9 | Dark-first "Nocturne" identity (aubergine ink + iris violet), light theme available; Bricolage Grotesque + Instrument Sans bundled locally. | Keeps the client-approved dark/purple identity, drops the generic SaaS look. |
 | D10 | Settings/data: units, theme, week start, JSON export, CSV export, DB backup/restore. | A local-first product must let users get their data out. |
+| D11 | Async service transactions go through `transact()` (BEGIN IMMEDIATE / COMMIT / ROLLBACK, queued) rather than rewriting every service synchronously. | better-sqlite3 rejects promise-returning transaction callbacks; every structured write was failing at runtime while mocked unit tests passed. |
+| D12 | Structured writes are covered by integration tests on real SQLite (`attachDb` + in-memory DB); tests are type-checked by `pnpm check-types`. | The mocks hid D11's bug; untyped test fixtures had drifted from the contracts. |
+| D13 | Bundle a slimmed public-domain exercise catalogue (free-exercise-db, 876 entries, Unlicense) in `resources/`; rank everyday variants of common lifts first. | Search must work offline and on first launch; no runtime download. |
+| D14 | The pattern scan controls the false-discovery rate (Benjamini–Hochberg, 5%) over every comparison, needs 14+ shared days, never compares a tag with counts/flags of the trackers it labels, and lists findings that carry the same information once. | ~5,000 tests at p ≤ 0.05 produced chance hits and tautologies ("Tagged ice cream" vs "Ate Ice cream"). |
+| D15 | Reading-type trackers show the fitted trend over the period, not last minus first. | One noisy reading at either end decided the old number and could contradict the per-week trend. |
+| D16 | Before pending migrations run on an existing database, write a consistent copy with `VACUUM INTO` to `backups/before-upgrade-*.db` (newest five kept, nothing else deleted). | Migrations are transactional, but a successful-yet-wrong upgrade must still be recoverable. |
+| D17 | Cross-platform packages get the official prebuilt better-sqlite3 for the target via an `afterPack` hook; the Windows installer is built on Windows in CI. | A Windows build made on Linux shipped Linux's native module and would fail on first database call. |
+| D18 | The portfolio showcase is seeded through `window.api` into an isolated, marker-guarded profile; screenshots are captures of the running app. | Real data paths, reproducible images, no fabricated screens, no personal data. |
+| D19 | Requirements were taken from the repository's own documents; the Notion workspace they reference was not available in this environment. | Work from what can be read and cited. |
 
 ## Checklist
 
+State on 2026-11-17, branch `feat/chimero-2`. `[x]` done and verified, `[~]` done with a stated limit.
+
 ### Backend
-- [ ] B1 remove apps/web, fix userData path, window-control IPC
-- [ ] B2 migration 0011: `settings.preferences` JSON; settings IPC
-- [ ] B3 dashboard layout v2 contract + IPC + legacy upgrade
-- [ ] B4 analytics: shared stats math, metric catalog, daily series, correlate, scan + tests
-- [ ] B5 entries range query; tracker archive/restore; identity from config
-- [ ] B6 custom tracker field config + templates
-- [ ] B7 data export / backup / restore
-- [ ] B8 reminders: verify notification loop
+- [x] B1 remove apps/web, fix userData path, window-control IPC
+- [x] B2 migration 0011: `settings.preferences` JSON; settings IPC
+- [x] B3 dashboard layout v2 contract + IPC + legacy upgrade (E2E: old array layout upgraded)
+- [x] B4 analytics: stats math, metric catalogue, daily series, pair analysis, FDR-controlled scan + tests
+- [x] B5 entries range query; tracker archive/restore; identity from config
+- [x] B6 custom tracker fields + templates
+- [x] B7 JSON/CSV export, backup, restore (E2E across a restart)
+- [~] B8 reminders: due logic fixed and unit-tested; OS notification delivery not verified
+- [x] B9 `transact()` for async service transactions; integration tests on real SQLite
+- [x] B10 copy before upgrading; E2E upgrade from the last release's database
 
 ### Renderer
-- [ ] R1 tokens, fonts, primitives (button, field, dialog, menu, tabs, toast)
-- [ ] R2 shell: title bar, sidebar, date context, command palette, shortcuts
-- [ ] R3 dashboard grid engine + widget registry + edit mode + persistence
-- [ ] R4 Quick Entry (all tracker kinds, recents, context-aware, Enter to save)
-- [ ] R5 tracker detail pages (per identity + generic) with ranges, stats, history CRUD
-- [ ] R6 Journal: calendar month, day detail, timeline
-- [ ] R7 Insight Lab: explorer, pair analysis, discoveries scan
-- [ ] R8 People (contacts CRM)
-- [ ] R9 Tags hierarchy manager
-- [ ] R10 Trackers manager + custom tracker builder
-- [ ] R11 Reminders, Assets, Settings
+- [x] R1 tokens, fonts, primitives (button, field, dialog, menu, tabs, toast)
+- [x] R2 shell: title bar, sidebar, date context, command palette, shortcuts
+- [x] R3 dashboard grid engine + widget registry + edit mode + persistence (E2E drag/resize/restart)
+- [x] R4 Quick Entry: all tracker kinds, recents, context-aware, keyboard-only scales, Enter to save
+- [x] R5 tracker pages per kind with ranges, stats, history CRUD
+- [x] R6 Journal: month calendar, day list, month list
+- [x] R7 Insights: pair analysis with lags, plain-language result, scan, pin to Today
+- [x] R8 People (contacts CRM with nudges and custom sections)
+- [x] R9 Tags with parent groups
+- [x] R10 Trackers manager + custom tracker builder
+- [x] R11 Reminders, Files, Settings
 
 ### Release
-- [ ] V1 unit/integration tests for new code; old renderer tests retired
-- [ ] V2 Electron E2E (CRUD, restart persistence, layout drag/resize persistence)
-- [ ] V3 lint, types, build, Linux package, Windows package attempt
-- [ ] V4 synthetic showcase profile + 8–12 screenshots
-- [ ] V5 portfolio docs, README, verification report
+- [x] V1 unit + integration tests (38 files, 171 tests); tests type-checked
+- [x] V2 Electron E2E: UI CRUD, restart persistence, grid drag/resize persistence, upgrade, backup/restore
+- [~] V3 lint, types, build, Linux AppImage (built, launched, E2E on packaged binary); Windows: unpacked build with verified win32 native module, installer needs wine/Windows (CI workflow added, not yet run)
+- [x] V4 synthetic showcase profile + 12 reviewed screenshots, WebP versions, hero/OG image
+- [x] V5 case study, demo guide, README, verification report
+
+## Known limits
+
+- Windows runtime is unverified until the CI Windows job (or a Windows machine) runs the E2E suite against the installer build.
+- Reminder notifications depend on the OS notification service; only the due-time logic is tested.
+- `Documentation/` and `docs/Client-Requeriments/` hold client-context material: keep them out of anything published without the client's approval.
+- Renderer bundle ~1.5 MB JS (local load, not split).

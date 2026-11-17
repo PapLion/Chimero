@@ -1,3 +1,5 @@
+> Superseded by [V2_PLAN.md](V2_PLAN.md) and [READINESS_CHECKLIST.md](READINESS_CHECKLIST.md). Kept as the record of the 14 November scope.
+
 # Portfolio completion — 14 November 2026
 
 ## Scope and evidence

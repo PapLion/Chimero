@@ -1,18 +1,15 @@
-# Portfolio readiness checklist
+# Readiness checklist — 2026-11-17
 
-Scope: coherent local desktop demonstration; no expansion to every historical request.
+`[x]` verified here, `[~]` done with a stated limit. Evidence: [VERIFICATION.md](VERIFICATION.md). Decisions: [V2_PLAN.md](V2_PLAN.md).
 
-| Objective | Evidence / state |
-|---|---|
-| Preserve real structured persistence | Existing specialized services retained; additive schema repair; SQL upgrade checks |
-| Core CRUD and restart | Automated Electron scenario; expanding to Weight and custom definition validation |
-| Statistical honesty | Daily aggregation and unknown-baseline fixes; UI now labels heuristic data coverage rather than statistical confidence |
-| All eight images visually reviewed | Calendar clipping, result hierarchy, duplicate hero and weak selected states identified and corrected; refreshed captures pending final review |
-| Fresh demo profile | Seed completion manifest, isolated profile and immediate reload being verified |
-| Cohesive desktop UI | Collapsible navigation, focus, error recovery, compact calendar and insight layout |
-| Portfolio package | English case study, assets, demo instructions; integration metadata being finalized |
-| Release gates | Full unit/types/lint/build + packaged E2E rerun after final changes |
-
-## Explicit boundaries
-
-Generic custom trackers are usable within their existing types, not a schema-builder product. Timeline era modeling and arbitrary analytics remain out of scope. Windows execution and notification delivery are unverified environmental/platform checks. Bundle size, remaining dialog accessibility warnings and non-exhaustive manual tracker coverage are disclosed product/QA limits, not hidden completion claims.
+- [x] Dashboard: add, remove, drag, resize, collisions, snapping to the grid, per-widget minimum and maximum sizes, keyboard moves, saved and restored across restarts (E2E)
+- [x] Trackers: create, edit, archive, restore and delete custom trackers; templates, fields and goals; history with editing (E2E for the full path)
+- [x] Quick Entry: Alt+Q from anywhere; type and Enter to pick; keyboard-only scales; a form fitted to each kind of record (E2E)
+- [x] Structured writes: books, weight and goals, food, health, intake, gaming, workouts and tags, checked against real SQLite
+- [x] Statistics: missing days are unknown, not zero; only days where both values are known are compared; FDR-controlled scan; every result says it is not proof of cause
+- [x] Data safety: additive migrations, a copy before upgrades, upgrade from the last release (E2E), backup, restore and export (E2E)
+- [x] Showcase: isolated synthetic profile, 12 reviewed captures, WebP and OG versions
+- [x] Linux: AppImage built and launched, E2E passes on the packaged binary
+- [~] Windows: unpacked build carries a verified win32 native module; installer and runtime need Windows (CI job added, not yet run)
+- [~] Reminders: due logic tested; OS notification delivery not verified
+- [x] Docs: case study, demo guide, README, decision log, verification report

@@ -1,64 +1,37 @@
 {
   "title": "Chimero",
   "tagline": "Your life, in perspective",
-  "summary": "A local-first desktop workspace for daily logging, structured activity history and exploratory personal statistics.",
+  "summary": "A local-first desktop app for tracking anything about your life: a dashboard you arrange, trackers you can design, logging in seconds, and statistics that never claim more than the data supports.",
   "category": "Desktop application",
-  "stack": [
-    "Electron",
-    "React",
-    "TypeScript",
-    "Vite",
-    "SQLite",
-    "Drizzle ORM",
-    "TanStack Query",
-    "Tailwind CSS",
-    "Playwright",
-    "Vitest"
-  ],
+  "year": 2026,
+  "role": "Product, interface design and full-stack engineering",
+  "stack": ["Electron", "React", "TypeScript", "SQLite", "Drizzle ORM", "TanStack Query", "Tailwind CSS", "Vitest", "Playwright", "electron-builder"],
   "highlights": [
-    "Structured tracker data and shared read models",
-    "Safe incremental SQLite upgrades",
-    "Fast keyboard-accessible entry",
-    "Local exploratory comparisons with explicit missing-data handling",
-    "Reproducible synthetic desktop demonstration"
+    "Composable 12-column dashboard: drag, resize, collisions, keyboard moves, saved layouts",
+    "Custom trackers with templates, goals, units and up to twelve fields",
+    "Quick Entry from anywhere with Alt+Q, with a form fitted to each kind of record",
+    "Correlation scan with a false-discovery-rate correction; missing days are never zero",
+    "Upgrades tested against the previous release's database, with a copy taken first",
+    "171 unit and integration tests, plus end-to-end tests on the packaged app"
   ],
   "repository": "https://github.com/PapLion/Chimero",
   "caseStudy": "README.md",
   "demoInstructions": "DEMO.md",
-  "hero": "screenshots/08-desktop-hero.png",
+  "hero": "web/hero.webp",
+  "ogImage": "og-1200x630.png",
   "screenshots": [
-    {
-      "src": "screenshots/01-dashboard.png",
-      "alt": "Daily dashboard with real synthetic records"
-    },
-    {
-      "src": "screenshots/02-quick-entry.png",
-      "alt": "Weight entry form"
-    },
-    {
-      "src": "screenshots/03-weight-history.png",
-      "alt": "Weight trend chart"
-    },
-    {
-      "src": "screenshots/04-calendar.png",
-      "alt": "Historical records in a monthly calendar"
-    },
-    {
-      "src": "screenshots/05-insight-lab.png",
-      "alt": "Exploratory comparison of synthetic outdoor time and mood"
-    },
-    {
-      "src": "screenshots/06-custom-trackers.png",
-      "alt": "Custom tracker configuration"
-    },
-    {
-      "src": "screenshots/07-contacts.png",
-      "alt": "Fictional contact profile and interaction context"
-    },
-    {
-      "src": "screenshots/08-desktop-hero.png",
-      "alt": "Wide desktop dashboard with collapsed navigation"
-    }
+    { "src": "web/01-today-dashboard.webp", "png": "screenshots/01-today-dashboard.png", "alt": "Today dashboard with mood, sleep, tasks, weight, a pinned insight, water and a logging streak" },
+    { "src": "web/02-dashboard-edit-mode.webp", "png": "screenshots/02-dashboard-edit-mode.png", "alt": "Dashboard in edit mode with remove buttons and resize handles on each widget" },
+    { "src": "web/03-quick-entry-mood.webp", "png": "screenshots/03-quick-entry-mood.png", "alt": "Quick Entry dialog for Mood with a 1 to 10 scale" },
+    { "src": "web/04-tracker-weight.webp", "png": "screenshots/04-tracker-weight.png", "alt": "Weight tracker page with fitted trend, goal line and history" },
+    { "src": "web/05-workout-entry.webp", "png": "screenshots/05-workout-entry.png", "alt": "Workout entry started from a Push routine with sets, reps and load" },
+    { "src": "web/06-insights-sleep-mood.webp", "png": "screenshots/06-insights-sleep-mood.png", "alt": "Insights comparing sleep and mood on the same day, with the list of patterns found" },
+    { "src": "web/07-insights-dairy-bloating.webp", "png": "screenshots/07-insights-dairy-bloating.png", "alt": "Insights comparing dairy with bloating on the next day" },
+    { "src": "web/08-journal.webp", "png": "screenshots/08-journal.png", "alt": "Journal month calendar with the records of the selected day" },
+    { "src": "web/09-people.webp", "png": "screenshots/09-people.png", "alt": "People page with a fictional contact's details and nudge settings" },
+    { "src": "web/10-custom-tracker-sleep.webp", "png": "screenshots/10-custom-tracker-sleep.png", "alt": "A custom Sleep tracker with statistics, chart and goal" },
+    { "src": "web/11-tracker-builder.webp", "png": "screenshots/11-tracker-builder.png", "alt": "New tracker builder started from the Meditation template" },
+    { "src": "web/12-today-light-theme.webp", "png": "screenshots/12-today-light-theme.png", "alt": "Today dashboard in the light theme" }
   ],
-  "publicationNote": "Only synthetic portfolio assets are included. Original client documents and personal profiles are not part of this showcase."
+  "publicationNote": "All screenshots are captures of the running app with a synthetic, fictional profile. Client-context documents in the repository are not part of this showcase and need the client's approval before publication."
 }
