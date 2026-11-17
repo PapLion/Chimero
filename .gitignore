@@ -83,3 +83,6 @@ yarn.lock
 chimero-habit-flow/.demo-profile/
 
 chimero-habit-flow/.demo-profile*/
+
+# Synthetic showcase profile (scripts/showcase.cjs)
+chimero-habit-flow/.showcase-profile/
