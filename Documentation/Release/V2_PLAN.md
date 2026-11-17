@@ -67,13 +67,13 @@ State on 2026-11-17, branch `feat/chimero-2`. `[x]` done and verified, `[~]` don
 ### Release
 - [x] V1 unit + integration tests (38 files, 171 tests); tests type-checked
 - [x] V2 Electron E2E: UI CRUD, restart persistence, grid drag/resize persistence, upgrade, backup/restore
-- [~] V3 lint, types, build, Linux AppImage (built, launched, E2E on packaged binary); Windows: unpacked build with verified win32 native module, installer needs wine/Windows (CI workflow added, not yet run)
+- [x] V3 lint, types, build; Linux AppImage and Windows NSIS built; E2E passes on both packaged apps (local + CI run 44144485652)
 - [x] V4 synthetic showcase profile + 12 reviewed screenshots, WebP versions, hero/OG image
 - [x] V5 case study, demo guide, README, verification report
 
 ## Known limits
 
-- Windows runtime is unverified until the CI Windows job (or a Windows machine) runs the E2E suite against the installer build.
+- Windows: the packaged app passes the E2E suite in CI (run 44144485652); the NSIS install/uninstall wizard has not been exercised by hand.
 - Reminder notifications depend on the OS notification service; only the due-time logic is tested.
 - `Documentation/` and `docs/Client-Requeriments/` hold client-context material: keep them out of anything published without the client's approval.
 - Renderer bundle ~1.5 MB JS (local load, not split).

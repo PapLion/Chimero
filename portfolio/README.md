@@ -137,7 +137,7 @@ Placement, collision, compaction and size limits are pure, unit-tested functions
 
 ### Packaging
 
-The Linux AppImage is built, launched, and passes the end-to-end suite as a packaged binary. A Windows build made on Linux turned out to contain Linux's SQLite binary and would have failed on first launch. An `afterPack` hook now ships the official prebuilt binary for the target platform and checks its format. A CI workflow builds the Windows installer on Windows and runs the same end-to-end suite against it. That workflow has not been run yet, so Windows runtime support is not claimed here.
+The Linux AppImage is built, launched, and passes the end-to-end suite as a packaged binary. A Windows build made on Linux turned out to contain Linux's SQLite binary and would have failed on first launch. An `afterPack` hook now ships the official prebuilt binary for the target platform and checks its format. In CI, the Windows job builds the NSIS installer on `windows-latest` and runs the same end-to-end suite against the packaged `Chimero.exe`; all three scenarios pass. That first Windows run also caught a real bug: on a small screen the sidebar collapses to icons, and those buttons had no accessible name.
 
 ## Verification
 
@@ -154,7 +154,7 @@ The full report is in [VERIFICATION.md](../Documentation/Release/VERIFICATION.md
 
 ## Limits, stated plainly
 
-- Windows packaging is set up and its native module is verified, but the installer has not been run on Windows.
+- On Windows the packaged app is tested in CI; the installer's own install and uninstall flow has not been exercised by hand.
 - Desktop notification delivery for reminders depends on the operating system and was not verified.
 - Insights describe associations in someone's own records. They are prompts for questions, not findings.
 - The renderer bundle is about 1.5 MB of JavaScript, loaded locally. It hasn't been split because there is no network cost.

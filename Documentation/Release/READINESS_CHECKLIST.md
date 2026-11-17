@@ -10,6 +10,6 @@
 - [x] Data safety: additive migrations, a copy before upgrades, upgrade from the last release (E2E), backup, restore and export (E2E)
 - [x] Showcase: isolated synthetic profile, 12 reviewed captures, WebP and OG versions
 - [x] Linux: AppImage built and launched, E2E passes on the packaged binary
-- [~] Windows: unpacked build carries a verified win32 native module; installer and runtime need Windows (CI job added, not yet run)
+- [x] Windows: CI builds the NSIS installer on windows-latest and the packaged Chimero.exe passes the 3 E2E scenarios (installer wizard itself not exercised by hand)
 - [~] Reminders: due logic tested; OS notification delivery not verified
 - [x] Docs: case study, demo guide, README, decision log, verification report

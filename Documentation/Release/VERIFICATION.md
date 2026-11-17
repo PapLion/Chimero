@@ -52,14 +52,22 @@ Each test runs the real Electron app on a new, temporary SQLite profile and fail
 
 ## Not verified here
 
-- **Windows runtime.**
-  - `electron-builder --win` produced `dist/win-unpacked` with the correct native module.
-  - The NSIS installer step needs wine, which this machine doesn't have.
-  - `.github/workflows/ci.yml` builds the installer on `windows-latest` and runs the E2E suite against `Chimero.exe`. It has not been run yet.
+- **Windows installer flow.** Installing and uninstalling through the NSIS wizard has not been exercised; CI tests the packaged app it installs (see below).
 - **Notification delivery.** The due-time rule is unit-tested, but whether the OS shows the notification was not checked.
 - **macOS.** Not built or run.
 - **Accessibility.** Keyboard paths are covered for Quick Entry and grid moves. No full screen-reader audit was done.
 - **Performance.** No startup or memory benchmarks. The renderer bundle is about 1.5 MB of JavaScript, loaded from disk.
+
+## CI on GitHub Actions — 2026-11-17, run 44144485652 (`64c93d0`)
+
+| Job | Result |
+|---|---|
+| linux (ubuntu-latest) | Passed: types, lint, 171 unit tests, migrations, build, 3/3 E2E under xvfb, AppImage |
+| windows (windows-latest) | Passed: 171 unit tests, build, NSIS installer, 3/3 E2E against the packaged `dist/win-unpacked/Chimero.exe` |
+
+The first CI run (`8bb54e1`) failed and was fixed rather than retried:
+- Linux could not start Electron: the runner has no root-owned `chrome-sandbox`. Tests now pass `--no-sandbox` only when `CI` is set on Linux.
+- Windows: the small runner screen collapses the sidebar to icons, and those buttons had no accessible name. They now carry `aria-label`. An E2E step collapses the sidebar and checks the names; it fails without the fix.
 
 ## Data used
 
