@@ -13,6 +13,8 @@ function NavItem({ icon, label, active, onClick, collapsed, trailing }: { icon: 
     <button
       type="button"
       onClick={onClick}
+      // Collapsed, the button shows only an icon; the tooltip is not a name.
+      aria-label={collapsed ? label : undefined}
       aria-current={active ? 'page' : undefined}
       className={cn(
         'group relative flex h-8 w-full items-center gap-2.5 rounded-control px-2 text-base transition-colors',

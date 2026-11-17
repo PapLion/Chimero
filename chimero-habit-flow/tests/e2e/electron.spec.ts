@@ -16,7 +16,8 @@ async function launch(profile: string): Promise<{ app: ElectronApplication; page
   const executable = process.env.CHIMERO_TEST_EXECUTABLE
   const app = await electron.launch({
     executablePath: executable,
-    args: executable ? ['--disable-gpu'] : [resolve('apps/electron'), '--disable-gpu'],
+    // CI runners lack a root-owned chrome-sandbox helper; real installs keep the sandbox.
+    args: [...(executable ? [] : [resolve('apps/electron')]), '--disable-gpu', ...(process.env.CI && process.platform === 'linux' ? ['--no-sandbox'] : [])],
     env: { ...process.env, CHIMERO_USER_DATA_DIR: profile, CHIMERO_NO_RELAUNCH: '1' },
   })
   const page = await app.firstWindow()
@@ -146,6 +147,15 @@ test('build a tracker, log through Quick Entry, arrange Today, and restart', asy
     expect(restored.reading).toEqual([30])
     expect(restored.mood).toEqual([8])
     await expect(running.page.locator(widget)).toHaveAttribute('data-grid', moved.join(','))
+
+    // Collapsed (by choice, or automatically in windows under 1180 px) the sidebar
+    // shows icons only; every item must keep its accessible name.
+    const nav = running.page.getByRole('navigation', { name: 'Main' })
+    await nav.getByRole('button', { name: 'Collapse sidebar' }).click()
+    await expect(nav).toHaveJSProperty('offsetWidth', 52)
+    await expect(nav.getByRole('button', { name: 'Reading', exact: true })).toBeVisible()
+    await expect(nav.getByRole('button', { name: 'Journal', exact: true })).toBeVisible()
+    await nav.getByRole('button', { name: 'Expand sidebar' }).click()
 
     // The shell holds up at common window sizes and Quick Entry opens everywhere.
     for (const size of [
