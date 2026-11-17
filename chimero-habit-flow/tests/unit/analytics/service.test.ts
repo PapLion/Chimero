@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
-import { analyze, getSeries, listMetrics, overview, scan } from '../../../apps/electron/src/main/features/analytics/service'
+import { analyze, benjaminiHochberg, getSeries, listMetrics, overview, scan } from '../../../apps/electron/src/main/features/analytics/service'
 import { eachDay } from '@contracts/domain/analytics/series'
 import { addEntry, addTracker, createTestDb } from '../../helpers/test-db'
 
@@ -148,9 +148,31 @@ describe('analytics service', () => {
       expect(finding.a.group).not.toBe(finding.b.group)
       expect(Math.abs(finding.rho)).toBeGreaterThanOrEqual(0.3)
       expect(finding.p).toBeLessThanOrEqual(0.05)
-      expect(finding.n).toBeGreaterThanOrEqual(10)
+      expect(finding.n).toBeGreaterThanOrEqual(14)
     }
-    expect(first.findings.some((f) => [f.a.id, f.b.id].includes(`t:${exercise}:trained`) && [f.a.id, f.b.id].includes(`t:${mood}:avg`))).toBe(true)
+    // Training metrics share one signal here, so the scan lists one of them against mood.
+    expect(first.findings.some((f) => [f.a.trackerId, f.b.trackerId].includes(exercise) && [f.a.id, f.b.id].includes(`t:${mood}:avg`))).toBe(true)
+  })
+
+  it('never pairs a tag with counts from the records it labels, but keeps tag-to-symptom findings', () => {
+    const { pasta, wheat } = seed()
+    const sameTracker = (f: { a: { id: string; trackerId: number | null }; b: { id: string; trackerId: number | null } }) =>
+      (f.a.id.startsWith('tag:') && f.b.trackerId === food) || (f.b.id.startsWith('tag:') && f.a.trackerId === food)
+    const all = scan(db, prefs, range)
+    expect(all.findings.some(sameTracker)).toBe(false)
+    for (const finding of all.findings) expect(finding.n).toBeGreaterThanOrEqual(14)
+    const nextDay = scan(db, prefs, { ...range, lags: [1] })
+    // Pasta and its parent Wheat carry the same days; whichever is listed points at the headache.
+    expect(nextDay.findings.some((f) => [`tag:${pasta}`, `tag:${wheat}`].includes(f.a.id) && f.b.trackerId === health)).toBe(true)
+  })
+
+  it('controls the false discovery rate across all comparisons', () => {
+    // Benjamini–Hochberg at 5%: thresholds are 0.01, 0.02, 0.03, 0.04, 0.05.
+    expect(benjaminiHochberg([0.001, 0.01, 0.03, 0.04, 0.5])).toBe(0.04)
+    expect(benjaminiHochberg([0.02, 0.5, 0.6, 0.7, 0.8])).toBe(-1)
+    // A p-value of 0.04 alone passes; among 100 null tests it does not.
+    expect(benjaminiHochberg([0.04])).toBe(0.04)
+    expect(benjaminiHochberg([0.04, ...Array<number>(99).fill(0.9)])).toBe(-1)
   })
 
   it('ignores archived trackers and reports activity per day', () => {

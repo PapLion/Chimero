@@ -216,7 +216,7 @@ export function InsightWidget({ widget, date }: Props) {
           <div className="flex min-h-0 flex-1 flex-col justify-center gap-1.5 overflow-hidden">
             <p className="text-xs font-medium text-accent">{strengthLabel(analysis)}</p>
             <p className="text-sm leading-snug text-text">{describePair(analysis)}</p>
-            {analysis.spearman && <p className="text-xs text-faint">ρ {num(analysis.spearman.value, 2)} over {analysis.n} days · a pattern, not proof of cause</p>}
+            {analysis.spearman && <p className="text-xs text-faint">Rank correlation {num(analysis.spearman.value, 2)} over {analysis.n} days · a pattern, not proof of cause</p>}
           </div>
         ) : (
           <Empty title="This comparison is unavailable">One of its metrics no longer has data.</Empty>
@@ -225,7 +225,7 @@ export function InsightWidget({ widget, date }: Props) {
         <div className="flex min-h-0 flex-1 flex-col justify-center gap-1.5 overflow-hidden">
           <p className="text-base font-medium leading-snug">{shortFinding(top.a, top.b, top.rho, top.lagDays)}</p>
           <p className="text-xs text-muted">
-            {top.a.group} and {top.b.group} · ρ {num(top.rho, 2)} over {top.n} days
+            {top.a.group} and {top.b.group} · rank correlation {num(top.rho, 2)} over {top.n} days
           </p>
           <p className="text-xs text-faint">A pattern in your records, not proof of cause.</p>
         </div>

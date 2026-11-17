@@ -39,10 +39,12 @@ interface TrackerRow {
   config: string | null
 }
 
-interface MetricData {
+export interface MetricData {
   descriptor: MetricDescriptor
   recorded: Map<string, number>
   observedFrom: string | null
+  /** For tag metrics: the trackers whose records carry the tag. */
+  sources?: Set<number>
 }
 
 type Bucket = Map<string, number[]>
@@ -465,9 +467,10 @@ export class MetricCatalog {
       childTagId: number
     }>
     const usage = this.raw
-      .prepare('SELECT et.tag_id AS tagId, e.date_str AS date FROM entries_to_tags et JOIN entries e ON e.id = et.entry_id')
-      .all() as Array<{ tagId: number; date: string }>
+      .prepare('SELECT et.tag_id AS tagId, e.date_str AS date, e.tracker_id AS trackerId FROM entries_to_tags et JOIN entries e ON e.id = et.entry_id')
+      .all() as Array<{ tagId: number; date: string; trackerId: number }>
     const buckets = new Map<number, Bucket>()
+    const sources = new Map<number, Set<number>>()
     const inherited = new Map<number, number[]>()
     for (const row of usage) {
       let resolved = inherited.get(row.tagId)
@@ -479,6 +482,9 @@ export class MetricCatalog {
         const bucket = buckets.get(tagId) ?? new Map()
         push(bucket, row.date, 1)
         buckets.set(tagId, bucket)
+        const trackers = sources.get(tagId) ?? new Set<number>()
+        trackers.add(row.trackerId)
+        sources.set(tagId, trackers)
       }
     }
     for (const tag of tags) {
@@ -491,6 +497,7 @@ export class MetricCatalog {
         descriptor: { id, trackerId: null, label: `Tagged ${tag.name}`, group: 'Tags', unit: null, kind: 'flag', color: tag.color, aggregate: 'any' },
         recorded: reduce(bucket, 'any'),
         observedFrom: first,
+        sources: sources.get(tag.id),
       })
       this.order.push(id)
     }
@@ -530,16 +537,41 @@ function clampLag(lag: number | undefined): number {
   return Math.max(0, Math.min(7, Math.round(lag ?? 0)))
 }
 
-const SCAN_MIN_PAIRS = 10
-const SCAN_MAX_P = 0.05
+/** Fewer shared days than this is an "early read" and stays out of the scan. */
+const SCAN_MIN_PAIRS = 14
+/** False discovery rate kept across every comparison in one scan (Benjamini–Hochberg). */
+const SCAN_FDR = 0.05
 const SCAN_MIN_RHO = 0.3
 const SCAN_MAX_METRICS = 80
 const SCAN_MAX_FINDINGS = 24
 
 /**
- * Test every cross-tracker metric pair and keep relationships that are at least
- * moderate and unlikely under "no relationship". Many pairs are tested, so some
- * findings will be coincidences — the UI says so.
+ * A tag on a tracker's records and that tracker's counts or flags describe the
+ * same records ("Tagged dairy" with "Ate Latte" or "Foods logged"), so their
+ * agreement says nothing new. Measured values on those records, such as mood
+ * tagged with what caused it, are still compared.
+ */
+export function isDefinitionalPair(a: MetricData, b: MetricData): boolean {
+  const check = (tag: MetricData, other: MetricData) => {
+    if (!tag.sources || other.descriptor.trackerId == null) return false
+    return other.descriptor.kind !== 'measure' && tag.sources.has(other.descriptor.trackerId)
+  }
+  return check(a, b) || check(b, a)
+}
+
+/** Largest p-value that still passes Benjamini–Hochberg at the given rate, or -1. */
+export function benjaminiHochberg(pValues: number[], rate = SCAN_FDR): number {
+  const sorted = [...pValues].sort((x, y) => x - y)
+  const m = sorted.length
+  let cutoff = -1
+  for (let k = 1; k <= m; k++) if (sorted[k - 1] <= (k / m) * rate) cutoff = sorted[k - 1]
+  return cutoff
+}
+
+/**
+ * Test every cross-tracker metric pair at each lag, then keep only relationships
+ * that are at least moderate and survive a false-discovery-rate correction over
+ * all the comparisons made. Correlation is reported, never causation.
  */
 export function scan(raw: Raw, prefs: Prefs, request: ScanRequest): ScanResult {
   const catalog = new MetricCatalog(raw, prefs)
@@ -551,32 +583,49 @@ export function scan(raw: Raw, prefs: Prefs, request: ScanRequest): ScanResult {
     .sort((a, b) => b.recordedDays - a.recordedDays || a.metric.id.localeCompare(b.metric.id))
     .slice(0, SCAN_MAX_METRICS)
 
-  const best = new Map<string, ScanFinding>()
+  const tested: Array<ScanFinding & { p: number }> = []
   let pairsTested = 0
   for (const a of candidates) {
     for (const b of candidates) {
       if (a.metric.id === b.metric.id || a.metric.group === b.metric.group) continue
+      if (isDefinitionalPair(catalog.get(a.metric.id) as MetricData, catalog.get(b.metric.id) as MetricData)) continue
       for (const lag of lags) {
         // Same-day relationships are symmetric: test each unordered pair once.
         if (lag === 0 && a.metric.id > b.metric.id) continue
-        pairsTested++
         const result = analyzePair(a, b, lag)
-        if (result.status !== 'ok' || !result.spearman || result.n < SCAN_MIN_PAIRS) continue
+        if (result.status !== 'ok' || !result.spearman || result.spearman.p == null) continue
+        pairsTested++
+        if (result.n < SCAN_MIN_PAIRS) continue
         const { value: rho, p } = result.spearman
-        if (Math.abs(rho) < SCAN_MIN_RHO || p == null || p > SCAN_MAX_P) continue
-        const key = [a.metric.id, b.metric.id].sort().join('|')
-        const existing = best.get(key)
-        if (existing && Math.abs(existing.rho) >= Math.abs(rho)) continue
-        best.set(key, { a: a.metric, b: b.metric, lagDays: lag, n: result.n, rho, p, strength: result.strength, reliability: result.reliability })
+        tested.push({ a: a.metric, b: b.metric, lagDays: lag, n: result.n, rho, p, strength: result.strength, reliability: result.reliability })
       }
     }
   }
+
+  // Every test counts toward the correction, including the ones too weak to list.
+  const cutoff = benjaminiHochberg([...tested.map((t) => t.p), ...Array<number>(Math.max(0, pairsTested - tested.length)).fill(1)])
+  const best = new Map<string, ScanFinding>()
+  for (const finding of tested) {
+    if (finding.p > cutoff || Math.abs(finding.rho) < SCAN_MIN_RHO) continue
+    const key = [finding.a.id, finding.b.id].sort().join('|')
+    const existing = best.get(key)
+    if (existing && Math.abs(existing.rho) >= Math.abs(finding.rho)) continue
+    best.set(key, finding)
+  }
+  // Metrics from the same two trackers with identical statistics carry the same
+  // information ("Any symptom" and "Headache" when only headaches were logged): list one.
+  const seen = new Set<string>()
   const findings = [...best.values()]
     .sort((x, y) => Math.abs(y.rho) - Math.abs(x.rho) || y.n - x.n || x.a.id.localeCompare(y.a.id))
+    .filter((f) => {
+      const signature = [f.a.group, f.b.group].sort().join('|') + `|${f.lagDays}|${f.n}|${f.rho.toFixed(6)}|${f.p}`
+      if (seen.has(signature)) return false
+      seen.add(signature)
+      return true
+    })
     .slice(0, SCAN_MAX_FINDINGS)
   return { from: request.from, to: request.to, metricsConsidered: candidates.length, pairsTested, findings }
 }
-
 export function overview(raw: Raw, range: AnalyticsRange, today = localDateStr(Date.now())): OverviewResponse {
   const rows = raw
     .prepare(

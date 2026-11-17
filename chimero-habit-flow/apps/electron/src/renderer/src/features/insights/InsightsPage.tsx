@@ -203,7 +203,7 @@ export function InsightsPage({ initial }: { initial: Extract<Route, { page: 'ins
                   })}
                 </ul>
                 <p className="mt-3 border-t border-line/60 pt-3 text-xs text-faint">
-                  Listed when the rank correlation is at least ±0.30 with p ≤ 0.05 over 10 or more days. With {scan.pairsTested.toLocaleString('en')} comparisons, expect a few of these to be coincidences — treat them as questions worth testing, not answers.
+                  Listed when the rank correlation is at least ±0.30 over 14 or more shared days, and it still holds after correcting for all {scan.pairsTested.toLocaleString('en')} comparisons (false discovery rate 5%). A tag is not compared with the items it labels. Some of these can still be coincidences — treat them as questions worth testing, not answers.
                 </p>
               </>
             )}
@@ -263,7 +263,7 @@ function Result({ analysis, onPin, suggested }: { analysis: PairAnalysis; onPin:
           <p className="text-xs text-faint">
             {split.outcomeIsRate ? `Share of days with “${analysis.b.label}”` : `Average “${analysis.b.label}”`}
             {analysis.lagDays ? `, ${lagPhrase(analysis.lagDays)}` : ''}. Difference {split.outcomeIsRate ? `${signed(split.diff * 100, 0)} points` : signed(split.diff)}
-            {split.p != null ? `, p = ${pValue(split.p)}` : ''}.
+            {split.p != null ? `, p ${split.p < 0.001 ? '' : '= '}${pValue(split.p)}` : ''}.
           </p>
         </div>
       )}
