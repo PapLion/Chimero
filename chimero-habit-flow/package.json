@@ -47,7 +47,8 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "apps/electron/resources/icon.ico"
+      "icon": "apps/electron/resources/icon.ico",
+      "artifactName": "Chimero-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -56,8 +57,12 @@
     "linux": {
       "target": "AppImage",
       "category": "Utility",
-      "icon": "apps/electron/resources/icon.png"
-    }
+      "icon": "apps/electron/resources/icon.png",
+      "executableName": "chimero",
+      "synopsis": "Local-first personal tracking",
+      "artifactName": "Chimero-${version}-${arch}.AppImage"
+    },
+    "afterPack": "scripts/after-pack.cjs"
   },
   "devDependencies": {
     "electron": "^40.0.0",

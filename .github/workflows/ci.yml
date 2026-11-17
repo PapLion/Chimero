@@ -1,0 +1,65 @@
+name: CI
+
+# Linux: types, lint, unit + integration tests, build, end-to-end on the built app.
+# Windows: the real NSIS installer, built on Windows, and the same end-to-end
+# suite run against the packaged Chimero.exe.
+
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: chimero-habit-flow
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: chimero-habit-flow/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: chimero-habit-flow/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check-types
+      - run: pnpm lint
+      - run: pnpm test
+      - run: python3 scripts/verify-migrations.py
+      - run: pnpm build
+      - run: xvfb-run --auto-servernum pnpm test:e2e
+      - run: pnpm exec electron-builder --linux AppImage --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chimero-linux
+          path: chimero-habit-flow/dist/*.AppImage
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: chimero-habit-flow/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: chimero-habit-flow/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm exec electron-builder --win nsis --publish never
+      - name: End to end against the packaged app
+        shell: bash
+        run: CHIMERO_TEST_EXECUTABLE="$PWD/dist/win-unpacked/Chimero.exe" pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chimero-windows
+          path: chimero-habit-flow/dist/*.exe
