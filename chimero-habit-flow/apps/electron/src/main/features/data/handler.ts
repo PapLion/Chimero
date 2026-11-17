@@ -71,7 +71,8 @@ export function registerDataHandlers(): void {
       stageRestore(path, join(app.getPath('userData'), PENDING_RESTORE_FILE))
       // The swap happens before the database opens on the next launch.
       setTimeout(() => {
-        app.relaunch()
+        // Automated tests start the next launch themselves.
+        if (!process.env.CHIMERO_NO_RELAUNCH) app.relaunch()
         app.exit(0)
       }, 600)
       return { ok: true, path, count: inspected.entries }

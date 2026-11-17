@@ -6,7 +6,7 @@
  */
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -17,7 +17,7 @@ async function launch(profile: string): Promise<{ app: ElectronApplication; page
   const app = await electron.launch({
     executablePath: executable,
     args: executable ? ['--disable-gpu'] : [resolve('apps/electron'), '--disable-gpu'],
-    env: { ...process.env, CHIMERO_USER_DATA_DIR: profile },
+    env: { ...process.env, CHIMERO_USER_DATA_DIR: profile, CHIMERO_NO_RELAUNCH: '1' },
   })
   const page = await app.firstWindow()
   const errors: string[] = []
@@ -213,5 +213,59 @@ test('upgrades a database left by the last release without losing anything', asy
   } finally {
     await running?.app.close()
     rmSync(profile, { recursive: true, force: true })
+  }
+})
+
+test('backs up, exports, and restores a profile', async () => {
+  test.setTimeout(120_000)
+  const profile = mkdtempSync(join(tmpdir(), 'chimero-restore-'))
+  const out = mkdtempSync(join(tmpdir(), 'chimero-files-'))
+  let running: Awaited<ReturnType<typeof launch>> | undefined
+  const moodValues = (page: Page) =>
+    page.evaluate(async () => {
+      const mood = (await window.api.getTrackers()).find((t) => t.name === 'Mood')!
+      return (await window.api.getEntries({ trackerId: mood.id })).map((e) => e.value)
+    })
+  try {
+    running = await launch(profile)
+    const files = { backup: join(out, 'backup.db'), json: join(out, 'export.json'), csv: join(out, 'entries.csv') }
+    const results = await running.page.evaluate(async (files) => {
+      const api = window.api
+      const mood = (await api.getTrackers()).find((t) => t.name === 'Mood')!
+      await api.addEntry({ trackerId: mood.id, value: 6, note: 'before the backup', timestamp: Date.now() - 60_000 })
+      const backup = await api.backupDatabase(files.backup)
+      const json = await api.exportJson(files.json)
+      const csv = await api.exportCsv(files.csv)
+      await api.addEntry({ trackerId: mood.id, value: 9, note: 'after the backup', timestamp: Date.now() })
+      return { backup, json, csv }
+    }, files)
+    expect(results.backup.ok).toBe(true)
+    expect(results.csv).toMatchObject({ ok: true, count: 1 })
+    expect(readFileSync(files.csv, 'utf8')).toContain('before the backup')
+    // JSON carries every table; its count is every row written.
+    const exported = JSON.parse(readFileSync(files.json, 'utf8')) as { tables: Record<string, Array<Record<string, unknown>>> }
+    expect(exported.tables.entries.map((e) => e.note)).toEqual(['before the backup'])
+    expect(exported.tables.trackers.length).toBeGreaterThan(0)
+    expect(results.json).toMatchObject({ ok: true })
+    expect((results.json as { count: number }).count).toBe(Object.values(exported.tables).reduce((n, rows) => n + rows.length, 0))
+    expect(await moodValues(running.page)).toEqual([9, 6])
+
+    // Restoring stages the file and quits; the swap happens before the next start opens the database.
+    const closed = new Promise((done) => running?.app.once('close', done))
+    const restore = await running.page.evaluate((path) => window.api.restoreDatabase(path), files.backup)
+    expect(restore).toMatchObject({ ok: true, count: 1 })
+    await closed
+    running = undefined
+
+    running = await launch(profile)
+    expect(await moodValues(running.page)).toEqual([6])
+    // The database it replaced is kept beside it, never deleted.
+    expect(readdirSync(profile).some((name) => name.startsWith('chimero.before-restore-') && name.endsWith('.db'))).toBe(true)
+    expect(existsSync(join(profile, 'chimero.restore-pending.db'))).toBe(false)
+    expect(running.errors).toEqual([])
+  } finally {
+    await running?.app.close()
+    rmSync(profile, { recursive: true, force: true })
+    rmSync(out, { recursive: true, force: true })
   }
 })
