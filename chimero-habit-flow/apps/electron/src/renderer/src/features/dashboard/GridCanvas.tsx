@@ -205,7 +205,7 @@ export function GridCanvas({ widgets, editing, onCommit, children, controls, lab
                   transition: active ? 'none' : 'transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1), width 200ms cubic-bezier(0.2, 0.8, 0.2, 1), height 200ms cubic-bezier(0.2, 0.8, 0.2, 1)',
                 }}
               >
-                <div className={cn('h-full w-full transition-[box-shadow,scale] duration-150', active && 'scale-[1.012] rounded-widget shadow-lift', editing && 'pointer-events-none select-none')}>{children(widget)}</div>
+                <div className={cn('h-full w-full transition-[box-shadow,scale] duration-150', active && 'scale-[1.012] rounded-widget shadow-lift', editing && 'pointer-events-none select-none [&_[data-widget-tools]]:invisible')}>{children(widget)}</div>
                 {editing && (
                   <>
                     <div

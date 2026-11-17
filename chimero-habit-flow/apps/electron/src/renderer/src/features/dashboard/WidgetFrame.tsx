@@ -31,13 +31,14 @@ export function WidgetFrame({ title, icon, onOpen, onAdd, addLabel, accent, meta
         ) : (
           <h3 className="min-w-0 truncate font-sans text-sm font-semibold tracking-normal">{title}</h3>
         )}
-        <span className="min-w-0 flex-1 truncate text-right text-xs text-faint">{meta}</span>
+        <span data-widget-tools className="min-w-0 flex-1 truncate text-right text-xs text-faint">{meta}</span>
         {onAdd && (
           <Tip label={addLabel ?? `Log ${title}`}>
             <button
               type="button"
               onClick={onAdd}
               aria-label={addLabel ?? `Log ${title}`}
+              data-widget-tools
               className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted transition-colors hover:text-white"
               style={{ ['--hover' as string]: accent }}
               onMouseEnter={(event) => (event.currentTarget.style.background = accent ?? 'rgb(var(--accent))')}

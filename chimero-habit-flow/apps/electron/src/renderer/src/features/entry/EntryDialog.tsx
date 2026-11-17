@@ -108,7 +108,7 @@ function EntrySession({ request, onClose }: { request: EntryRequest; onClose: ()
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2">
               <Input type="date" aria-label="Date" value={date} max={identityOf(tracker) === 'tasks' ? undefined : todayStr()} onChange={(event) => event.target.value && setDate(event.target.value)} className="w-[150px]" />
-              {identityOf(tracker) !== 'tasks' && <Input type="time" aria-label="Time" value={time} onChange={(event) => event.target.value && setTime(event.target.value)} className="w-[118px]" />}
+              {identityOf(tracker) !== 'tasks' && <Input type="time" aria-label="Time" value={time} onChange={(event) => event.target.value && setTime(event.target.value)} className="w-[132px]" />}
               <span className="text-sm text-muted">{fmt.relativeDay(date)}</span>
             </div>
             <TrackerForm key={`${tracker.id}:${entry?.id ?? 'new'}`} tracker={tracker} date={date} time={time} entry={entry} onDone={onClose} />

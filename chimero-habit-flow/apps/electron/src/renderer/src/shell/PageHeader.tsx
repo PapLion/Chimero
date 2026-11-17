@@ -29,7 +29,7 @@ export function Section({ title, hint, actions, children, className }: { title: 
         </div>
         {actions}
       </div>
-      {children}
+      <div>{children}</div>
     </section>
   )
 }
