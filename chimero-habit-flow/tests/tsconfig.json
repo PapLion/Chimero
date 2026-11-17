@@ -35,9 +35,7 @@
   },
   "include": [
     "./**/*.ts",
-    "./**/*.tsx"
-  ],
-  "exclude": [
-    "e2e/**"
+    "./**/*.tsx",
+    "../apps/electron/src/renderer/src/env.d.ts"
   ]
 }
