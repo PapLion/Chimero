@@ -83,9 +83,11 @@ test('build a tracker, log through Quick Entry, arrange Today, and restart', asy
     await page.getByTestId('entry-save').click()
     await expect(page.getByRole('dialog')).toBeHidden()
 
+    // Keyboard only: the scale takes focus, a digit picks the score, Enter saves.
     await quickEntry(page, 'Mood')
-    await page.getByRole('radio', { name: /^8,/ }).click()
-    await page.getByTestId('entry-save').click()
+    await page.keyboard.press('8')
+    await expect(page.getByRole('radio', { name: /^8,/ })).toHaveAttribute('aria-checked', 'true')
+    await page.keyboard.press('Enter')
     await expect(page.getByRole('dialog')).toBeHidden()
 
     // Edit the reading record from its tracker page.

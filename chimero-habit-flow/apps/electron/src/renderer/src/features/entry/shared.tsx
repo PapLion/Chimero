@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import type { Entry, Tag, Tracker } from '@contracts/contracts'
 import { ImagePlus, Plus, X } from 'lucide-react'
 import { api, assetUrl, must } from '@/lib/api'
@@ -222,23 +222,59 @@ export function parseNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-export function ScalePicker({ value, onChange, min, max, color, label }: { value: number | null; onChange: (value: number) => void; min: number; max: number; color: (score: number) => string; label: (score: number) => string }) {
+/**
+ * A row of scores that works fully from the keyboard: it takes focus when it
+ * opens, digits pick a score (0 is 10), arrows move, and Enter saves the form.
+ */
+export function ScalePicker({ value, onChange, min, max, color, label, autoFocus = true }: { value: number | null; onChange: (value: number) => void; min: number; max: number; color: (score: number) => string; label: (score: number) => string; autoFocus?: boolean }) {
   const scores = Array.from({ length: max - min + 1 }, (_, i) => i + min)
+  const buttons = useRef<Array<HTMLButtonElement | null>>([])
+  const resting = value ?? Math.round((min + max) / 2)
+  const pick = (score: number) => {
+    const next = Math.max(min, Math.min(max, score))
+    onChange(next)
+    buttons.current[next - min]?.focus()
+  }
+  useEffect(() => {
+    if (autoFocus) buttons.current[resting - min]?.focus()
+    // Only when the picker first appears.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, score: number) => {
+    const step = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[event.key]
+    if (step) {
+      event.preventDefault()
+      pick(score + step)
+    } else if (/^[0-9]$/.test(event.key)) {
+      const typed = event.key === '0' ? 10 : Number(event.key)
+      if (typed >= min && typed <= max) {
+        event.preventDefault()
+        pick(typed)
+      }
+    } else if (event.key === 'Enter') {
+      event.preventDefault()
+      const form = event.currentTarget.closest('form')
+      if (value !== score) onChange(score)
+      // Let the new score render before the form reads it.
+      setTimeout(() => form?.requestSubmit(), 0)
+    }
+  }
   return (
     <div>
       <div className="flex gap-1.5" role="radiogroup" aria-label="Score">
         {scores.map((score) => (
           <button
             key={score}
+            ref={(element) => {
+              buttons.current[score - min] = element
+            }}
             type="button"
             role="radio"
             aria-checked={value === score}
             aria-label={`${score}, ${label(score)}`}
+            tabIndex={score === resting ? 0 : -1}
             onClick={() => onChange(score)}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowRight' && score < max) onChange(score + 1)
-              if (event.key === 'ArrowLeft' && score > min) onChange(score - 1)
-            }}
+            onKeyDown={(event) => onKeyDown(event, score)}
             className={cn('num h-11 min-w-0 flex-1 rounded-control text-lg font-semibold transition-[transform,opacity]', value === score ? 'scale-105 text-black/85 shadow-pop' : 'text-black/70 opacity-40 hover:opacity-80')}
             style={{ background: color(score) }}
           >
