@@ -34,6 +34,7 @@
     },
     "files": [
       "out/**/*",
+      "resources/**/*",
       "package.json"
     ],
     "asar": true,
@@ -51,6 +52,11 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Utility",
+      "icon": "apps/electron/resources/icon.png"
     }
   },
   "devDependencies": {
