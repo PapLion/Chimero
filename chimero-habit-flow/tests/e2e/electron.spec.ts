@@ -150,12 +150,15 @@ test('build a tracker, log through Quick Entry, arrange Today, and restart', asy
 
     // Collapsed (by choice, or automatically in windows under 1180 px) the sidebar
     // shows icons only; every item must keep its accessible name.
+    // (On a small screen it is already collapsed and the toggle is hidden.)
     const nav = running.page.getByRole('navigation', { name: 'Main' })
-    await nav.getByRole('button', { name: 'Collapse sidebar' }).click()
+    const toggle = nav.getByRole('button', { name: 'Collapse sidebar' })
+    const narrow = (await toggle.count()) === 0
+    if (!narrow) await toggle.click()
     await expect(nav).toHaveJSProperty('offsetWidth', 52)
     await expect(nav.getByRole('button', { name: 'Reading', exact: true })).toBeVisible()
     await expect(nav.getByRole('button', { name: 'Journal', exact: true })).toBeVisible()
-    await nav.getByRole('button', { name: 'Expand sidebar' }).click()
+    if (!narrow) await nav.getByRole('button', { name: 'Expand sidebar' }).click()
 
     // The shell holds up at common window sizes and Quick Entry opens everywhere.
     for (const size of [
