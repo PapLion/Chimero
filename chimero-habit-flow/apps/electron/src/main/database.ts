@@ -15,6 +15,7 @@ import { trackers, entries } from '@packages/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { getTrackerIdentity, planDefaultTrackerSeedActions } from '@contracts/features/tracking';
 import { mapTracker } from './shared/mappers';
+import { backupBeforeMigrating } from './upgrade-backup';
 
 /**
  * Resolves the path to the Drizzle migrations folder.
@@ -265,6 +266,14 @@ export function setupDatabase(): void {
         console.warn('[DB] could not list migrations folder:', e);
       }
     }
+  }
+
+  try {
+    const copy = backupBeforeMigrating(dbPath, migrationsFolder);
+    if (copy) console.log('[DB] Saved a copy before upgrading:', copy);
+  } catch (err) {
+    // Migrations are still transactional; a missing copy must not lock people out.
+    console.error('[DB] Could not save a copy before upgrading:', err);
   }
 
   initDb(dbPath);

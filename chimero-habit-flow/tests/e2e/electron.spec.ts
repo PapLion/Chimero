@@ -5,7 +5,8 @@
  * that everything came back. Run `pnpm build` first.
  */
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -157,6 +158,57 @@ test('build a tracker, log through Quick Entry, arrange Today, and restart', asy
       await running.page.keyboard.press('Escape')
       await expect(running.page.getByRole('dialog')).toBeHidden()
     }
+    expect(running.errors).toEqual([])
+  } finally {
+    await running?.app.close()
+    rmSync(profile, { recursive: true, force: true })
+  }
+})
+
+test('upgrades a database left by the last release without losing anything', async () => {
+  test.setTimeout(120_000)
+  const profile = mkdtempSync(join(tmpdir(), 'chimero-upgrade-'))
+  // The last release shipped migrations 0000-0010; build its database with its records.
+  const electronBinary: string = require('electron')
+  const output = execFileSync(electronBinary, [resolve('tests/e2e/fixtures/legacy-profile.cjs'), join(profile, 'chimero.db'), resolve('packages/db/drizzle'), '0010_contact_crm_round_trip'], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+  })
+  const ids = JSON.parse(output.toString().trim().split('\n').pop() as string) as { weight: number; mood: number; meditation: number }
+  const copies = () => readdirSync(join(profile, 'backups')).filter((name) => name.startsWith('before-upgrade-'))
+  let running: Awaited<ReturnType<typeof launch>> | undefined
+  try {
+    running = await launch(profile)
+    const state = await running.page.evaluate(async (ids) => {
+      const api = window.api
+      const tags = await api.getTags()
+      return {
+        trackers: (await api.getTrackers()).map((t) => t.name),
+        weights: (await api.getWeightDetail(ids.weight)).history.map((h) => h.weight),
+        mood: (await api.getEntries({ trackerId: ids.mood })).map((e) => [e.value, e.note]),
+        meditation: (await api.getEntries({ trackerId: ids.meditation })).map((e) => [e.value, e.tagIds?.map((id) => tags.find((t) => t.id === id)?.name)]),
+        contacts: (await api.getContacts()).map((c) => [c.name, c.notes]),
+        layout: await api.getDashboardLayout(),
+        preferences: await api.getPreferences(),
+      }
+    }, ids)
+
+    expect(state.weights.map((w) => Math.round(w * 10) / 10).sort()).toEqual([79.2, 79.6, 80])
+    expect(state.mood).toEqual([[7, 'legacy note kept'], [6, null], [5, null]])
+    expect(state.meditation).toEqual([[20, ['calm']], [15, ['calm']], [10, ['calm']]])
+    expect(state.contacts).toEqual([['Sam Example', 'kept across the upgrade']])
+    expect(state.trackers).toEqual(expect.arrayContaining(['Weight', 'Mood', 'Meditation']))
+    // The old array layout becomes a grid layout that keeps the same widgets, in order.
+    expect(state.layout.version).toBe(2)
+    expect(state.layout.widgets.filter((w) => w.type === 'tracker').map((w) => w.trackerId).slice(0, 2)).toEqual([ids.meditation, ids.mood])
+    expect(state.preferences.weightUnit).toBeTruthy()
+    await expect(running.page.locator(`[data-widget-id="tracker-${ids.meditation}"]`)).toBeVisible()
+
+    // A consistent copy was taken before the schema changed, and only then.
+    expect(copies()).toHaveLength(1)
+    expect(running.errors).toEqual([])
+    await running.app.close()
+    running = await launch(profile)
+    expect(copies()).toHaveLength(1)
     expect(running.errors).toEqual([])
   } finally {
     await running?.app.close()
