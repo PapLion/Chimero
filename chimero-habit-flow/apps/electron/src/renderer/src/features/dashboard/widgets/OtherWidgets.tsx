@@ -214,6 +214,9 @@ export function InsightWidget({ widget, date }: Props) {
       {pinned ? (
         analysis ? (
           <div className="flex min-h-0 flex-1 flex-col justify-center gap-1.5 overflow-hidden">
+            <p className="text-base font-medium leading-snug">
+              {analysis.a.label} <span className="text-faint">{analysis.lagDays > 0 ? `→ ${analysis.lagDays === 1 ? 'next day' : `${analysis.lagDays} days later`} →` : 'and'}</span> {analysis.b.label}
+            </p>
             <p className="text-xs font-medium text-accent">{strengthLabel(analysis)}</p>
             <p className="text-sm leading-snug text-text">{describePair(analysis)}</p>
             {analysis.spearman && <p className="text-xs text-faint">Rank correlation {num(analysis.spearman.value, 2)} over {analysis.n} days · a pattern, not proof of cause</p>}
@@ -230,7 +233,7 @@ export function InsightWidget({ widget, date }: Props) {
           <p className="text-xs text-faint">A pattern in your records, not proof of cause.</p>
         </div>
       ) : (
-        <Empty title="No clear patterns yet">Patterns show up once two trackers share about ten days of records.</Empty>
+        <Empty title="No clear patterns yet">Patterns show up once two trackers share about two weeks of records.</Empty>
       )}
     </WidgetFrame>
   )

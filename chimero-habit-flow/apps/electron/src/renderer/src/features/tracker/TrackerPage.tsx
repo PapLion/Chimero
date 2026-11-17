@@ -5,7 +5,7 @@ import { TimeChart, type ChartSeries } from '@/charts/TimeChart'
 import { movingAverage } from '@/charts/scale'
 import { api, must } from '@/lib/api'
 import { cn } from '@/lib/cn'
-import { RANGE_PRESETS, fmt, resolveRange } from '@/lib/dates'
+import { RANGE_PRESETS, diffDays, fmt, resolveRange } from '@/lib/dates'
 import { describeEntry } from '@/lib/entries'
 import { num, percent, plural, signed } from '@/lib/format'
 import { TrackerIcon } from '@/lib/icons'
@@ -248,13 +248,16 @@ function Stats({ metric, summary, goal }: { metric: MetricDescriptor; summary: M
   const value = (v: number | null, digits = 1) => (v == null ? '—' : `${num(v, digits)}${unit}`)
   if (summary.days === 0) return null
   if (metric.kind === 'measure') {
-    const change = summary.first && summary.last && summary.days > 1 ? summary.last.value - summary.first.value : null
+    // The fitted trend over the period, not last minus first: one noisy reading
+    // at either end would otherwise decide the number.
+    const span = summary.first && summary.last ? diffDays(summary.first.date, summary.last.date) : 0
+    const change = summary.trendPerDay != null && span > 0 ? summary.trendPerDay * span : null
     return (
       <div className="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-5">
         <Stat label="Latest" value={value(summary.last?.value ?? null)} sub={summary.last ? fmt.relativeDay(summary.last.date) : undefined} />
         <Stat label="Average" value={value(summary.mean)} sub={`${plural(summary.days, 'day')} recorded`} />
-        <Stat label="Range" value={`${num(summary.min)} – ${num(summary.max)}`} sub={metric.unit ?? undefined} />
-        <Stat label="Change" value={change == null ? '—' : `${signed(change)}${unit}`} sub={summary.trendPerDay != null ? `${signed(summary.trendPerDay * 7, 2)}${unit} per week` : undefined} />
+        <Stat label="Range" value={`${num(summary.min)} – ${num(summary.max)}${unit}`} sub="Lowest to highest" />
+        <Stat label="Trend" value={change == null ? '—' : `${signed(change)}${unit}`} sub={summary.trendPerDay != null ? `${signed(summary.trendPerDay * 7, 2)}${unit} per week, fitted` : 'Needs more days'} />
         {goal != null && summary.last ? <Stat label="To goal" value={`${signed(goal - summary.last.value)}${unit}`} sub={`Goal ${num(goal)}${unit}`} /> : <Stat label="Typical swing" value={summary.sd == null ? '—' : `±${num(summary.sd)}${unit}`} sub="Standard deviation" />}
       </div>
     )
