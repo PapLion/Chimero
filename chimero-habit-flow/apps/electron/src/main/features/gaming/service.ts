@@ -1,6 +1,6 @@
 import { desc, eq } from 'drizzle-orm'
 import { entries, entriesToTags, entryGaming, trackers } from '@packages/db'
-import { getDb } from '@packages/db/database'
+import { getDb, transact } from '@packages/db/database'
 import { mapEntry, mapTracker } from '../../shared/mappers'
 import { getEntryTagIds, getTags, replaceEntryTags } from '../tags/service'
 import type {
@@ -106,8 +106,7 @@ export async function addGamingEntry(data: CreateGamingEntryRequest): Promise<Ga
   const timestamp = Number(data.timestamp)
   if (!Number.isFinite(timestamp)) throw new Error('Timestamp must be finite')
 
-  const database = getDb()
-  const inserted = await database.transaction(async (tx) => {
+  const inserted = await transact(async (tx) => {
     const [row] = await tx
       .insert(entries)
       .values({
@@ -173,8 +172,7 @@ export async function updateGamingEntry(entryId: number, updates: UpdateGamingEn
     entrySet.dateStr = formatDateStr(timestamp)
   }
 
-  const database = getDb()
-  await database.transaction(async (tx) => {
+  await transact(async (tx) => {
     if (Object.keys(entrySet).length > 0) {
       await tx.update(entries).set(entrySet).where(eq(entries.id, entryId))
     }
@@ -188,8 +186,7 @@ export async function updateGamingEntry(entryId: number, updates: UpdateGamingEn
 }
 
 export async function deleteGamingEntryData(entryId: number): Promise<boolean> {
-  const database = getDb()
-  await database.transaction(async (tx) => {
+  await transact(async (tx) => {
     await tx.delete(entriesToTags).where(eq(entriesToTags.entryId, entryId))
     await tx.delete(entryGaming).where(eq(entryGaming.entryId, entryId))
     await tx.delete(entries).where(eq(entries.id, entryId))

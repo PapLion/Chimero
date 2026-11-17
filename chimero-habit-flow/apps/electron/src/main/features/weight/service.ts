@@ -1,6 +1,6 @@
 import { and, desc, eq } from 'drizzle-orm'
 import { entries, entriesToTags, entryWeight, trackerGoals } from '@packages/db'
-import { getDb } from '@packages/db/database'
+import { getDb, transact } from '@packages/db/database'
 import { calculateWeightDetail } from '@contracts/domain'
 import type {
   CreateWeightEntryRequest,
@@ -62,9 +62,8 @@ export async function addWeightEntry(data: CreateWeightEntryRequest): Promise<We
   if (data.waist !== undefined && data.waist !== null) assertFiniteNumber(data.waist, 'Waist')
   if (data.bodyFatPercentage !== undefined && data.bodyFatPercentage !== null) assertFiniteNumber(data.bodyFatPercentage, 'Body fat percentage')
 
-  const database = getDb()
   const dateStr = formatDateStr(data.timestamp)
-  const inserted = await database.transaction(async (tx) => {
+  const inserted = await transact(async (tx) => {
     const [row] = await tx
       .insert(entries)
       .values({
@@ -132,8 +131,7 @@ export async function updateWeightEntry(entryId: number, updates: UpdateWeightEn
     entrySet.dateStr = formatDateStr(updates.timestamp)
   }
 
-  const database = getDb()
-  await database.transaction(async (tx) => {
+  await transact(async (tx) => {
     if (Object.keys(entrySet).length > 0) {
       await tx.update(entries).set(entrySet).where(eq(entries.id, entryId))
     }
@@ -151,8 +149,7 @@ export async function updateWeightEntry(entryId: number, updates: UpdateWeightEn
 }
 
 export async function deleteWeightEntry(entryId: number): Promise<boolean> {
-  const database = getDb()
-  await database.transaction(async (tx) => {
+  await transact(async (tx) => {
     await tx.delete(entriesToTags).where(eq(entriesToTags.entryId, entryId))
     await tx.delete(entryWeight).where(eq(entryWeight.entryId, entryId))
     await tx.delete(entries).where(eq(entries.id, entryId))
@@ -208,7 +205,7 @@ export async function setWeightGoal(data: SetTrackerGoalRequest): Promise<Tracke
     return null
   }
 
-  await database.transaction(async (tx) => {
+  await transact(async (tx) => {
     if (data.active ?? true) {
       await tx
         .update(trackerGoals)

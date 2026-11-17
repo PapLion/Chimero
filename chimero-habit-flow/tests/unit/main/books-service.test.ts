@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@packages/db/database', () => ({
   getDb: mocks.getDbMock,
+  // Routed through the fake handle so each test can count transactions.
+  transact: (work: (tx: unknown) => unknown) => mocks.getDbMock().transaction(work),
 }))
 
 vi.mock('../../../apps/electron/src/main/features/tags/service', () => ({

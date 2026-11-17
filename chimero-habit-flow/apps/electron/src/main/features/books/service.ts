@@ -1,6 +1,6 @@
 import { and, desc, eq, ne } from 'drizzle-orm'
 import { books, bookActivities, entries, entriesToTags, trackers } from '@packages/db'
-import { getDb } from '@packages/db/database'
+import { getDb, transact } from '@packages/db/database'
 import { entryToBookHistoryItem, buildBookHistoryReadModel, buildBookSelectedDayReadModel, buildBookStatisticsReadModel, normalizeBookTitle, normalizeBookTitleKey, validateBookRatingTenths } from '@contracts/domain'
 import type {
   Book,
@@ -198,8 +198,7 @@ async function createBookActivity(
   const book = await getBookById(data.bookId)
   if (!book) throw new Error('Book not found')
 
-  const database = getDb()
-  const entryId = await database.transaction(async (tx) => {
+  const entryId = await transact(async (tx) => {
     if (activityType === 'read') {
       const [existing] = await tx
         .select({
@@ -351,8 +350,7 @@ export async function updateBookReadActivity(entryId: number, updates: UpdateBoo
   }
   if (updates.assetId !== undefined) entrySet.assetId = updates.assetId
 
-  const database = getDb()
-  await database.transaction(async (tx) => {
+  await transact(async (tx) => {
     if (Object.keys(entrySet).length > 0) {
       await tx.update(entries).set(entrySet).where(eq(entries.id, entryId))
     }
@@ -381,7 +379,7 @@ export async function deleteBookReadActivity(entryId: number): Promise<boolean> 
     throw new Error('Structured book read activities can only be deleted through the Books flow')
   }
 
-  await getDb().transaction(async (tx) => {
+  await transact(async (tx) => {
     await tx.delete(entriesToTags).where(eq(entriesToTags.entryId, entryId))
     await tx.delete(bookActivities).where(eq(bookActivities.entryId, entryId))
     await tx.delete(entries).where(eq(entries.id, entryId))

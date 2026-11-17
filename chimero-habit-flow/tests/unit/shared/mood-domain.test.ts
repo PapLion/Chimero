@@ -10,7 +10,7 @@ import {
 } from '@contracts/domain'
 import type { MoodEntryReadModel } from '@contracts/contracts'
 
-const entries: MoodEntryReadModel[] = [
+const raw = [
   {
     entryId: 1,
     trackerId: 10,
@@ -41,7 +41,14 @@ const entries: MoodEntryReadModel[] = [
     assetId: null,
     tagIds: [],
   },
-]
+] satisfies Array<Omit<MoodEntryReadModel, 'visualState' | 'color' | 'label'>>
+
+const entries: MoodEntryReadModel[] = raw.map((entry) => ({
+  ...entry,
+  visualState: moodScoreToVisualState(entry.moodScore),
+  color: moodScoreToColor(entry.moodScore),
+  label: moodScoreToLabel(entry.moodScore),
+}))
 
 describe('shared mood domain', () => {
   it('normalizes and clamps Mood scores to the canonical 1-10 scale', () => {

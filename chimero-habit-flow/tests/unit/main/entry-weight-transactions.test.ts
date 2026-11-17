@@ -19,6 +19,8 @@ vi.mock('electron', () => ({
 
 vi.mock('@packages/db/database', () => ({
   getDb: mocks.getDbMock,
+  // Routed through the fake handle so each test can count transactions.
+  transact: (work: (tx: unknown) => unknown) => mocks.getDbMock().transaction(work),
 }))
 
 vi.mock('../../../apps/electron/src/main/features/tags/service', () => ({
@@ -69,7 +71,7 @@ function createQueryDb() {
 
   function createResultQuery(rows: unknown[], options?: { innerJoinRows?: unknown[]; leftJoinRows?: unknown[] }) {
     const state = { rows }
-    const query: Record<string, unknown> = {}
+    const query: Record<string | symbol, unknown> = {}
     query.where = vi.fn(() => query)
     query.leftJoin = vi.fn(() => {
       state.rows = options?.leftJoinRows ?? state.rows

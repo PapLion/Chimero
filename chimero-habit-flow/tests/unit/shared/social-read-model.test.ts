@@ -71,7 +71,7 @@ describe('social read models', () => {
   })
 
   it('classifies generic Social entries as legacy and keeps them out of structured metrics', () => {
-    const summary = buildStructuredSocialSummary({
+    const summary = buildStructuredSocialSummary(createStructuredEntry({
       id: 202,
       trackerId: 4,
       value: 1,
@@ -82,7 +82,7 @@ describe('social read models', () => {
       assetId: null,
       tagIds: [],
       socialInteractions: [],
-    })
+    }))
 
     expect(summary).toEqual({
       entryId: 202,

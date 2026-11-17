@@ -658,6 +658,7 @@ export function registerEntryHandlers(): void {
         .leftJoin(entryFood, eq(entryFood.entryId, entries.id))
         .leftJoin(entryHealth, eq(entryHealth.entryId, entries.id))
         .leftJoin(entryIntake, eq(entryIntake.entryId, entries.id))
+        .leftJoin(intakeItems, eq(intakeItems.id, entryIntake.itemId))
         .leftJoin(symptoms, eq(symptoms.id, entryHealth.symptomId))
         .leftJoin(bookActivities, eq(bookActivities.entryId, entries.id))
         .leftJoin(books, eq(bookActivities.bookId, books.id))

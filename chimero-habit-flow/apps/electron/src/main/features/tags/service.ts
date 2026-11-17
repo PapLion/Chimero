@@ -1,6 +1,6 @@
 import { asc, eq, inArray } from 'drizzle-orm'
 import { entriesToTags, tagRelationships, tags } from '@packages/db'
-import { getDb } from '@packages/db/database'
+import { getDb, transact } from '@packages/db/database'
 import type { DrizzleDB } from '@packages/db/database'
 import { buildTagTree, resolveInheritedTagIds } from '@contracts/domain'
 import type {
@@ -101,7 +101,7 @@ export async function updateTagRelationships(input: TagRelationship[] | { relati
     }
   }
 
-  await getDb().transaction(async (tx) => {
+  await transact(async (tx) => {
     await tx.delete(tagRelationships)
     const values = Array.from(unique.values()).map((relationship) => ({
       parentTagId: relationship.parentTagId,

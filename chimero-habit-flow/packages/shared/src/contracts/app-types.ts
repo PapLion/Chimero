@@ -1419,6 +1419,7 @@ export interface SocialInteractionReadModel {
   contactId: number
   contactName?: string | null
   contactInitials?: string | null
+  contactAvatarAssetId?: number | null
   method?: SocialMethod | null
   moodImpact: SocialMoodImpact
   note?: string | null

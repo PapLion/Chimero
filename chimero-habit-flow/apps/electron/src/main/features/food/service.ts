@@ -1,6 +1,6 @@
 import { desc, eq } from 'drizzle-orm'
 import { entries, entriesToTags, entryFood, trackers } from '@packages/db'
-import { getDb } from '@packages/db/database'
+import { getDb, transact } from '@packages/db/database'
 import {
   buildFoodDetailReadModel,
   entryToFoodHistoryItem,
@@ -116,8 +116,7 @@ export async function addFoodEntry(data: CreateFoodEntryRequest): Promise<FoodEn
   if (!Number.isFinite(timestamp)) throw new Error('Timestamp must be finite')
   const dateStr = formatDateStr(timestamp)
 
-  const database = getDb()
-  const inserted = await database.transaction(async (tx) => {
+  const inserted = await transact(async (tx) => {
     const [row] = await tx
       .insert(entries)
       .values({
@@ -190,8 +189,7 @@ export async function updateFoodEntry(entryId: number, updates: UpdateFoodEntryR
     entrySet.dateStr = formatDateStr(timestamp)
   }
 
-  const database = getDb()
-  await database.transaction(async (tx) => {
+  await transact(async (tx) => {
     if (Object.keys(entrySet).length > 0) {
       await tx.update(entries).set(entrySet).where(eq(entries.id, entryId))
     }
@@ -205,7 +203,7 @@ export async function updateFoodEntry(entryId: number, updates: UpdateFoodEntryR
 }
 
 export async function deleteFoodEntry(entryId: number): Promise<boolean> {
-  await getDb().transaction(async (tx) => {
+  await transact(async (tx) => {
     await tx.delete(entriesToTags).where(eq(entriesToTags.entryId, entryId))
     await tx.delete(entries).where(eq(entries.id, entryId))
   })

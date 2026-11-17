@@ -16,7 +16,7 @@ function toSummaryContact(
   interaction: NonNullable<Entry['socialInteractions']>[number],
   avatarAssetId: number | null,
 ): SocialSummaryContact {
-  const interactionAvatarAssetId = (interaction as { contactAvatarAssetId?: number | null }).contactAvatarAssetId ?? null
+  const interactionAvatarAssetId = interaction.contactAvatarAssetId ?? null
   const name = (interaction.contactName ?? '').trim() || `Contact ${interaction.contactId}`
   const initials = (interaction.contactInitials ?? '').trim() || getContactInitials(name) || '?'
   return {

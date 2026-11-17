@@ -1,4 +1,4 @@
-import type { DrizzleTransaction } from '@packages/db/database'
+import type { DrizzleDB } from '@packages/db/database'
 import { desc, eq, inArray } from 'drizzle-orm'
 import {
   entries,
@@ -10,7 +10,7 @@ import {
   workoutSessions,
   workoutSets,
 } from '@packages/db'
-import { getDb } from '@packages/db/database'
+import { getDb, transact } from '@packages/db/database'
 import {
   buildExerciseProgressReadModel,
   buildWorkoutCalendarReadModel,
@@ -336,7 +336,7 @@ function buildSessionMetadata(session: WorkoutSessionReadModel): JsonRecord {
   }
 }
 
-async function persistSessionTags(tx: DrizzleTransaction, entryId: number, tagIds?: number[]): Promise<void> {
+async function persistSessionTags(tx: DrizzleDB, entryId: number, tagIds?: number[]): Promise<void> {
   await replaceEntryTags(entryId, tagIds, tx)
 }
 
@@ -422,8 +422,7 @@ export async function createWorkoutSession(data: CreateWorkoutSessionRequest): P
   const exercises = assertWorkoutSessionExercises(data.exercises)
   const dateStr = formatDateStr(data.timestamp)
 
-  const db = getDb()
-  const entryId = await db.transaction(async (tx) => {
+  const entryId = await transact(async (tx) => {
     const totalSets = exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0)
     const [entryRow] = await tx
       .insert(entries)
@@ -533,7 +532,7 @@ export async function updateWorkoutSession(entryId: number, updates: UpdateWorko
   const loadUnit = updates.loadUnit ? validateWorkoutWeightUnit(updates.loadUnit) : existing.loadUnit
   const dateStr = formatDateStr(timestamp)
 
-  await getDb().transaction(async (tx) => {
+  await transact(async (tx) => {
     const metadataExercises = exercises.map((exercise) => ({
       exerciseId: exercise.exerciseId,
       sourceExerciseId: exercise.sourceExerciseId ?? null,
@@ -632,7 +631,7 @@ export async function updateWorkoutSession(entryId: number, updates: UpdateWorko
 }
 
 export async function deleteWorkoutSession(entryId: number): Promise<boolean> {
-  await getDb().transaction(async (tx) => {
+  await transact(async (tx) => {
     await tx.delete(entriesToTags).where(eq(entriesToTags.entryId, entryId))
     await tx.delete(entries).where(eq(entries.id, entryId))
   })
@@ -694,7 +693,7 @@ export async function createWorkoutRoutine(data: CreateWorkoutRoutineRequest): P
   const loadUnit = validateWorkoutWeightUnit(data.loadUnit)
   const exercises = assertWorkoutRoutineExercises(data.exercises)
 
-  const routineId = await getDb().transaction(async (tx) => {
+  const routineId = await transact(async (tx) => {
     const [row] = await tx
       .insert(workoutRoutines)
       .values({
@@ -753,7 +752,7 @@ export async function updateWorkoutRoutine(routineId: number, updates: UpdateWor
   }))
   const loadUnit = updates.loadUnit ? validateWorkoutWeightUnit(updates.loadUnit) : existing.routine.loadUnit
 
-  await getDb().transaction(async (tx) => {
+  await transact(async (tx) => {
     await tx.update(workoutRoutines).set({
       name: updates.name?.trim() || existing.routine.name,
       notes: updates.notes === undefined ? existing.routine.notes : updates.notes,

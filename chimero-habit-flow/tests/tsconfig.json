@@ -1,0 +1,43 @@
+{
+  "extends": "../apps/electron/tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "tsBuildInfoFile": null,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": [
+      "vitest/globals",
+      "node"
+    ],
+    "baseUrl": "../apps/electron",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "paths": {
+      "@/*": [
+        "src/renderer/src/*"
+      ],
+      "@contracts/*": [
+        "../../packages/shared/src/*"
+      ],
+      "@packages/db": [
+        "../../packages/db/src/index.ts"
+      ],
+      "@packages/db/*": [
+        "../../packages/db/src/*"
+      ],
+      "better-sqlite3": [
+        "../../packages/db/node_modules/@types/better-sqlite3"
+      ]
+    }
+  },
+  "include": [
+    "./**/*.ts",
+    "./**/*.tsx"
+  ],
+  "exclude": [
+    "e2e/**"
+  ]
+}

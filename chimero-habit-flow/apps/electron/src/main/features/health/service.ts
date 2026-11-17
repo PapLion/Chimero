@@ -1,7 +1,7 @@
-import type { DrizzleTransaction } from '@packages/db/database'
+import type { DrizzleDB } from '@packages/db/database'
 import { and, desc, eq } from 'drizzle-orm'
 import { entries, entriesToTags, entryHealth, symptoms, trackers } from '@packages/db'
-import { getDb } from '@packages/db/database'
+import { getDb, transact } from '@packages/db/database'
 import {
   buildHealthDetailReadModel,
   buildHealthHomeWidgetReadModel,
@@ -74,7 +74,7 @@ async function tagsForEntry(entryId: number) {
   return allTags.filter((tag) => tagIds.has(tag.id))
 }
 
-async function findOrCreateSymptom(tx: DrizzleTransaction, trackerId: number, symptomName: string, category: ReturnType<typeof validateSymptomCategory>): Promise<number> {
+async function findOrCreateSymptom(tx: DrizzleDB, trackerId: number, symptomName: string, category: ReturnType<typeof validateSymptomCategory>): Promise<number> {
   const symptomKey = normalizeSymptomKey(symptomName)
   const [existing] = await tx
     .select()
@@ -168,8 +168,7 @@ export async function addHealthSymptomEntry(data: CreateHealthSymptomRequest): P
   if (!Number.isFinite(timestamp)) throw new Error('Timestamp must be finite')
   const dateStr = formatDateStr(timestamp)
 
-  const database = getDb()
-  const inserted = await database.transaction(async (tx) => {
+  const inserted = await transact(async (tx) => {
     const symptomId = await findOrCreateSymptom(tx, data.trackerId, symptomName, category)
     const [row] = await tx
       .insert(entries)
@@ -258,8 +257,7 @@ export async function updateHealthSymptomEntry(entryId: number, updates: UpdateH
     severitySet.severity = nextSeverity
   }
 
-  const database = getDb()
-  await database.transaction(async (tx) => {
+  await transact(async (tx) => {
     let symptomId = Number(existing.symptomId)
     if (Object.keys(symptomSet).length > 0) {
       symptomId = await findOrCreateSymptom(tx, Number(existing.trackerId), nextSymptomName, nextCategory)
@@ -283,7 +281,7 @@ export async function updateHealthSymptomEntry(entryId: number, updates: UpdateH
 }
 
 export async function deleteHealthSymptomEntry(entryId: number): Promise<boolean> {
-  await getDb().transaction(async (tx) => {
+  await transact(async (tx) => {
     await tx.delete(entriesToTags).where(eq(entriesToTags.entryId, entryId))
     await tx.delete(entries).where(eq(entries.id, entryId))
   })

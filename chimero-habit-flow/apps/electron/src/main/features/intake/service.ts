@@ -1,7 +1,7 @@
-import type { DrizzleTransaction } from '@packages/db/database'
+import type { DrizzleDB } from '@packages/db/database'
 import { and, desc, eq } from 'drizzle-orm'
 import { entries, entriesToTags, entryIntake, intakeItems, trackers } from '@packages/db'
-import { getDb } from '@packages/db/database'
+import { getDb, transact } from '@packages/db/database'
 import {
   buildIntakeDetailReadModel,
   buildIntakeHomeWidgetReadModel,
@@ -42,7 +42,7 @@ async function isIntakeTracker(trackerId: number): Promise<boolean> {
 }
 
 async function findOrCreateItem(
-  tx: DrizzleTransaction,
+  tx: DrizzleDB,
   trackerId: number,
   itemName: string,
   itemType: ReturnType<typeof validateIntakeItemType>,
@@ -172,8 +172,7 @@ export async function addIntakeEntry(data: CreateIntakeEntryRequest): Promise<In
   const dateStr = formatDateStr(timestamp)
   const itemKey = normalizeIntakeItemKey(itemName, itemType, variant)
 
-  const database = getDb()
-  const inserted = await database.transaction(async (tx) => {
+  const inserted = await transact(async (tx) => {
     const itemId = await findOrCreateItem(tx, data.trackerId, itemName, itemType, variant)
     const [row] = await tx
       .insert(entries)
@@ -269,8 +268,7 @@ export async function updateIntakeEntry(entryId: number, updates: UpdateIntakeEn
   if (updates.dosage !== undefined) intakeSet.dosage = nextDosage
   if (updates.unit !== undefined) intakeSet.unit = nextUnit
 
-  const database = getDb()
-  await database.transaction(async (tx) => {
+  await transact(async (tx) => {
     let itemId = Number(existing.itemId)
     if (Object.keys(itemSet).length > 0) {
       itemId = await findOrCreateItem(tx, Number(existing.trackerId), nextItemName, nextItemType, nextVariant)
@@ -294,7 +292,7 @@ export async function updateIntakeEntry(entryId: number, updates: UpdateIntakeEn
 }
 
 export async function deleteIntakeEntry(entryId: number): Promise<boolean> {
-  await getDb().transaction(async (tx) => {
+  await transact(async (tx) => {
     await tx.delete(entriesToTags).where(eq(entriesToTags.entryId, entryId))
     await tx.delete(entries).where(eq(entries.id, entryId))
   })

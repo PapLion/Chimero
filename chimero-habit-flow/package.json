@@ -16,7 +16,7 @@
     "test:e2e": "playwright test",
     "build": "pnpm --filter chimero-electron build",
     "package": "pnpm build && electron-builder --linux AppImage",
-    "check-types": "pnpm --filter chimero-electron exec tsc --noEmit",
+    "check-types": "pnpm --filter chimero-electron exec tsc --noEmit && pnpm --filter chimero-electron exec tsc --noEmit -p ../../tests/tsconfig.json",
     "package:win": "pnpm build && electron-builder --win nsis",
     "showcase": "node scripts/showcase.cjs --open",
     "showcase:capture": "node scripts/showcase.cjs --capture"
