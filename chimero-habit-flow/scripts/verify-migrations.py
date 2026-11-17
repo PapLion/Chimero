@@ -39,5 +39,5 @@ with tempfile.TemporaryDirectory(prefix='chimero-migrations-') as temporary:
         db.execute('DELETE FROM trackers WHERE id=9901')
         assert db.execute('SELECT count(*) FROM entries WHERE id=9902').fetchone() == (0,)
         db.close()
-        print(f'PASS: upgrade from migration {upgrade_from:02d}, reopen persistence, update, cascade delete, integrity')
-print('All 11 disposable SQLite migration paths passed.')
+        print(f'PASS: data written after migration {journal[upgrade_from - 1]["tag"][:4]}, reopen persistence, update, cascade delete, integrity')
+print(f'All {len(journal)} disposable SQLite migration paths passed.')
