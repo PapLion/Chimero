@@ -251,7 +251,8 @@ test('backs up, exports, and restores a profile', async () => {
     expect(await moodValues(running.page)).toEqual([9, 6])
 
     // Restoring stages the file and quits; the swap happens before the next start opens the database.
-    const closed = new Promise((done) => running?.app.once('close', done))
+    const app = running.app
+    const closed = new Promise<void>((done) => app.once('close', () => done()))
     const restore = await running.page.evaluate((path) => window.api.restoreDatabase(path), files.backup)
     expect(restore).toMatchObject({ ok: true, count: 1 })
     await closed
